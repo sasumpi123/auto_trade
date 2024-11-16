@@ -1,29 +1,31 @@
 import requests
 import logging
 from datetime import datetime
-from config import APP_TOKEN, CHANNEL
+from config import APP_TOKEN, SLACK_CHANNELS
 
 class NotificationService:
     def __init__(self, message_queue):
         self.message_queue = message_queue
-        self.important_messages = []
+        self.important_messages = {channel: [] for channel in SLACK_CHANNELS.values()}
 
-    def send_message(self, message, is_important=False):
+    def send_message(self, message, channel_type='status', is_important=False):
         """슬랙으로 메시지 전송"""
         try:
+            channel = SLACK_CHANNELS.get(channel_type, SLACK_CHANNELS['status'])
+            
             if is_important:
-                self.important_messages.append(message)
+                self.important_messages[channel].append(message)
             
             if not self.message_queue.can_send_message():
                 if is_important:
                     return  # 중요 메시지는 나중에 재시도
-                return False  # 일반 메시지는 그냥 스킵
+                return False
             
             response = requests.post(
                 "https://slack.com/api/chat.postMessage",
                 headers={"Authorization": f"Bearer {APP_TOKEN}"},
                 json={
-                    "channel": CHANNEL,
+                    "channel": channel,
                     "text": message,
                     "mrkdwn": True
                 }
@@ -31,7 +33,7 @@ class NotificationService:
             
             if response.status_code == 429:  # Rate limit
                 if is_important:
-                    self.important_messages.append(message)
+                    self.important_messages[channel].append(message)
                 logging.warning("슬랙 API 호출 제한에 도달했습니다.")
                 return False
                 
@@ -40,30 +42,29 @@ class NotificationService:
                 return False
 
             self.message_queue.log_message_sent()
-            
-            if is_important:
-                logging.info(f"중요 메시지 전송 완료: {message[:100]}...")
-            else:
-                logging.debug(f"일반 메시지 전송 완료: {message[:100]}...")
-            
             return True
-                
+            
         except Exception as e:
             logging.error(f"슬랙 메시지 전송 중 오류 발생: {str(e)}")
             if is_important:
-                self.important_messages.append(message)
+                self.important_messages[channel].append(message)
             return False
 
-    def send_pending_important_messages(self):
-        """대기 중인 중요 메시지 전송 시도"""
-        if not self.important_messages:
-            return
+    def send_trade_alert(self, message):
+        """매수/매도 알림 전송"""
+        return self.send_message(message, channel_type='trades', is_important=True)
 
-        messages_to_retry = self.important_messages[:]
-        self.important_messages.clear()
+    def send_status_update(self, message):
+        """상태 업데이트 전송"""
+        return self.send_message(message, channel_type='status', is_important=False)
 
-        for message in messages_to_retry:
-            self.send_message(message, is_important=True)
+    def send_report(self, message):
+        """리포트 전송"""
+        return self.send_message(message, channel_type='reports', is_important=True)
+
+    def send_error_alert(self, message):
+        """에러 알림 전송"""
+        return self.send_message(message, channel_type='errors', is_important=True)
 
     def format_error_message(self, error_type, error_message, additional_info=None):
         """에러 메시지 포맷팅"""

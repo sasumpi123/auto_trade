@@ -138,7 +138,7 @@ class AutoTrade:
                 message = self.notification.format_trade_message(
                     'BUY', ticker, current_price, quantity
                 )
-                self.notification.send_message(message, is_important=True)
+                self.notification.send_trade_alert(message)
                 return True
 
         except Exception as e:
@@ -182,7 +182,7 @@ class AutoTrade:
                 message = self.notification.format_trade_message(
                     'SELL', ticker, current_price, quantity, profit
                 )
-                self.notification.send_message(message, is_important=True)
+                self.notification.send_trade_alert(message)
                 return True
 
         except Exception as e:
@@ -214,10 +214,12 @@ class AutoTrade:
             
             if status_messages:  # 상태 메시지가 있을 때만 전송
                 combined_message = "\n".join(status_messages)
-                self.notification.send_message(combined_message, is_important=False)
+                self.notification.send_status_update(combined_message)
                 
         except Exception as e:
-            logging.error(f"상태 로깅 중 오류 발생: {str(e)}")
+            error_message = f"상태 로깅 중 오류 발생: {str(e)}"
+            logging.error(error_message)
+            self.notification.send_error_alert(error_message)
             raise
 
     def start(self):
@@ -254,7 +256,7 @@ class AutoTrade:
                     # 일일 리포트 체크
                     if self.analyzer.check_daily_report_time():
                         report = self.analyzer.generate_daily_report()
-                        self.notification.send_message(report, is_important=True)
+                        self.notification.send_report(report)
                     
                     # 매매 신호 확인
                     action = self.analyzers[ticker].analyze(-1)

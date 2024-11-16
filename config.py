@@ -21,6 +21,14 @@ SEC_KEY = os.getenv("SEC_KEY")
 APP_TOKEN = os.getenv("APP_TOKEN")
 CHANNEL = os.getenv("CHANNEL")
 
+SLACK_CHANNELS = {
+    'status': 'trading-status',     # 주기적 상태 업데이트
+    'trades': 'trading-alerts',     # 매수/매도 알림
+    'reports': 'trading-reports',   # 일일/주간 리포트
+    'errors': 'trading-errors'      # 에러 알림
+}
+
+
 # 거래 설정
 TICKERS = [
     "KRW-BTC",  # 비트코인
