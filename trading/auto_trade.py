@@ -16,7 +16,10 @@ from utils.decorators import retry_on_failure
 from data_analyzer.analyzer import DataAnalyzer
 
 class AutoTrade:
-    def __init__(self, start_cash):
+    def __init__(self, start_cash, simulation_mode=True):
+        self.simulation_mode = simulation_mode
+        self.simulation_balance = start_cash  # 시뮬레이션용 잔고
+        self.simulation_holdings = {ticker: 0.0 for ticker in TICKERS}  # 시뮬레이션용 보유량
         self.setup_initial_state(start_cash)
         self.setup_services()
         
@@ -77,82 +80,13 @@ class AutoTrade:
             logging.error(f"서비스 설정 중 오류 발생: {e}")
             raise
 
-    @retry_on_failure(max_attempts=3)
-    def buy_coin(self, ticker, current_price):
-        """코인 매수"""
-        try:
-            balance = self.get_balance("KRW")
-            if balance < self.min_trading_amount:
-                self.notification.send_message(f"잔고 부족: {balance} KRW")
-                return
-                
-            amount_to_buy = min(balance, self.max_per_coin) / current_price
-            
-            if amount_to_buy * current_price < self.min_trading_amount:
-                logging.info(f"{ticker} 최소 주문금액 미달")
-                return
-                
-            order = self.upbit.buy_market_order(ticker, amount_to_buy * current_price)
-            if order and order['status'] == 'done':
-                self.buy_yn[ticker] = True
-                self.buy_price[ticker] = current_price
-                trade_info = {
-                    'type': 'buy',
-                    'price': current_price,
-                    'amount': amount_to_buy,
-                    'timestamp': datetime.now()
-                }
-                self.analyzer.add_trade(ticker, trade_info)
-                self.notification.send_message(
-                    f"{ticker} 매수 성공\n"
-                    f"가격: {current_price:,} KRW\n"
-                    f"수량: {amount_to_buy:.8f}",
-                    is_important=True
-                )
-                
-        except Exception as e:
-            logging.error(f"매수 중 오류 발생: {str(e)}")
-            raise
-
-    @retry_on_failure(max_attempts=3)
-    def sell_coin(self, ticker, current_price, stop_loss_triggered=False):
-        """코인 매도"""
-        try:
-            balance = self.get_balance(ticker)
-            if balance <= 0:
-                return
-                
-            order = self.upbit.sell_market_order(ticker, balance)
-            if order and order['status'] == 'done':
-                profit = (current_price - self.buy_price[ticker]) / self.buy_price[ticker] * 100
-                self.total_profit[ticker] += profit
-                
-                trade_info = {
-                    'type': 'sell',
-                    'price': current_price,
-                    'amount': balance,
-                    'profit': profit,
-                    'timestamp': datetime.now()
-                }
-                self.analyzer.add_trade(ticker, trade_info)
-                
-                message = (
-                    f"{ticker} {'스탑로스' if stop_loss_triggered else '매도'} 성공\n"
-                    f"매수가: {self.buy_price[ticker]:,} KRW\n"
-                    f"매도가: {current_price:,} KRW\n"
-                    f"수익률: {profit:.2f}%"
-                )
-                self.notification.send_message(message, is_important=True)
-                
-                self.buy_yn[ticker] = False
-                self.buy_price[ticker] = None
-                
-        except Exception as e:
-            logging.error(f"매도 중 오류 발생: {str(e)}")
-            raise
-
     def get_balance(self, ticker="KRW"):
-        """캐시된 잔고 조회"""
+        """잔고 조회 (시뮬레이션/실제)"""
+        if self.simulation_mode:
+            if ticker == "KRW":
+                return self.simulation_balance
+            return self.simulation_holdings.get(ticker, 0.0)
+        
         try:
             current_time = time.time()
             if current_time - self.balance_cache_time > self.balance_cache_duration:
@@ -169,6 +103,91 @@ class AutoTrade:
         except Exception as e:
             logging.error(f"잔고 조회 중 오류 발생: {str(e)}")
             return 0.0
+
+    def buy_coin(self, ticker, current_price):
+        """코인 매수 (시뮬레이션/실제)"""
+        try:
+            available_cash = self.get_balance("KRW")
+            if available_cash < self.min_trading_amount:
+                return False
+
+            buy_amount = min(available_cash, self.max_per_coin)
+            quantity = buy_amount / current_price
+
+            if self.simulation_mode:
+                # 시뮬레이션 모드에서는 실제 거래 대신 잔고만 업데이트
+                self.simulation_balance -= buy_amount
+                self.simulation_holdings[ticker] = quantity
+                success = True
+            else:
+                # 실제 거래
+                success = self.upbit.buy_market_order(ticker, buy_amount)
+
+            if success:
+                self.buy_yn[ticker] = True
+                self.buy_price[ticker] = current_price
+                trade_info = {
+                    'type': 'BUY',
+                    'price': current_price,
+                    'quantity': quantity,
+                    'timestamp': datetime.now()
+                }
+                self.trade_history[ticker].append(trade_info)
+                self.analyzer.add_trade(ticker, trade_info)
+                
+                message = self.notification.format_trade_message(
+                    'BUY', ticker, current_price, quantity
+                )
+                self.notification.send_message(message, is_important=True)
+                return True
+
+        except Exception as e:
+            logging.error(f"매수 중 오류 발생: {str(e)}")
+        return False
+
+    def sell_coin(self, ticker, current_price, stop_loss_triggered=False):
+        """코인 매도 (시뮬레이션/실제)"""
+        try:
+            quantity = self.get_balance(ticker)
+            if quantity <= 0:
+                return False
+
+            if self.simulation_mode:
+                # 시뮬레이션 모드에서는 실제 거래 대신 잔고만 업데이트
+                sell_amount = quantity * current_price
+                self.simulation_balance += sell_amount
+                self.simulation_holdings[ticker] = 0
+                success = True
+            else:
+                # 실제 거래
+                success = self.upbit.sell_market_order(ticker, quantity)
+
+            if success:
+                profit = ((current_price - self.buy_price[ticker]) / self.buy_price[ticker]) * 100
+                self.total_profit[ticker] += profit
+                self.buy_yn[ticker] = False
+                self.buy_price[ticker] = None
+
+                trade_info = {
+                    'type': 'SELL',
+                    'price': current_price,
+                    'quantity': quantity,
+                    'profit': profit,
+                    'stop_loss': stop_loss_triggered,
+                    'timestamp': datetime.now()
+                }
+                self.trade_history[ticker].append(trade_info)
+                self.analyzer.add_trade(ticker, trade_info)
+
+                message = self.notification.format_trade_message(
+                    'SELL', ticker, current_price, quantity, profit
+                )
+                self.notification.send_message(message, is_important=True)
+                return True
+
+        except Exception as e:
+            logging.error(f"매도 중 오류 발생: {str(e)}")
+        return False
 
     def log_current_status(self):
         """현재 상태 로깅"""
