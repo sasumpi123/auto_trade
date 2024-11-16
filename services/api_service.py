@@ -1,15 +1,15 @@
 import logging
 import traceback
 import pyupbit
-from config import ACC_KEY, SEC_KEY
+from config import UPBIT_ACCESS_KEY, UPBIT_ACCESS_KEY
 
 def verify_api_keys():
     try:
         logging.info("API 키 검증 시작")
-        if not ACC_KEY or not SEC_KEY:
+        if not UPBIT_ACCESS_KEY or not UPBIT_ACCESS_KEY:
             raise Exception("API 키가 설정되지 않았습니다.")
             
-        upbit = pyupbit.Upbit(ACC_KEY, SEC_KEY)
+        upbit = pyupbit.Upbit(UPBIT_ACCESS_KEY, UPBIT_ACCESS_KEY)
         
         try:
             balance = upbit.get_balance("KRW")

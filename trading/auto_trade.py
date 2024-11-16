@@ -6,8 +6,9 @@ import pyupbit
 import traceback
 from datetime import datetime, timedelta
 from collections import deque
+from collections import defaultdict
 
-from config import TICKERS, STOP_LOSS, ACC_KEY, SEC_KEY
+from config import TICKERS, STOP_LOSS, UPBIT_ACCESS_KEY, UPBIT_ACCESS_KEY, CASH_USAGE_RATIO, MAX_COINS_AT_ONCE, REAL_TRADING, UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY, START_CASH, MIN_TRADING_AMOUNT
 from services.api_service import verify_api_keys
 from services.notification_service import NotificationService
 from services.performance_service import PerformanceMonitor, PerformanceAnalyzer
@@ -16,204 +17,161 @@ from utils.decorators import retry_on_failure
 from data_analyzer.analyzer import DataAnalyzer
 
 class AutoTrade:
-    def __init__(self, start_cash, simulation_mode=True):
-        self.simulation_mode = simulation_mode
-        self.simulation_balance = start_cash  # 시뮬레이션용 잔고
-        self.simulation_holdings = {ticker: 0.0 for ticker in TICKERS}  # 시뮬레이션용 보유량
-        self.setup_initial_state(start_cash)
-        self.setup_services()
+    def __init__(self, start_cash=1_000_000):
+        """
+        자동매매 클래스 초기화
+        :param start_cash: 시작 자금 (기본값: 100만원)
+        """
+        # 거래 대상 코인 목록
+        self.tickers = TICKERS
         
-    def setup_initial_state(self, start_cash):
-        """초기 상태 설정"""
-        logging.info("AutoTrade 초기화 시작")
-        try:
-            self.start_cash = start_cash
-            self.tickers = TICKERS
-            self.stop_loss = STOP_LOSS
-            self.min_trading_amount = 5000  # 최소 거래금액
-            self.max_per_coin = start_cash / (len(TICKERS) * 2)  # 코인당 최대 투자금액
-            
-            # 각 티커별 캐시 및 상태 초기화
-            self.price_cache = {ticker: deque(maxlen=100) for ticker in self.tickers}
-            self.analyzers = {}
-            self.buy_yn = {ticker: False for ticker in self.tickers}
-            self.buy_price = {ticker: None for ticker in self.tickers}
-            self.total_profit = {ticker: 0.0 for ticker in self.tickers}
-            self.trade_history = {ticker: [] for ticker in self.tickers}
-            
-            # 각 티커별 분석기 초기화
-            for ticker in self.tickers:
-                logging.info(f"{ticker} DataAnalyzer 생성 시작")
-                self.analyzers[ticker] = DataAnalyzer(ticker)
-                self.analyzers[ticker].fetch_data()
-                self.analyzers[ticker].calculate_indicators()
-            
-            # 시간 관련 변수 초기화
-            self.last_order_time = 0
-            self.last_update_time = time.time()
-            self.last_status_time = time.time()
-            
-            # 잔고 캐시 초기화
-            self.balance_cache = {"KRW": 0.0}
-            self.balance_cache_time = 0
-            self.balance_cache_duration = 5
-            
-            # Upbit 연결
-            logging.info("Upbit 연결 시작")
-            self.upbit = pyupbit.Upbit(ACC_KEY, SEC_KEY)
-            
-            logging.info("초기 상태 설정 완료")
-            
-        except Exception as e:
-            logging.error(f"초기화 중 오류 발생: {e}")
-            raise
-
-    def setup_services(self):
-        """서비스 초기화"""
-        try:
-            self.message_queue = MessageQueue()
-            self.notification = NotificationService(self.message_queue)
-            self.performance = PerformanceMonitor()
-            self.analyzer = PerformanceAnalyzer(self.tickers)
-            logging.info("서비스 설정 완료")
-        except Exception as e:
-            logging.error(f"서비스 설정 중 오류 발생: {e}")
-            raise
-
-    def get_balance(self, ticker="KRW"):
-        """잔고 조회 (시뮬레이션/실제)"""
-        if self.simulation_mode:
-            if ticker == "KRW":
-                return self.simulation_balance
-            return self.simulation_holdings.get(ticker, 0.0)
+        # 거래 모드 설정
+        self.real_trading = REAL_TRADING
+        if self.real_trading:
+            self.upbit = pyupbit.Upbit(UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY)
+            self.current_cash = float(self.upbit.get_balance("KRW"))
+            logging.info(f"실제 거래 모드 시작 (보유 현금: {self.current_cash:,}원)")
+        else:
+            self.upbit = None
+            self.current_cash = start_cash
+            logging.info(f"테스트 모드 시작 (시작 자금: {start_cash:,}원)")
         
-        try:
-            current_time = time.time()
-            if current_time - self.balance_cache_time > self.balance_cache_duration:
-                self.balance_cache = {}
-                for t in self.tickers + ["KRW"]:
-                    try:
-                        balance = float(self.upbit.get_balance(t) or 0)
-                        self.balance_cache[t] = balance
-                    except Exception as e:
-                        logging.error(f"{t} 잔고 조회 실패: {str(e)}")
-                        self.balance_cache[t] = 0.0
-                self.balance_cache_time = current_time
-            return self.balance_cache.get(ticker, 0.0)
-        except Exception as e:
-            logging.error(f"잔고 조회 중 오류 발생: {str(e)}")
-            return 0.0
+        # 기본 설정
+        self.min_trading_amount = MIN_TRADING_AMOUNT
+        self.max_per_coin = start_cash * 0.4  # 코인당 최대 40%까지 투자
+        self.stop_loss = STOP_LOSS
+        
+        # 상태 변수 초기화
+        self.buy_yn = {ticker: False for ticker in self.tickers}
+        self.buy_price = {ticker: 0 for ticker in self.tickers}
+        self.analyzers = {}
+        self.price_cache = defaultdict(list)
+        self.last_status_time = time.time()
+        
+        # 데이터 분석기 초기화
+        for ticker in self.tickers:
+            self.analyzers[ticker] = DataAnalyzer(ticker)
+            
+        logging.info(
+            f"거래 설정:\n"
+            f"- 코인당 최대 투자: {self.max_per_coin:,}원\n"
+            f"- 최소 거래금액: {self.min_trading_amount:,}원\n"
+            f"- 손절라인: {self.stop_loss*100}%\n"
+            f"- 거래 대상: {', '.join(self.tickers)}"
+        )
 
-    def buy_coin(self, ticker, current_price):
-        """코인 매수 (시뮬레이션/실제)"""
+    def get_balance(self, currency="KRW"):
+        """잔액 조회"""
+        if self.real_trading:
+            return float(self.upbit.get_balance(currency))
+        return self.current_cash
+
+    def buy_coin(self, ticker, current_price, reason=None, target_price=None, strategy_status=None):
+        """코인 매수"""
         try:
-            available_cash = self.get_balance("KRW")
-            if available_cash < self.min_trading_amount:
+            if self.buy_yn[ticker]:
                 return False
-
-            buy_amount = min(available_cash, self.max_per_coin)
-            quantity = buy_amount / current_price
-
-            if self.simulation_mode:
-                # 시뮬레이션 모드에서는 실제 거래 대신 잔고만 업데이트
-                self.simulation_balance -= buy_amount
-                self.simulation_holdings[ticker] = quantity
-                success = True
-            else:
-                # 실제 거래
-                success = self.upbit.buy_market_order(ticker, buy_amount)
-
-            if success:
-                self.buy_yn[ticker] = True
-                self.buy_price[ticker] = current_price
-                trade_info = {
-                    'type': 'BUY',
-                    'price': current_price,
-                    'quantity': quantity,
-                    'timestamp': datetime.now()
-                }
-                self.trade_history[ticker].append(trade_info)
-                self.analyzer.add_trade(ticker, trade_info)
                 
-                message = self.notification.format_trade_message(
-                    'BUY', ticker, current_price, quantity
-                )
-                self.notification.send_trade_alert(message)
-                return True
-
+            balance = self.get_balance("KRW")
+            logging.info(f"현재 보유 현금: {balance:,}원")
+            
+            if balance < MIN_TRADING_AMOUNT:
+                logging.warning(f"잔액 부족 - 현재 잔액: {balance:,}원")
+                return False
+                
+            buy_amount = min(self.max_per_coin, balance)
+            
+            logging.info(
+                f"{'[실제]' if self.real_trading else '[테스트]'} {ticker} 매수 시도:\n"
+                f"재가: {current_price:,}원\n"
+                f"매수금액: {buy_amount:,}원\n"
+                f"매수이유: {reason}"
+            )
+            
+            if self.real_trading:
+                response = self.upbit.buy_market_order(ticker, buy_amount)
+                if not response:
+                    logging.error(f"{ticker} 매수 주문 실패")
+                    return False
+            else:
+                self.current_cash -= buy_amount
+            
+            self.buy_yn[ticker] = True
+            self.buy_price[ticker] = current_price
+            
+            message = f"{'[실제]' if self.real_trading else '[테스트]'} {ticker} 매수 성공\n" \
+                     f"매수가: {current_price:,}원\n" \
+                     f"매수금액: {buy_amount:,}원\n" \
+                     f"잔액: {self.get_balance('KRW'):,}원"
+            logging.info(message)
+            
+            return True
+            
         except Exception as e:
             logging.error(f"매수 중 오류 발생: {str(e)}")
-        return False
+            return False
 
     def sell_coin(self, ticker, current_price, stop_loss_triggered=False):
-        """코인 매도 (시뮬레이션/실제)"""
+        """코인 매도"""
         try:
-            quantity = self.get_balance(ticker)
-            if quantity <= 0:
+            if not self.buy_yn[ticker]:
                 return False
-
-            if self.simulation_mode:
-                # 시뮬레이션 모드에서는 실제 거래 대신 잔고만 업데이트
-                sell_amount = quantity * current_price
-                self.simulation_balance += sell_amount
-                self.simulation_holdings[ticker] = 0
-                success = True
+                
+            buy_price = self.buy_price[ticker]
+            profit_rate = (current_price - buy_price) / buy_price * 100
+            
+            if self.real_trading:
+                coin_balance = self.upbit.get_balance(ticker)
+                response = self.upbit.sell_market_order(ticker, coin_balance)
+                if not response:
+                    logging.error(f"{ticker} 매도 주문 실패")
+                    return False
             else:
-                # 실제 거래
-                success = self.upbit.sell_market_order(ticker, quantity)
-
-            if success:
-                profit = ((current_price - self.buy_price[ticker]) / self.buy_price[ticker]) * 100
-                self.total_profit[ticker] += profit
-                self.buy_yn[ticker] = False
-                self.buy_price[ticker] = None
-
-                trade_info = {
-                    'type': 'SELL',
-                    'price': current_price,
-                    'quantity': quantity,
-                    'profit': profit,
-                    'stop_loss': stop_loss_triggered,
-                    'timestamp': datetime.now()
-                }
-                self.trade_history[ticker].append(trade_info)
-                self.analyzer.add_trade(ticker, trade_info)
-
-                message = self.notification.format_trade_message(
-                    'SELL', ticker, current_price, quantity, profit
-                )
-                self.notification.send_trade_alert(message)
-                return True
-
+                sell_amount = self.max_per_coin * (current_price / buy_price)
+                self.current_cash += sell_amount
+            
+            self.buy_yn[ticker] = False
+            self.buy_price[ticker] = 0
+            
+            message = f"{'[실제]' if self.real_trading else '[테스트]'} "
+            message += f"{'[손절]' if stop_loss_triggered else ''} {ticker} 매도 완료\n" \
+                      f"매도가: {current_price:,}원\n" \
+                      f"수익률: {profit_rate:.2f}%\n" \
+                      f"잔액: {self.get_balance('KRW'):,}원"
+            logging.info(message)
+            
+            return True
+            
         except Exception as e:
             logging.error(f"매도 중 오류 발생: {str(e)}")
-        return False
+            return False
 
     def log_current_status(self):
         """현재 상태 로깅"""
         try:
             status_messages = []
             for ticker in self.tickers:
-                if not self.price_cache[ticker]:  # 가격 데이터가 없으면 스킵
+                if not self.price_cache[ticker]:
                     continue
                 
                 current_price = self.price_cache[ticker][-1]
-                krw_balance = self.get_balance("KRW")
-                coin_balance = self.get_balance(ticker)
-                coin_value = coin_balance * current_price
                 
-                # 중요한 변화가 있을 때만 상태 메시지 추가
-                if (self.buy_yn[ticker] or  # 보유 중이거나
-                    coin_balance > 0 or      # 코인 잔고가 있거나
-                    self.total_profit[ticker] != 0):  # 수익이 발생했을 때
-                    
-                    status_message = self.notification.format_status_message(
-                        ticker, current_price, krw_balance, coin_balance, self.total_profit[ticker]
-                    )
-                    status_messages.append(status_message)
+                # 현재 전략 상태 확인
+                analysis_result = self.analyzers[ticker].analyze(-1)
+                strategy_status = analysis_result['strategy_status']
+                
+                status_message = self.notification.format_status_message(
+                    ticker,
+                    current_price,
+                    self.get_balance("KRW"),
+                    self.get_balance(ticker),
+                    self.total_profit[ticker],
+                    strategy_status
+                )
+                status_messages.append(status_message)
             
-            if status_messages:  # 상태 메시지가 있을 때만 전송
-                combined_message = "\n".join(status_messages)
+            if status_messages:
+                combined_message = "\n\n".join(status_messages)
                 self.notification.send_status_update(combined_message)
                 
         except Exception as e:
@@ -225,6 +183,8 @@ class AutoTrade:
     def start(self):
         """자동매매 시작"""
         wm = None
+        STATUS_INTERVAL = 300  # 상태 업데이트 주기 5분
+        
         while True:
             try:
                 if wm is not None:
@@ -234,45 +194,36 @@ class AutoTrade:
                 while True:
                     data = wm.get()
                     if data is None:
-                        self.performance.websocket_disconnects += 1
                         raise Exception("WebSocket 연결 끊김")
                     
-                    ticker = data['code']
-                    current_price = data['trade_price']
+                    # WebSocket 데이터 처리
+                    ticker = data.get('code')
+                    current_price = float(data.get('trade_price', 0))
+                    
+                    if not ticker or current_price <= 0:
+                        continue
+                        
+                    # 현재가 캐시 업데이트
                     self.price_cache[ticker].append(current_price)
                     
-                    # 상태 체크 및 보고
+                    # 상태 체크 (5분 간격)
                     current_time = time.time()
-                    if current_time - self.last_status_time > 30:
-                        self.log_current_status()
+                    if current_time - self.last_status_time > STATUS_INTERVAL:
+                        self.log_status()
                         self.last_status_time = current_time
                     
-                    # 데이터 갱신
-                    if current_time - self.last_update_time > 300:
-                        for t in self.tickers:
-                            self.analyzers[t].update_data()
-                        self.last_update_time = current_time
-                        
-                    # 일일 리포트 체크
-                    if self.analyzer.check_daily_report_time():
-                        report = self.analyzer.generate_daily_report()
-                        self.notification.send_report(report)
-                    
                     # 매매 신호 확인
-                    action = self.analyzers[ticker].analyze(-1)
-                    if action == "BUY" and not self.buy_yn[ticker]:
-                        self.buy_coin(ticker, current_price)
-                    elif action == "SELL" and self.buy_yn[ticker]:
-                        self.sell_coin(ticker, current_price)
-                    elif self.buy_yn[ticker] and self.buy_price[ticker]:
-                        if current_price < self.buy_price[ticker] * (1 - self.stop_loss):
-                            self.sell_coin(ticker, current_price, stop_loss_triggered=True)
+                    if ticker in self.analyzers:
+                        analysis = self.analyzers[ticker].analyze()
+                        if analysis['action'] == "BUY" and not self.buy_yn[ticker]:
+                            self.buy_coin(ticker, current_price, 
+                                        reason=analysis['reason'],
+                                        target_price=analysis['target_price'])
+                        elif analysis['action'] == "SELL" and self.buy_yn[ticker]:
+                            self.sell_coin(ticker, current_price)
                     
             except Exception as e:
                 logging.error(f"메인 루프 에러 발생: {str(e)}")
                 if wm is not None:
-                    try:
-                        wm.terminate()
-                    except:
-                        pass
-                time.sleep(60)
+                    wm.terminate()
+                time.sleep(1)
