@@ -22,8 +22,8 @@ class AutoTrade:
         자동매매 클래스 초기화
         :param start_cash: 시작 자금 (기본값: 100만원)
         """
-        # 거래 대상 코인 목록
-        self.tickers = TICKERS
+        self.start_cash = start_cash  # 시작 자금 저장
+        self.current_cash = start_cash  # 현재 보유 현금
         
         # 거래 모드 설정
         self.real_trading = REAL_TRADING
@@ -33,12 +33,12 @@ class AutoTrade:
             logging.info(f"실제 거래 모드 시작 (보유 현금: {self.current_cash:,}원)")
         else:
             self.upbit = None
-            self.current_cash = start_cash
-            logging.info(f"테스트 모드 시작 (시작 자금: {start_cash:,}원)")
+            logging.info(f"테스트 모드 시작 (시작 자금: {self.start_cash:,}원)")
         
         # 기본 설정
+        self.tickers = TICKERS
         self.min_trading_amount = MIN_TRADING_AMOUNT
-        self.max_per_coin = start_cash * 0.4  # 코인당 최대 40%까지 투자
+        self.max_per_coin = start_cash * CASH_USAGE_RATIO  # 코인당 최대 투자금액
         self.stop_loss = STOP_LOSS
         
         # 상태 변수 초기화
@@ -51,6 +51,14 @@ class AutoTrade:
         # 데이터 분석기 초기화
         for ticker in self.tickers:
             self.analyzers[ticker] = DataAnalyzer(ticker)
+            
+        # 알림 서비스 초기화
+        try:
+            from services.notification_service import NotificationService
+            self.notification = NotificationService()
+        except Exception as e:
+            logging.warning(f"알림 서비스 초기화 실패: {str(e)}")
+            self.notification = None
             
         logging.info(
             f"거래 설정:\n"
@@ -179,6 +187,60 @@ class AutoTrade:
             logging.error(error_message)
             self.notification.send_error_alert(error_message)
             raise
+
+    def log_status(self):
+        """현재 거래 상태 로깅"""
+        try:
+            # 보유 현금
+            current_cash = self.current_cash if not self.real_trading else self.get_balance("KRW")
+            
+            # 보유 코인 상태
+            holdings = []
+            total_value = current_cash
+            
+            for ticker in self.tickers:
+                if self.buy_yn[ticker]:
+                    buy_price = self.buy_price[ticker]
+                    current_price = float(self.price_cache[ticker][-1])
+                    quantity = self.max_per_coin / buy_price
+                    current_value = quantity * current_price
+                    profit_rate = ((current_price - buy_price) / buy_price) * 100
+                    
+                    holdings.append(
+                        f"- {ticker}: "
+                        f"수량={quantity:.4f}, "
+                        f"매수가={buy_price:,}원, "
+                        f"현재가={current_price:,}원, "
+                        f"수익률={profit_rate:.2f}%"
+                    )
+                    
+                    total_value += current_value
+            
+            # 전체 수익률
+            total_profit_rate = ((total_value - self.start_cash) / self.start_cash) * 100
+            
+            # 상태 메시지 생성
+            status_msg = (
+                f"\n===== 거래 상태 =====\n"
+                f"시작 자금: {self.start_cash:,}원\n"
+                f"현재 현금: {current_cash:,}원\n"
+                f"총 평가액: {total_value:,}원\n"
+                f"총 수익률: {total_profit_rate:.2f}%\n"
+            )
+            
+            if holdings:
+                status_msg += "\n보유 코인:\n" + "\n".join(holdings)
+            else:
+                status_msg += "\n보유 코인: 없음"
+                
+            logging.info(status_msg)
+            
+            # Slack 알림 전송 (설정된 경우)
+            if hasattr(self, 'notification') and self.notification:
+                self.notification.send_status_update(status_msg)
+                
+        except Exception as e:
+            logging.error(f"상태 로깅 중 오류 발생: {str(e)}")
 
     def start(self):
         """자동매매 시작"""

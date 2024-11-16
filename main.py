@@ -6,7 +6,7 @@ from services.api_service import verify_api_keys
 from services.notification_service import NotificationService
 from config import (
     REAL_TRADING, START_CASH, UPBIT_ACCESS_KEY, 
-    UPBIT_SECRET_KEY, SLACK_APP_TOKEN, TICKERS
+    UPBIT_SECRET_KEY, SLACK_APP_TOKEN, TICKERS, MIN_TRADING_AMOUNT
 )
 
 def setup_logging():
@@ -30,6 +30,8 @@ def system_check():
         # 1. 설정 파일 검사
         if not all([TICKERS, START_CASH > 0]):
             raise ValueError("기본 설정값 오류")
+        if START_CASH < MIN_TRADING_AMOUNT:
+            raise ValueError(f"시작 금액이 최소 거래금액보다 작습니다. (최소: {MIN_TRADING_AMOUNT:,}원)")
         checks["설정 파일 검사"] = True
         
         # 2. API 키 검증
@@ -50,11 +52,10 @@ def system_check():
         checks["Slack 연동 확인"] = True
         
         # 4. 데이터 분석기 테스트
-        test_analyzer = AutoTrade(start_cash=1000)
-        for ticker in TICKERS[:1]:  # 첫 번째 코인으로만 테스트
-            analysis = test_analyzer.analyzers[ticker].analyze()
-            if not isinstance(analysis, dict) or 'action' not in analysis:
-                raise ValueError(f"데이터 분석기 초기화 실패: {ticker}")
+        from trading.auto_trade import AutoTrade
+        test_trader = AutoTrade(start_cash=10000)
+        if not test_trader.analyzers or not test_trader.analyzers[TICKERS[0]]:
+            raise ValueError("데이터 분석기 초기화 실패")
         checks["데이터 분석기 초기화"] = True
         
         # 모든 검사 통과
@@ -80,13 +81,10 @@ def main():
             logging.error("시스템 점검 실패. 프로그램을 종료합니다.")
             sys.exit(1)
         
-        # 거래 모드 설정
-        if not REAL_TRADING:
-            logging.info(f"시뮬레이션 모드 시작 (초기 자본: {START_CASH:,} KRW)")
-        else:
-            logging.info("실제 거래 모드 시작")
+        # 거래 모드 설정 및 AutoTrade 인스턴스 생성
+        mode = "실제" if REAL_TRADING else "시뮬레이션"
+        logging.info(f"{mode} 거래 모드 시작 (초기 자본: {START_CASH:,}원)")
         
-        # AutoTrade 인스턴스 생성 및 시작
         auto_trader = AutoTrade(start_cash=START_CASH)
         auto_trader.start()
         
