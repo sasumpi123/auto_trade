@@ -40,6 +40,7 @@ class AutoTrade:
         self.min_trading_amount = MIN_TRADING_AMOUNT
         self.max_per_coin = start_cash * CASH_USAGE_RATIO  # 코인당 최대 투자금액
         self.stop_loss = STOP_LOSS
+        self.profit_taking_ratio = 0.1  # 이익 실현 비율 (10%)
         
         # 상태 변수 초기화
         self.buy_yn = {ticker: False for ticker in self.tickers}
@@ -127,6 +128,10 @@ class AutoTrade:
                 
             buy_price = self.buy_price[ticker]
             profit_rate = (current_price - buy_price) / buy_price * 100
+            
+            # 이익 실현 조건 추가
+            if profit_rate < self.profit_taking_ratio * 100 and not stop_loss_triggered:
+                return False
             
             if self.real_trading:
                 coin_balance = self.upbit.get_balance(ticker)
