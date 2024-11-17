@@ -115,6 +115,18 @@ class DataAnalyzer:
     def analyze(self, index=-1):
         """매매 신호 분석"""
         try:
+            # 거래량 확인
+            volume = self.df['volume'].iloc[index]
+            avg_volume = self.df['volume'].rolling(window=20).mean().iloc[index]
+            
+            # 거래량이 평균 거래량의 50% 미만이면 거래 제한
+            if volume < avg_volume * 0.5:
+                return {
+                    'action': 'HOLD',
+                    'reason': '거래량 부족',
+                    'target_price': None,
+                    'strategy_status': self.get_strategy_status(index)
+                }            
             current_time = time.time()
             
             # 이전 신호와 동일한 신호가 쿨다운 시간 내에 발생하면 HOLD 반환
@@ -176,31 +188,69 @@ class DataAnalyzer:
             target_price = None
             
             # RSI 기반 매매 신호
-            if rsi < 30:
+            if rsi < 30 and self.df['rsi'].diff().iloc[-1] > 0:  # RSI가 30 이하이면서 상승추세
                 action = "BUY"
-                reasons.append(f"RSI 과매도({rsi:.1f})")
-                target_price = current_price * 1.05  # 5% 목표수익
-            elif rsi > 70:
+                reasons.append(f"RSI 과매도 반등({rsi:.1f})")
+                target_price = current_price * 1.05
+            elif rsi > 70 and self.df['rsi'].diff().iloc[-1] < 0:  # RSI가 70 이상이면서 하락추세
                 action = "SELL"
-                reasons.append(f"RSI 과매수({rsi:.1f})")
+                reasons.append(f"RSI 과매수 하락({rsi:.1f})")
             
             # MACD 기반 매매 신호
-            if macd > macd_signal and macd < 0:
+            # MACD 방향성 확인
+            macd_trend = self.df['macd'].diff().iloc[-1]
+            signal_trend = self.df['macd_signal'].diff().iloc[-1]
+
+            if macd > macd_signal and macd < 0 and macd_trend > 0:  # 골든크로스 + 상승추세
                 action = "BUY"
-                reasons.append(f"MACD 골든크로스({macd_diff:.1f})")
-                target_price = current_price * 1.03  # 3% 목표수익
-            elif macd < macd_signal and macd > 0:
+                reasons.append(f"MACD 골든크로스 상승({macd_diff:.1f})")
+                target_price = current_price * 1.03
+            elif macd < macd_signal and macd > 0 and macd_trend < 0:  # 데드크로스 + 하락추세
                 action = "SELL"
-                reasons.append(f"MACD 데드크로스({macd_diff:.1f})")
+                reasons.append(f"MACD 데드크로스 하락({macd_diff:.1f})")
             
             # 볼린저 밴드 기반 매매 신호
-            if current_price < bb_lower:
-                action = "BUY"
-                reasons.append(f"BB 하단 지지({bb_position:.1f}%)")
-                target_price = bb_middle  # 중간선까지 목표
+            if current_price < bb_lower:  # 하단밴드 하향 돌파
+                # 추가 조건 확인: RSI가 상승 추세이거나 MACD가 반등 신호를 보일 때
+                if (self.df['rsi'].diff().iloc[-1] > 0 or  # RSI 상승 추세
+                    (self.df['macd'].iloc[-1] > self.df['macd'].iloc[-2])):  # MACD 반등
+                    action = "BUY"
+                    reasons.append(f"BB 하단 반등({bb_position:.1f}%)")
+                    target_price = bb_middle
             elif current_price > bb_upper:
                 action = "SELL"
                 reasons.append(f"BB 상단 돌파({bb_position:.1f}%)")
+            
+            # 여러 지표가 동시에 매수/매도 신호를 보낼 때 신뢰도 증가
+            buy_signals = 0
+            sell_signals = 0
+
+            # RSI 신호
+            if rsi < 30 and self.df['rsi'].diff().iloc[-1] > 0:
+                buy_signals += 1
+            elif rsi > 70 and self.df['rsi'].diff().iloc[-1] < 0:
+                sell_signals += 1
+
+            # MACD 신호
+            if macd > macd_signal and macd < 0 and macd_trend > 0:
+                buy_signals += 1
+            elif macd < macd_signal and macd > 0 and macd_trend < 0:
+                sell_signals += 1
+
+            # BB 신호
+            if current_price < bb_lower and (self.df['rsi'].diff().iloc[-1] > 0 or self.df['macd'].iloc[-1] > self.df['macd'].iloc[-2]):
+                buy_signals += 1
+            elif current_price > bb_upper:
+                sell_signals += 1
+
+            # 최종 신호 결정
+            if buy_signals >= 2:  # 2개 이상의 지표가 매수 신호
+                action = "BUY"
+                target_price = current_price * 1.05
+                reasons.append(f"복합 매수 신호({buy_signals}개)")
+            elif sell_signals >= 2:  # 2개 이상의 지표가 매도 신호
+                action = "SELL"
+                reasons.append(f"복합 매도 신호({sell_signals}개)")
             
             # 매매 신호가 있을 때만 로깅
             if action != "HOLD":
