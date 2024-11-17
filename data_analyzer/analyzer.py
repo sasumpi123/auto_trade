@@ -3,6 +3,7 @@ import numpy as np
 import logging
 import pandas as pd
 import traceback
+import time
 
 # 로그 설정
 logging.basicConfig(
@@ -19,6 +20,9 @@ class DataAnalyzer:
         self.ticker = ticker
         logging.info("DataAnalyzer 초기화 시작")
         self.df = pd.DataFrame()
+        self.last_signal = None
+        self.last_signal_time = None
+        self.signal_cooldown = 300  # 신호 재발생 대기시간 (5분)
         logging.info("DataAnalyzer 초기화 완료")
 
     def fetch_data(self, interval="minute1", count=200):
@@ -111,32 +115,54 @@ class DataAnalyzer:
     def analyze(self, index=-1):
         """매매 신호 분석"""
         try:
+            current_time = time.time()
+            
+            # 이전 신호와 동일한 신호가 쿨다운 시간 내에 발생하면 HOLD 반환
+            if (self.last_signal and 
+                self.last_signal_time and 
+                current_time - self.last_signal_time < self.signal_cooldown):
+                return {
+                    'action': 'HOLD',
+                    'reason': None,
+                    'target_price': None,
+                    'strategy_status': self.get_strategy_status(index)
+                }
+
+            # 데이터가 없으면 데이터 가져오기 시도
+            if self.df.empty:
+                self.fetch_data()
+                self.calculate_indicators()
+            
             if self.df.empty:
                 return {
                     'action': 'HOLD',
                     'reason': None,
                     'target_price': None,
-                    'strategy_status': {}
+                    'strategy_status': {
+                        'RSI': 'N/A',
+                        'MACD': 'N/A',
+                        'BB': 'N/A'
+                    }
                 }
-            
+
             current_price = self.df['close'].iloc[index]
             
             # 전략별 상태 확인
             strategy_status = {}
             
-            # RSI 전략
+            # RSI 상태
             rsi = self.df['rsi'].iloc[index]
             rsi_status = '과매수' if rsi > 70 else '과매도' if rsi < 30 else '중립'
             strategy_status['RSI'] = f"{rsi:.1f} ({rsi_status})"
             
-            # MACD 전략
+            # MACD 상태
             macd = self.df['macd'].iloc[index]
             macd_signal = self.df['macd_signal'].iloc[index]
             macd_diff = macd - macd_signal
-            macd_status = '골든크로스' if macd_diff > 0 and macd < 0 else '데드크로스' if macd_diff < 0 and macd > 0 else '중립'
+            macd_status = '골든크로스' if macd_diff > 0 else '데드크로스' if macd_diff < 0 else '중립'
             strategy_status['MACD'] = f"{macd_diff:.1f} ({macd_status})"
             
-            # 볼린저 밴드 전략
+            # BB 상태
             bb_upper = self.df['bb_upper'].iloc[index]
             bb_lower = self.df['bb_lower'].iloc[index]
             bb_middle = self.df['bb_middle'].iloc[index]
@@ -185,6 +211,11 @@ class DataAnalyzer:
                     f"현재가: {current_price:,} → 목표가: {target_price_str}"
                 )
             
+            # 매수/매도 신호가 발생하면 시간 기록
+            if action in ['BUY', 'SELL']:
+                self.last_signal = action
+                self.last_signal_time = current_time
+            
             return {
                 'action': action,
                 'reason': ' & '.join(reasons) if reasons else None,
@@ -198,5 +229,52 @@ class DataAnalyzer:
                 'action': 'HOLD',
                 'reason': None,
                 'target_price': None,
-                'strategy_status': {}
+                'strategy_status': {
+                    'RSI': 'N/A',
+                    'MACD': 'N/A',
+                    'BB': 'N/A'
+                }
+            }
+
+    def get_strategy_status(self, index=-1):
+        """현재 전략 상태 반환"""
+        try:
+            if self.df.empty:
+                return {
+                    'RSI': 'N/A',
+                    'MACD': 'N/A',
+                    'BB': 'N/A'
+                }
+
+            current_price = self.df['close'].iloc[index]
+            
+            # RSI 상태
+            rsi = self.df['rsi'].iloc[index]
+            rsi_status = '과매수' if rsi > 70 else '과매도' if rsi < 30 else '중립'
+            
+            # MACD 상태
+            macd = self.df['macd'].iloc[index]
+            macd_signal = self.df['macd_signal'].iloc[index]
+            macd_diff = macd - macd_signal
+            macd_status = '골든크로스' if macd_diff > 0 else '데드크로스' if macd_diff < 0 else '중립'
+            
+            # BB 상태
+            bb_upper = self.df['bb_upper'].iloc[index]
+            bb_lower = self.df['bb_lower'].iloc[index]
+            bb_middle = self.df['bb_middle'].iloc[index]
+            bb_position = ((current_price - bb_middle) / bb_middle) * 100
+            bb_status = "상단돌파" if current_price > bb_upper else "하단돌파" if current_price < bb_lower else "밴드내"
+            
+            return {
+                'RSI': f"{rsi:.1f} ({rsi_status})",
+                'MACD': f"{macd_diff:.1f} ({macd_status})",
+                'BB': f"{bb_position:.1f}% ({bb_status})"
+            }
+            
+        except Exception as e:
+            logging.error(f"전략 상태 조회 중 오류 발생: {str(e)}")
+            return {
+                'RSI': 'N/A',
+                'MACD': 'N/A',
+                'BB': 'N/A'
             }

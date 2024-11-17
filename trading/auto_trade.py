@@ -189,7 +189,7 @@ class AutoTrade:
             raise
 
     def log_status(self):
-        """현재 거래 상태 로깅"""
+        """현재 거래 상태 로"""
         try:
             # 보유 현금
             current_cash = self.current_cash if not self.real_trading else self.get_balance("KRW")
@@ -271,6 +271,8 @@ class AutoTrade:
         """자동매매 시작"""
         wm = None
         STATUS_INTERVAL = 300  # 상태 업데이트 주기 5분
+        DATA_UPDATE_INTERVAL = 60  # 데이터 업데이트 주기 1분
+        last_data_update = 0
         
         while True:
             try:
@@ -278,10 +280,28 @@ class AutoTrade:
                     wm.terminate()
                 wm = pyupbit.WebSocketManager("ticker", self.tickers)
                 
+                # 초기 데이터 가져오기
+                for ticker in self.tickers:
+                    self.analyzers[ticker].fetch_data()
+                    self.analyzers[ticker].calculate_indicators()
+                
                 while True:
                     data = wm.get()
                     if data is None:
                         raise Exception("WebSocket 연결 끊김")
+                    
+                    current_time = time.time()
+                    
+                    # 주기적 데이터 업데이트
+                    if current_time - last_data_update > DATA_UPDATE_INTERVAL:
+                        for ticker in self.tickers:
+                            try:
+                                self.analyzers[ticker].fetch_data()
+                                self.analyzers[ticker].calculate_indicators()
+                            except Exception as e:
+                                logging.error(f"{ticker} 데이터 업데이트 실패: {str(e)}")
+                        last_data_update = current_time
+                        logging.info("지표 데이터 업데이트 완료")
                     
                     # WebSocket 데이터 처리
                     ticker = data.get('code')
@@ -294,7 +314,6 @@ class AutoTrade:
                     self.price_cache[ticker].append(current_price)
                     
                     # 상태 체크 (5분 간격)
-                    current_time = time.time()
                     if current_time - self.last_status_time > STATUS_INTERVAL:
                         self.log_status()
                         self.last_status_time = current_time
@@ -302,13 +321,22 @@ class AutoTrade:
                     # 매매 신호 확인
                     if ticker in self.analyzers:
                         analysis = self.analyzers[ticker].analyze()
+                        
+                        # 매수 신호 (보유하지 않은 경우만)
                         if analysis['action'] == "BUY" and not self.buy_yn[ticker]:
                             self.buy_coin(ticker, current_price, 
                                         reason=analysis['reason'],
                                         target_price=analysis['target_price'])
+                        
+                        # 매도 신호 (보유 중인 경우만)
                         elif analysis['action'] == "SELL" and self.buy_yn[ticker]:
+                            logging.info(
+                                f"[{ticker}] SELL 신호 발생\n"
+                                f"이유: {analysis['reason']}\n"
+                                f"현재가: {current_price:,} → 목표가: {analysis.get('target_price', '없음')}"
+                            )
                             self.sell_coin(ticker, current_price)
-                    
+                
             except Exception as e:
                 logging.error(f"메인 루프 에러 발생: {str(e)}")
                 if wm is not None:
