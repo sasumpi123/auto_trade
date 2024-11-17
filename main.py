@@ -43,17 +43,30 @@ def system_check():
         # 3. Slack 연동 확인
         if SLACK_APP_TOKEN:
             notification = NotificationService()
-            test_result = notification.send_message(
-                'status',
-                "시스템 점검 중... Slack 연동 테스트"
-            )
-            if not test_result:
-                raise ValueError("Slack 연동 실패")
+            
+            # 모든 채널 테스트
+            test_messages = {
+                'status': "시스템 점검 중... 상태 채널 테스트",
+                'trades': "시스템 점검 중... 거래 알림 채널 테스트",
+                'reports': "시스템 점검 중... 리포트 채널 테스트",
+                'errors': "시스템 점검 중... 에러 채널 테스트"
+            }
+            
+            channel_results = []
+            for channel_type, message in test_messages.items():
+                result = notification.send_message(channel_type, message)
+                channel_results.append((channel_type, result))
+                logging.info(f"Slack {channel_type} 채널 테스트: {'성공' if result else '실패'}")
+            
+            if not all(result for _, result in channel_results):
+                failed_channels = [channel for channel, result in channel_results if not result]
+                raise ValueError(f"Slack 연동 실패 (실패한 채널: {', '.join(failed_channels)})")
+                
         checks["Slack 연동 확인"] = True
         
         # 4. 데이터 분석기 테스트
         from trading.auto_trade import AutoTrade
-        test_trader = AutoTrade(start_cash=10000)
+        test_trader = AutoTrade(start_cash=1000000)
         if not test_trader.analyzers or not test_trader.analyzers[TICKERS[0]]:
             raise ValueError("데이터 분석기 초기화 실패")
         checks["데이터 분석기 초기화"] = True

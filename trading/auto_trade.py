@@ -108,16 +108,28 @@ class AutoTrade:
             self.buy_yn[ticker] = True
             self.buy_price[ticker] = current_price
             
-            message = f"{'[실제]' if self.real_trading else '[테스트]'} {ticker} 매수 성공\n" \
-                     f"매수가: {current_price:,}원\n" \
-                     f"매수금액: {buy_amount:,}원\n" \
-                     f"잔액: {self.get_balance('KRW'):,}원"
+            # 매수 성공 메시지
+            message = (
+                f"{'[실제]' if self.real_trading else '[테스트]'} {ticker} 매수 완료\n"
+                f"매수가: {current_price:,}원\n"
+                f"매수금액: {buy_amount:,}원\n"
+                f"매수이유: {reason}\n"
+                f"잔액: {self.get_balance('KRW'):,}원"
+            )
+            
             logging.info(message)
+            if self.notification:
+                # 여기서 trades 채널로 알림 전송
+                success = self.notification.send_trade_alert(message)
+                if not success:
+                    logging.error("매매 알림 전송 실패")
             
             return True
             
         except Exception as e:
             logging.error(f"매수 중 오류 발생: {str(e)}")
+            if self.notification:
+                self.notification.send_error_alert(f"매수 중 오류 발생: {str(e)}")
             return False
 
     def sell_coin(self, ticker, current_price, stop_loss_triggered=False):
@@ -146,17 +158,27 @@ class AutoTrade:
             self.buy_yn[ticker] = False
             self.buy_price[ticker] = 0
             
-            message = f"{'[실제]' if self.real_trading else '[테스트]'} "
-            message += f"{'[손절]' if stop_loss_triggered else ''} {ticker} 매도 완료\n" \
-                      f"매도가: {current_price:,}원\n" \
-                      f"수익률: {profit_rate:.2f}%\n" \
-                      f"잔액: {self.get_balance('KRW'):,}원"
+            message = (
+                f"{'[실제]' if self.real_trading else '[테스트]'} "
+                f"{'[손절]' if stop_loss_triggered else ''} {ticker} 매도 완료\n"
+                f"매도가: {current_price:,}원\n"
+                f"수익률: {profit_rate:.2f}%\n"
+                f"잔액: {self.get_balance('KRW'):,}원"
+            )
+            
             logging.info(message)
+            if self.notification:
+                # 여기서 trades 채널로 알림 전송
+                success = self.notification.send_trade_alert(message)
+                if not success:
+                    logging.error("매매 알림 전송 실패")
             
             return True
             
         except Exception as e:
             logging.error(f"매도 중 오류 발생: {str(e)}")
+            if self.notification:
+                self.notification.send_error_alert(f"매도 중 오류 발생: {str(e)}")
             return False
 
     def log_current_status(self):
