@@ -194,24 +194,43 @@ class AutoTrade:
             # 보유 현금
             current_cash = self.current_cash if not self.real_trading else self.get_balance("KRW")
             
-            # 보유 코인 상태
+            # 보유 코인 상태 및 지표 분석
             holdings = []
+            indicators = []
             total_value = current_cash
             
             for ticker in self.tickers:
+                # 현재가 확인
+                if not self.price_cache[ticker]:
+                    continue
+                current_price = float(self.price_cache[ticker][-1])
+                
+                # 지표 분석 가져오기
+                analysis = self.analyzers[ticker].analyze()
+                strategy_status = analysis['strategy_status']
+                
+                # 지표 정보 추가
+                indicators.append(
+                    f"▶ {ticker} 지표:\n"
+                    f"  - RSI: {strategy_status.get('RSI', 'N/A')}\n"
+                    f"  - MACD: {strategy_status.get('MACD', 'N/A')}\n"
+                    f"  - BB: {strategy_status.get('BB', 'N/A')}\n"
+                    f"  - 현재가: {current_price:,}원"
+                )
+                
+                # 보유 중인 코인 정보
                 if self.buy_yn[ticker]:
                     buy_price = self.buy_price[ticker]
-                    current_price = float(self.price_cache[ticker][-1])
                     quantity = self.max_per_coin / buy_price
                     current_value = quantity * current_price
                     profit_rate = ((current_price - buy_price) / buy_price) * 100
                     
                     holdings.append(
-                        f"- {ticker}: "
-                        f"수량={quantity:.4f}, "
-                        f"매수가={buy_price:,}원, "
-                        f"현재가={current_price:,}원, "
-                        f"수익률={profit_rate:.2f}%"
+                        f"- {ticker}:\n"
+                        f"  수량={quantity:.4f}\n"
+                        f"  매수가={buy_price:,}원\n"
+                        f"  현재가={current_price:,}원\n"
+                        f"  수익률={profit_rate:.2f}%"
                     )
                     
                     total_value += current_value
@@ -221,18 +240,23 @@ class AutoTrade:
             
             # 상태 메시지 생성
             status_msg = (
-                f"\n===== 거래 상태 =====\n"
-                f"시작 자금: {self.start_cash:,}원\n"
-                f"현재 현금: {current_cash:,}원\n"
-                f"총 평가액: {total_value:,}원\n"
-                f"총 수익률: {total_profit_rate:.2f}%\n"
+                f"\n{'='*40}\n"
+                f"📊 거래 상태 ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n"
+                f"{'='*40}\n"
+                f"💰 자금 현황:\n"
+                f"- 시작 자금: {self.start_cash:,}원\n"
+                f"- 현재 현금: {current_cash:,}원\n"
+                f"- 총 평가액: {total_value:,}원\n"
+                f"- 총 수익률: {total_profit_rate:.2f}%\n"
             )
             
             if holdings:
-                status_msg += "\n보유 코인:\n" + "\n".join(holdings)
+                status_msg += f"\n📈 보유 코인:\n" + "\n".join(holdings)
             else:
-                status_msg += "\n보유 코인: 없음"
-                
+                status_msg += "\n📈 보유 코인: 없음"
+            
+            status_msg += f"\n\n📉 코인 지표:\n" + "\n".join(indicators)
+            
             logging.info(status_msg)
             
             # Slack 알림 전송 (설정된 경우)
@@ -241,6 +265,7 @@ class AutoTrade:
                 
         except Exception as e:
             logging.error(f"상태 로깅 중 오류 발생: {str(e)}")
+            logging.error(traceback.format_exc())
 
     def start(self):
         """자동매매 시작"""
