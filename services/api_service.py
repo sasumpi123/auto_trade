@@ -1,15 +1,17 @@
 import logging
 import traceback
 import pyupbit
-from config import UPBIT_ACCESS_KEY, UPBIT_ACCESS_KEY
+from config import UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY
+from utils.decorators import send_error_alert
 
+@send_error_alert
 def verify_api_keys():
     try:
         logging.info("API 키 검증 시작")
-        if not UPBIT_ACCESS_KEY or not UPBIT_ACCESS_KEY:
+        if not UPBIT_ACCESS_KEY or not UPBIT_SECRET_KEY:
             raise Exception("API 키가 설정되지 않았습니다.")
             
-        upbit = pyupbit.Upbit(UPBIT_ACCESS_KEY, UPBIT_ACCESS_KEY)
+        upbit = pyupbit.Upbit(UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY)
         
         try:
             balance = upbit.get_balance("KRW")

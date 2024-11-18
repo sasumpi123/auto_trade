@@ -1,6 +1,7 @@
 import time
 from datetime import datetime, time as dt_time, timedelta
 import logging
+from utils.decorators import send_error_alert
 
 class PerformanceMonitor:
     def __init__(self):
@@ -59,23 +60,35 @@ class PerformanceAnalyzer:
 
     def check_daily_report_time(self):
         """리포트 시간 체크 (오전 9시, 오후 6시)"""
-        now = datetime.now()
-        current_time = now.time()
-        
-        for report_time in self.report_times:
-            if (current_time >= report_time and 
-                current_time < (datetime.combine(now.date(), report_time) + timedelta(minutes=1)).time()):
-                
-                if (self.last_report_date == now.date() and 
-                    self.last_report_time == report_time):
-                    return False
-                
-                self.last_report_date = now.date()
-                self.last_report_time = report_time
-                return True
-        
-        return False
+        try:
+            now = datetime.now()
+            current_time = now.time()
+            
+            # 현재 분이 0분인지 확인
+            if current_time.minute != 0:
+                return False
+            
+            # 현재 시간이 9시 또는 18시인지 확인
+            if current_time.hour not in [9, 18]:
+                return False
+            
+            # 이미 오늘 해당 시간에 리포트를 생성했는지 확인
+            if (self.last_report_date == now.date() and 
+                self.last_report_time == current_time.replace(minute=0, second=0, microsecond=0)):
+                return False
+            
+            # 리포트 생성 시간 업데이트
+            self.last_report_date = now.date()
+            self.last_report_time = current_time.replace(minute=0, second=0, microsecond=0)
+            
+            logging.info(f"리포트 생성 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"리포트 시간 체크 중 오류 발생: {str(e)}")
+            return False
 
+    @send_error_alert
     def generate_daily_report(self):
         """일일 거래 리포트 생성"""
         now = datetime.now()

@@ -1,4 +1,6 @@
 import sys
+import signal
+import asyncio
 import logging
 import traceback
 from trading.auto_trade import AutoTrade
@@ -36,7 +38,7 @@ def system_check():
         
         # 2. API 키 검증
         if REAL_TRADING:
-            if not verify_api_keys(UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY):
+            if not verify_api_keys():
                 raise ValueError("Upbit API 키 검증 실패")
         checks["API 키 검증"] = True
         
@@ -84,39 +86,63 @@ def system_check():
             logging.error(f"- {check}: {'성공' if status else '실패'}")
         return False
 
-def main():
-    """메인 함수"""
-    try:
-        logging.info("프로그램 시작")
+class TradingBot:
+    def __init__(self):
+        self.auto_trader = None
+        self.running = False
         
-        # 시스템 점검 실행
-        if not system_check():
-            logging.error("시스템 점검 실패. 프로그램을 종료합니다.")
-            sys.exit(1)
-        
-        # 거래 모드 설정 및 AutoTrade 인스턴스 생성
-        mode = "실제" if REAL_TRADING else "시뮬레이션"
-        logging.info(f"{mode} 거래 모드 시작 (초기 자본: {START_CASH:,}원)")
-        
-        auto_trader = AutoTrade(start_cash=START_CASH)
-        auto_trader.start()
-        
-    except Exception as e:
-        logging.error(f"프로그램 시작 실패: {str(e)}")
-        logging.error(f"Traceback (most recent call last):\n{traceback.format_exc()}")
-        
-        # Slack으로 에러 알림 전송
+    def signal_handler(self, signum, frame):
+        """시그널 핸들러"""
+        logging.info("종료 신호 감지, 프로그램을 안전하게 종료합니다...")
+        self.running = False
+        if self.auto_trader:
+            self.auto_trader.stop()
+    
+    def run(self):
+        """트레이딩 봇 실행"""
         try:
-            notification = NotificationService()
-            notification.send_error_alert(
-                f"프로그램 시작 실패:\n"
-                f"에러: {str(e)}\n"
-                f"상세: {traceback.format_exc()}"
-            )
-        except:
-            pass
+            # 시그널 핸들러 등록
+            signal.signal(signal.SIGINT, self.signal_handler)
+            signal.signal(signal.SIGTERM, self.signal_handler)
             
-        sys.exit(1)
+            logging.info("프로그램 시작")
+            
+            # 시스템 점검
+            if not system_check():
+                logging.error("시스템 점검 실패. 프로그램을 종료합니다.")
+                return
+            
+            # AutoTrade 인스턴스 생성 및 실행
+            self.auto_trader = AutoTrade(start_cash=START_CASH)
+            self.running = True
+            
+            # 트레이딩 시작
+            self.auto_trader.start()
+            
+        except Exception as e:
+            logging.error(f"프로그램 실행 중 오류 발생: {str(e)}")
+            logging.error(traceback.format_exc())
+            if hasattr(self, 'auto_trader') and hasattr(self.auto_trader, 'notification'):
+                self.auto_trader.notification.send_error_alert(
+                    f"프로그램 오류 발생:\n"
+                    f"에러: {str(e)}\n"
+                    f"상세: {traceback.format_exc()}"
+                )
+        finally:
+            self.cleanup()
+    
+    def cleanup(self):
+        """리소스 정리"""
+        try:
+            if self.auto_trader:
+                self.auto_trader.stop()
+            logging.info("프로그램이 안전하게 종료되었습니다.")
+        except Exception as e:
+            logging.error(f"종료 처리 중 오류 발생: {str(e)}")
+
+def main():
+    bot = TradingBot()
+    bot.run()
 
 if __name__ == "__main__":
     setup_logging()

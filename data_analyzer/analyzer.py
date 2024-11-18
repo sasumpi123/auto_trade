@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 import traceback
 import time
+from utils.decorators import send_error_alert
 
 # 로그 설정
 logging.basicConfig(
@@ -25,6 +26,7 @@ class DataAnalyzer:
         self.signal_cooldown = 300  # 신호 재발생 대기시간 (5분)
         logging.info("DataAnalyzer 초기화 완료")
 
+    @send_error_alert
     def fetch_data(self, interval="minute1", count=200):
         """데이터 조회"""
         try:
@@ -53,6 +55,7 @@ class DataAnalyzer:
             logging.error(f"데이터 조회 중 오류 발생: {str(e)}")
             raise
 
+    @send_error_alert
     def calculate_indicators(self):
         """기술적 지표 계산"""
         try:
@@ -103,6 +106,7 @@ class DataAnalyzer:
             logging.error(f"지표 계산 중 오류 발생: {str(e)}")
             raise
 
+    @send_error_alert
     def update_data(self):
         """데이터 업데이트"""
         try:
@@ -112,6 +116,7 @@ class DataAnalyzer:
             logging.error(f"데이터 업데이트 중 오류 발생: {str(e)}")
             raise 
 
+    @send_error_alert
     def analyze(self, index=-1):
         """매매 신호 분석"""
         try:
