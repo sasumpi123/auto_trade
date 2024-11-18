@@ -1,3 +1,3 @@
 from .analyzer import DataAnalyzer
 
-__all__ = ['DataAnalyzer']
+__all__ = ['DataAnalyzer', 'CandleAnalyzer']
