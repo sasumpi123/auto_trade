@@ -45,7 +45,7 @@ class AutoTrade:
         self.min_trading_amount = MIN_TRADING_AMOUNT
         self.max_per_coin = start_cash * CASH_USAGE_RATIO  # 코인당 최대 투자금액
         self.stop_loss = STOP_LOSS
-        self.profit_taking_ratio = 0.1  # 이익 실현 비율 (10%)
+        self.profit_taking_ratio = 0.05  # 이익 실현 비율 (10%)
         
         # 상태 변수 초기화
         self.buy_yn = {ticker: False for ticker in self.tickers}
@@ -304,7 +304,7 @@ class AutoTrade:
                 if self.notification:
                     self.notification.send_trade_alert(message)
                 
-                # 거래 정보 기록
+                # 거래 정보 ��록
                 trade_info = {
                     'type': 'buy',
                     'price': actual_price,
@@ -621,12 +621,28 @@ class AutoTrade:
             current_price = float(data['trade_price'])
             self.price_cache[ticker].append(current_price)
             
+            # 보유 중인 경우 이익 실현 확인
+            if self.buy_yn[ticker]:
+                buy_price = self.buy_price[ticker]
+                profit_rate = (current_price - buy_price) / buy_price
+                
+                # 설정된 이익 실현 비율 도달 시 매도
+                if profit_rate >= self.profit_taking_ratio:
+                    logging.info(f"{ticker} 이익 실현 매도 시도 (수익률: {profit_rate*100:.2f}%)")
+                    self.sell_coin(ticker, current_price, reason=f"이익 실현 ({profit_rate*100:.2f}%)")
+                    return
+                
+                # 손절 라인 체크
+                if self.check_stop_loss(ticker, current_price):
+                    self.sell_coin(ticker, current_price, stop_loss_triggered=True)
+                    return
+            
             # 보유 중이 아닐 때만 매수 신호 체크
             if not self.buy_yn[ticker]:
                 # 실질적 보유 코인 수 체크
                 current_holdings = self.get_significant_holdings_count()
                 if current_holdings >= MAX_COINS_AT_ONCE:
-                    return  # 최대 보유 코인 수 도달, 매수 신호 무시
+                    return
                 
                 # 매수 신호 분석
                 analysis = self.analyzers[ticker].analyze()
@@ -635,8 +651,12 @@ class AutoTrade:
                                 reason=analysis['reason'],
                                 target_price=analysis['target_price'])
             
-            # ... rest of the existing code ...
-
+            # 보유 중인 경우 매도 신호 체크
+            elif self.buy_yn[ticker]:
+                analysis = self.analyzers[ticker].analyze()
+                if analysis['action'] == 'SELL':
+                    self.sell_coin(ticker, current_price, reason=analysis['reason'])
+                
         except Exception as e:
             error_msg = f"시장 데이터 처리 중 오류 발생: {str(e)}"
             logging.error(error_msg)
