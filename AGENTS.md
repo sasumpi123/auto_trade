@@ -50,3 +50,10 @@
 - `automation/store.py`와 오케스트레이터는 fake-only이며 실제 GitHub/Codex/리뷰/병합 API를 연결하지 않습니다. `enabled=false` 및 기존 권한을 유지합니다.
 - 원장은 명시적으로 생성하고 손상/정책 불일치/시간 역행/lease 만료/복원 모호성에서 실행을 차단합니다. DB 삭제, 수동 SQL 수정, 비용 환급, 한도 초기화로 복구 검사를 우회하지 않습니다.
 - 재현·백업·복구와 미해결 운영 경계는 `docs/P1_LEDGER.md`를 따릅니다. 원장/SQLite sidecar/백업 파일은 커밋하지 않습니다.
+
+## P2 읽기 전용 관측
+
+- `automation/github_*.py`의 실제 관측 Snapshot은 P1 Fake Event로 변환하거나 실행/예약/게시/병합에 연결하지 않습니다.
+- 이벤트 본문 대신 인증된 API를 재조회하고 불변 ID/hash/head 및 CI run-job-Check 연결을 확인합니다. 오류/권한 부족/미검증은 보류합니다.
+- 관측 DB는 runner 로컬 companion이며 공유 실행 원장이 아닙니다. body/token/raw event는 저장·출력하지 않습니다.
+- 현재 observer에 외부 Secret/App key/쓰기 권한을 주지 않습니다. 상세 제한과 P3 사용자 설정은 `docs/P2_GITHUB_READONLY.md`를 따릅니다.

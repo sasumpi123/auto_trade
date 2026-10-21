@@ -2,18 +2,18 @@
 
 ## 현재 구현 범위와 활성 상태
 
-현재는 **설계·비활성 설정·읽기 전용 이벤트 관찰과 P1 SQLite 영속 Fake-only 오케스트레이터** 단계입니다. 로컬 트랜잭션·복구·모의 E2E는 [P1 원장 문서](P1_LEDGER.md)에 정리했습니다. 승인 이슈에서 실제 Codex 실행, 수정 Push, 독립 ChatGPT 호출, 병합까지 이어지는 운영 루프는 아직 연결하지 않았습니다. 키 등록·GitHub App 설치·권한 확대·브랜치 보호 변경·자동 병합 활성화는 수행하지 않습니다. 현재 모델 호출 수와 API 사용 비용은 0입니다. GitHub Actions 실행 시간 비용은 계정 정책에 따릅니다.
+현재는 **P1 Fake-only 영속 원장과 P2 인증된 GitHub 읽기 전용 관측** 단계입니다. P2 권한·검증·관측 DB 및 제한은 [P2 문서](P2_GITHUB_READONLY.md)를 참고하세요. 로컬 트랜잭션·복구·모의 E2E는 [P1 원장 문서](P1_LEDGER.md)에 정리했습니다. 승인 이슈에서 실제 Codex 실행, 수정 Push, 독립 ChatGPT 호출, 병합까지 이어지는 운영 루프는 아직 연결하지 않았습니다. 키 등록·GitHub App 설치·권한 확대·브랜치 보호 변경·자동 병합 활성화는 수행하지 않습니다. 현재 모델 호출 수와 API 사용 비용은 0입니다. GitHub Actions 실행 시간 비용은 계정 정책에 따릅니다.
 
 | 구성 | 이번 PR | 운영 활성화에 추가로 필요한 것 |
 |---|---|---|
-| GitHub 이벤트 | 기본 브랜치 코드로 메타데이터 관찰; 본문/비밀정보 출력 없음 | 인증된 API 상태 수집·승인 큐 어댑터 |
-| 승인·수정·병합 정책 | 순수 결정 함수와 회귀 테스트 | 사실을 인증된 GitHub API에서 만드는 어댑터 |
+| GitHub 이벤트 | 기본 브랜치 코드와 GET REST 재조회; 메타데이터만 기록 | 서명 receiver·영속 공유 원장·누락 복구 |
+| 승인·수정·병합 정책 | 순수 정책 및 ID/hash/head/run-job-Check 검증 | threads/rulesets·최종 atomic gate 검증 |
 | 중복/재시도/예산 | SQLite 트랜잭션·영속 이벤트/예약·lease·복원 격리 및 Fake E2E | 다중 호스트의 단일 내구 원장·실제 사용량 집계·운영 복구 |
 | Codex Action | 검증한 커밋 SHA의 비활성 템플릿, 마지막 단계·drop-sudo·workspace 프로필 | 별도 승인한 CLI 버전·격리 작업자·자격·예산 집행 |
 | 독립 ChatGPT | 역할/메시지/검증 계약 | 별도 계정/연결·독립 리뷰 작업 및 GitHub 리뷰 발행 |
 | Push/PR/병합 | 호출 코드/쓰기 권한 없음 | 독립 게시 브로커·보호 브랜치·병합 게이트 |
 
-`.github/workflows/automation-observer.yml`은 이슈·댓글·PR 리뷰·커밋 갱신·CI 완료 이벤트와 수동 실행을 관찰합니다. `master`만 checkout하고 PR head 코드를 실행하지 않습니다. 현재는 상태 수집기가 아니므로 승인된 큐를 실제 착수시키지 않습니다. `policy.json.enabled=false`, builder/reviewer ID 빈 목록입니다. 이를 true로 바꿔도 관찰기가 작업자로 바뀌지는 않습니다. 비활성 작업자 예제는 workflows 밖의 `.github/automation/codex-worker.yml.example`에 있으며 `if: false`도 설정했습니다.
+`.github/workflows/automation-observer.yml`은 이슈·댓글·PR 리뷰·커밋 갱신·CI 완료 이벤트를 관찰합니다. `master`만 checkout하고 PR head 코드를 실행하지 않습니다. P2는 인증된 현재 상태를 수집하지만 관측 전용이며 승인된 큐를 착수시키지 않습니다. 보호 규칙 조회 권한 부족이나 미검증 항목은 보류합니다. `policy.json.enabled=false`, builder/reviewer ID 빈 목록입니다. 이를 true로 바꿔도 관찰기가 작업자로 바뀌지는 않습니다. 비활성 작업자 예제는 workflows 밖의 `.github/automation/codex-worker.yml.example`에 있으며 `if: false`도 설정했습니다.
 
 ## 제안하는 완전 자동 사이클
 
@@ -62,7 +62,7 @@ flowchart TD
 
 | 구성 | 향후 최소 권한 | 비밀정보 |
 |---|---|---|
-| 현재 관찰기 | contents:read만 | 없음 |
+| P2 관찰기 | contents/issues/PR/checks/actions:read; metadata implicit | Actions 자동 단기 github.token만; 새 Secret 없음 |
 | 컨트롤러/원장 | metadata·contents·issues·PR·checks·actions 읽기; 원장 전용 CAS 저장소 쓰기 | 컨트롤러 전용 App 키 |
 | Codex 작업자 | contents:read; 저장소 쓰기·리뷰·병합 권한 없음 | 격리 환경의 OPENAI_API_KEY만 공식 proxy에 전달 |
 | 패치 게시 브로커 | contents:write, pull_requests:write; 지정 브랜치/승인 범위만 | 게시 전용 단기 App installation token |
