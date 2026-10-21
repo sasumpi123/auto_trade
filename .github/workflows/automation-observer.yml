@@ -1,25 +1,30 @@
 name: Development automation observer (read only)
 on:
   issues:
-    types: [labeled, edited, reopened]
+    types: [opened, labeled, unlabeled, edited, reopened, closed]
   issue_comment:
-    types: [created]
+    types: [created, edited, deleted]
   pull_request_review:
-    types: [submitted, dismissed]
-  pull_request:
-    types: [synchronize, closed]
+    types: [submitted, dismissed, edited]
+  # Trusted base workflow; never fetch or execute a PR head or its artifacts.
+  pull_request_target:
+    types: [opened, synchronize, edited, reopened, closed]
   workflow_run:
     workflows: [Python safety tests]
     types: [completed]
-  workflow_dispatch:
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
+  actions: read
+  checks: read
+  # Metadata read is implicit. GITHUB_TOKEN cannot grant administration: read.
 concurrency:
   group: automation-observer-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
   cancel-in-progress: false
 jobs:
   observe:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' || github.event.sender.id == 45135977 }}
+    if: ${{ github.repository == 'sasumpi123/auto_trade' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -30,10 +35,8 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.12'
-      - name: Observe metadata without bodies, secrets, model calls or writes
-        run: |
-          if [ -f tools/automation_plan.py ]; then
-            python tools/automation_plan.py
-          else
-            echo "Observer is not on the trusted master yet; no execution."
-          fi
+      - name: Verify GitHub state with no execution or writes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python tools/automation_plan.py

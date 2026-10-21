@@ -176,7 +176,8 @@ class AutomationPolicyTests(unittest.TestCase):
             path = Path(tmp) / 'event.json'
             path.write_text(json.dumps({'issue': {'number': 42, 'body': 'fake-sensitive-body'},
                                         'comment': {'body': 'fake-sensitive-comment'}}), encoding='utf-8')
-            env = dict(os.environ, GITHUB_EVENT_PATH=str(path), GITHUB_EVENT_NAME='issue_comment')
+            env = dict(os.environ, GITHUB_EVENT_PATH=str(path), GITHUB_EVENT_NAME='issue_comment',
+                       GITHUB_REPOSITORY='')  # Explicit offline context, including on Actions.
             result = subprocess.run([sys.executable, str(ROOT / 'tools/automation_plan.py')],
                                     env=env, capture_output=True, text=True, check=True)
             self.assertNotIn('fake-sensitive', result.stdout)
@@ -190,7 +191,10 @@ class AutomationPolicyTests(unittest.TestCase):
         self.assertNotIn('contents: write', template)
         workflow = (ROOT / '.github/workflows/automation-observer.yml').read_text(encoding='utf-8')
         self.assertNotIn('secrets.', workflow)
-        self.assertNotIn('pull_request_target:', workflow)
+        self.assertIn('pull_request_target:', workflow)
+        self.assertNotIn('github.event.pull_request.head', workflow)
+        self.assertNotIn('download-artifact', workflow)
+        self.assertIn('checks: read', workflow)
         self.assertNotIn('contents: write', workflow)
         self.assertIn('ref: master', workflow)
 

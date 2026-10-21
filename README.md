@@ -179,3 +179,7 @@ python -m automation status --database runtime/p1-normal.sqlite3
 ```
 
 DB는 명시적으로 새로 만들며 덮어쓰지 않습니다. 만료/모호한 작업과 복원된 백업은 격리하며, 예약은 자동 환급하지 않습니다.
+
+## P2 GitHub 읽기 전용 검증
+
+[인증·이벤트·별도 관측 DB·P3 전제](docs/P2_GITHUB_READONLY.md)를 참고하세요. master 코드로 실제 REST 상태를 재조회하지만 실행/Push/병합과 연결하지 않습니다. 자동화와 실거래는 비활성 상태이며 API 권한 부족은 검증 보류입니다. 테스트는 Fake HTTP만 사용합니다.
