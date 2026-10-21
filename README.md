@@ -165,4 +165,17 @@ python -m backtesting.historical evaluate --data research/2026-10-21/data --outp
 
 ## 개발 자동화 제안
 
-승인 이슈 → 격리 구현 → 독립 ChatGPT 검토 → 보호된 병합의 [아키텍처·권한·비용·보안·설정 경계](docs/DEVELOPMENT_AUTOMATION.md)를 참고하세요. 현재는 비밀 없는 읽기 전용 이벤트 관찰과 오프라인 정책 테스트만 구현했습니다. 유료 모델 작업자·수정 push·자동 병합은 연결/활성화하지 않았습니다. 키/권한 변경은 사용자 설정과 별도 검토가 필요합니다.
+승인 이슈 → 격리 구현 → 독립 ChatGPT 검토 → 보호된 병합의 [아키텍처·권한·비용·보안·설정 경계](docs/DEVELOPMENT_AUTOMATION.md)를 참고하세요. 현재는 비밀 없는 읽기 전용 이벤트 관찰, 오프라인 정책 및 SQLite 영속 Fake-only 흐름을 구현했습니다. 유료 모델 작업자·수정 push·자동 병합은 연결/활성화하지 않았습니다. 키/권한 변경은 사용자 설정과 별도 검토가 필요합니다.
+
+## P1 영속 Dry-run 개발 흐름
+
+[SQLite 원장·상태 전이·lease·백업/복구와 활성화 전제](docs/P1_LEDGER.md)를 참고하세요. 외부 API, 키, 실제 PR/Push/병합 없이 모의 흐름만 실행합니다. 기본 데모는 병합 가능 판정에서 멈추며 자동화는 계속 비활성 상태입니다.
+
+```bash
+python -m automation demo --database runtime/p1-normal.sqlite3 --scenario normal
+python -m automation demo --database runtime/p1-revision.sqlite3 --scenario revision
+python -m automation demo --database runtime/p1-failure.sqlite3 --scenario failure
+python -m automation status --database runtime/p1-normal.sqlite3
+```
+
+DB는 명시적으로 새로 만들며 덮어쓰지 않습니다. 만료/모호한 작업과 복원된 백업은 격리하며, 예약은 자동 환급하지 않습니다.
