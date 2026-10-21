@@ -157,28 +157,56 @@ class BacktestResult:
         return serializable(asdict(self))
 
 
+@dataclass(frozen=True)
+class PreparedCandles:
+    # Internal immutable-by-contract cache; callers must not mutate frame/features.
+    frame: pd.DataFrame
+    features: pd.DataFrame
+    snapshots: tuple
+    first: int
+    data_hash: str
+    bar_seconds: int
+
+
 class BacktestEngine:
     def __init__(self, config):
         if not isinstance(config, BacktestConfig):
             raise ValueError('BacktestConfig required')
         self.config = config
 
-    def run(self, data, strategy: Strategy):
-        config = self.config
-        if not isinstance(strategy.name, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,63}', strategy.name):
-            raise ValueError('Strategy names must be safe, unique report identifiers')
-        frame = validate_candles(data, config.bar_seconds)
+    def prepare(self, data):
+        frame = validate_candles(data, self.config.bar_seconds)
         features = indicators(frame)
-        snapshots = [snapshot_at(features, i) for i in range(len(frame))]
+        snapshots = tuple(snapshot_at(features, i) for i in range(len(frame)))
         first = next((i for i, snapshot in enumerate(snapshots) if snapshot is not None), None)
         if first is None or first + 1 >= len(frame):
             raise ValueError('Insufficient common indicator warm-up plus a following execution bar')
+        return PreparedCandles(frame, features, snapshots, first, dataset_hash(frame), self.config.bar_seconds)
+
+    def run(self, data, strategy: Strategy, *, evaluation_start=None):
+        config = self.config
+        if not isinstance(strategy.name, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,63}', strategy.name):
+            raise ValueError('Strategy names must be safe, unique report identifiers')
+        prepared = data if isinstance(data, PreparedCandles) else self.prepare(data)
+        if prepared.bar_seconds != config.bar_seconds:
+            raise ValueError('Prepared candle interval mismatch')
+        frame, features, snapshots, first = prepared.frame, prepared.features, prepared.snapshots, prepared.first
+        if evaluation_start is None:
+            evaluation_start = frame.index[0]
+        evaluation_start = pd.Timestamp(evaluation_start)
+        if evaluation_start.tzinfo is None or evaluation_start not in frame.index:
+            raise ValueError('Evaluation start must be a timezone-aware candle open in the dataset')
+        if evaluation_start > frame.index[-2]:
+            raise ValueError('Evaluation requires at least two bars')
         portfolio = SimulationPortfolio(config.initial_cash)
         pending, last_signal_at = None, None
         curve, signals = [], []
         peak = config.initial_cash
         max_drawdown = Decimal('0')
-        for i, (timestamp, row) in enumerate(frame.iterrows()):
+        for i, row in enumerate(frame.itertuples()):
+            timestamp = row.Index
+            if timestamp < evaluation_start:
+                continue
             # A signal from the previous COMPLETED bar executes at this bar's OPEN.
             if pending is not None:
                 portfolio.execute(pending, timestamp, row.open, config)
@@ -227,7 +255,7 @@ class BacktestEngine:
             'realized_pnl': realized, 'unrealized_pnl': unrealized,
             'ending_cash': portfolio.cash, 'ending_quantity': portfolio.quantity,
         }
-        return BacktestResult(strategy.name, dataset_hash(frame), config, first, metrics,
+        return BacktestResult(strategy.name, prepared.data_hash, config, first, metrics,
                               tuple(portfolio.fills), tuple(curve), tuple(signals), pending)
 
 
