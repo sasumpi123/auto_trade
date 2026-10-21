@@ -1,0 +1,107 @@
+{
+  "normal": {
+    "mode": "fake-only",
+    "paid_execution_allowed": false,
+    "actual_api_calls": 0,
+    "scenario": "normal",
+    "issues": [
+      {
+        "issue": 1,
+        "attempts": 1,
+        "failures": 0,
+        "halt_reason": "",
+        "reserved_cents": 500,
+        "state": "MERGE_ELIGIBLE",
+        "version": 10
+      }
+    ],
+    "states": [
+      "ISSUE_APPROVED",
+      "IMPLEMENTATION_PENDING",
+      "IMPLEMENTATION_RUNNING",
+      "IMPLEMENTATION_RUNNING",
+      "IMPLEMENTATION_RUNNING",
+      "PR_CREATED",
+      "REVIEW_PENDING",
+      "REVIEW_PENDING",
+      "CI_PENDING",
+      "MERGE_ELIGIBLE"
+    ],
+    "fake_codex_calls": 1,
+    "integrity": true
+  },
+  "revision": {
+    "mode": "fake-only",
+    "paid_execution_allowed": false,
+    "actual_api_calls": 0,
+    "scenario": "revision",
+    "issues": [
+      {
+        "issue": 1,
+        "attempts": 2,
+        "failures": 0,
+        "halt_reason": "",
+        "reserved_cents": 1000,
+        "state": "MERGE_ELIGIBLE",
+        "version": 17
+      }
+    ],
+    "states": [
+      "ISSUE_APPROVED",
+      "IMPLEMENTATION_PENDING",
+      "IMPLEMENTATION_RUNNING",
+      "IMPLEMENTATION_RUNNING",
+      "IMPLEMENTATION_RUNNING",
+      "PR_CREATED",
+      "REVIEW_PENDING",
+      "REVIEW_PENDING",
+      "CHANGES_REQUESTED",
+      "REVISION_RUNNING",
+      "REVISION_RUNNING",
+      "REVISION_RUNNING",
+      "CI_PENDING",
+      "REVIEW_PENDING",
+      "REVIEW_PENDING",
+      "CI_PENDING",
+      "MERGE_ELIGIBLE"
+    ],
+    "fake_codex_calls": 2,
+    "integrity": true
+  },
+  "failure": {
+    "mode": "fake-only",
+    "paid_execution_allowed": false,
+    "actual_api_calls": 0,
+    "scenario": "failure",
+    "issues": [
+      {
+        "issue": 1,
+        "attempts": 2,
+        "failures": 2,
+        "halt_reason": "execution_or_failure_limit",
+        "reserved_cents": 1000,
+        "state": "HALTED",
+        "version": 15
+      }
+    ],
+    "states": [
+      "ISSUE_APPROVED",
+      "IMPLEMENTATION_PENDING",
+      "IMPLEMENTATION_RUNNING",
+      "IMPLEMENTATION_RUNNING",
+      "IMPLEMENTATION_RUNNING",
+      "PR_CREATED",
+      "REVIEW_PENDING",
+      "REVIEW_PENDING",
+      "FAILED",
+      "CHANGES_REQUESTED",
+      "REVISION_RUNNING",
+      "REVISION_RUNNING",
+      "REVISION_RUNNING",
+      "CI_PENDING",
+      "HALTED"
+    ],
+    "fake_codex_calls": 2,
+    "integrity": true
+  }
+}

@@ -73,3 +73,9 @@ backtest.log
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Persistent automation journals, SQLite sidecars and backup metadata
+*.sqlite3-*
+*.sqlite-*
+*.db-*
+*.ledger-backup.json
