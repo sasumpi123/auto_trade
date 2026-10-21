@@ -17,7 +17,7 @@ DEFAULT_PROTOCOL = Path(__file__).with_name('protocol.json')
 
 
 def load_protocol(path=DEFAULT_PROTOCOL):
-    raw = Path(path).read_bytes()
+    raw = Path(path).read_text(encoding='utf-8').encode('utf-8')  # Normalize checkout CRLF to LF.
     protocol = json.loads(raw)
     boundaries = [utc(protocol[key]) for key in ('start', 'train_end', 'validation_end', 'end')]
     if any(a >= b for a, b in zip(boundaries, boundaries[1:])):

@@ -55,3 +55,5 @@ python -m unittest discover -v
 CI는 네트워크를 사용하지 않는 가짜 공개 응답과 합성 데이터로 수집·시간 분리·봉인 테스트·비용·기준선을 검증합니다. 실제 데이터 스냅샷/품질 및 재현 결과도 별도 검사합니다. 실제 API 호출은 이번 수동 수집 경로에서만 수행했습니다. 실거래 주문, 계정 API, 운영 배포는 수행하지 않았습니다.
 
 공식 문서: [분 캔들](https://docs.upbit.com/kr/reference/list-candles-minutes), [과거 캔들 수집 안내](https://docs.upbit.com/kr/docs/how-to-download-candle-data). 후속 연구: #7, 비용 모델 #5, 운영 bfill #4.
+
+프로토콜 해시는 UTF-8 텍스트 개행을 LF로 정규화한 뒤 계산합니다. Windows Git checkout의 CRLF 변환은 실험 내용 변경으로 취급하지 않으며, 공백·필드·값 변경은 여전히 해시 불일치로 차단합니다.

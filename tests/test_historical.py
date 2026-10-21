@@ -180,6 +180,14 @@ class HistoricalResearchTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 quality_report(data, 15, protocol['start'], protocol['end'])
 
+    def test_protocol_digest_is_independent_of_checkout_line_endings(self):
+        path = Path(__file__).resolve().parents[1] / 'backtesting/protocol.json'
+        protocol, digest = load_protocol(path)
+        with tempfile.TemporaryDirectory() as tmp:
+            crlf = Path(tmp) / 'protocol.json'
+            crlf.write_bytes(path.read_text(encoding='utf-8').replace('\n', '\r\n').encode('utf-8'))
+            self.assertEqual(load_protocol(crlf), (protocol, digest))
+
     def test_split_disjoint_complete_time_order_and_protocol_validation(self):
         frame, protocol = research_fixture()
         splits = split_frames(frame, protocol)
