@@ -152,6 +152,17 @@ MIT License
 
 버그 리포트, 기능 제안, PR은 언제나 환영합니다.
 
+
+## 실제 과거 데이터 연구
+
+BTC·ETH·XRP·SOL KRW의 15분/1시간봉 공개 OHLCV 수집과 고정 비용 격자 비교는 [연구 설계](docs/HISTORICAL_RESEARCH.md)를 참고하세요.
+학습/검증/미사용 테스트를 시간순으로 분리하며 미사용 테스트는 평가하지 않습니다. [고정 스냅샷과 실제 결과](research/2026-10-21/)를 보존합니다. 누락 봉은 채우지 않으며 개발 구간의 품질이 나쁘면 중단합니다. 실제 주문이나 계정 API 없이 실행합니다.
+
+```bash
+python -m backtesting.historical collect --data runtime/new-snapshot
+python -m backtesting.historical evaluate --data research/2026-10-21/data --output runtime/reproduced
+```
+
 ## 개발 자동화 제안
 
 승인 이슈 → 격리 구현 → 독립 ChatGPT 검토 → 보호된 병합의 [아키텍처·권한·비용·보안·설정 경계](docs/DEVELOPMENT_AUTOMATION.md)를 참고하세요. 현재는 비밀 없는 읽기 전용 이벤트 관찰과 오프라인 정책 테스트만 구현했습니다. 유료 모델 작업자·수정 push·자동 병합은 연결/활성화하지 않았습니다. 키/권한 변경은 사용자 설정과 별도 검토가 필요합니다.
