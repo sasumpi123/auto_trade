@@ -5,6 +5,7 @@ import pandas as pd
 import traceback
 import time
 from utils.decorators import send_error_alert
+from strategies.signals import LegacyCompositeStrategy, Snapshot
 
 class DataAnalyzer:
     def __init__(self, ticker):
@@ -181,85 +182,19 @@ class DataAnalyzer:
             bb_status = "상단돌파" if current_price > bb_upper else "하단돌파" if current_price < bb_lower else "밴드내"
             strategy_status['BB'] = f"{bb_position:.1f}% ({bb_status})"
             
-            # 매매 신호 및 이유 결정
-            action = "HOLD"
-            reasons = []
-            target_price = None
-            
-            # RSI 기반 매매 신호
-            if rsi < 30 and self.df['rsi'].diff().iloc[-1] > 0:  # RSI가 30 이하이면서 상승추세
-                action = "BUY"
-                reasons.append(f"RSI 과매도 반등({rsi:.1f})")
-                target_price = current_price * 1.05
-            elif rsi > 70 and self.df['rsi'].diff().iloc[-1] < 0:  # RSI가 70 이상이면서 하락추세
-                action = "SELL"
-                reasons.append(f"RSI 과매수 하락({rsi:.1f})")
-            
-            # MACD 기반 매매 신호
-            # MACD 방향성 확인
-            macd_trend = self.df['macd'].diff().iloc[-1]
-            signal_trend = self.df['macd_signal'].diff().iloc[-1]
-
-            if macd > macd_signal and macd < 0 and macd_trend > 0:  # 골든크로스 + 상승추세
-                action = "BUY"
-                reasons.append(f"MACD 골든크로스 상승({macd_diff:.1f})")
-                target_price = current_price * 1.03
-            elif macd < macd_signal and macd > 0 and macd_trend < 0:  # 데드크로스 + 하락추세
-                action = "SELL"
-                reasons.append(f"MACD 데드크로스 하락({macd_diff:.1f})")
-            
-            # 볼린저 밴드 기반 매매 신호
-            if current_price < bb_lower:  # 하단밴드 하향 돌파
-                # 추가 조건 확인: RSI가 상승 추세이거나 MACD가 반등 신호를 보일 때
-                if (self.df['rsi'].diff().iloc[-1] > 0 or  # RSI 상승 추세
-                    (self.df['macd'].iloc[-1] > self.df['macd'].iloc[-2])):  # MACD 반등
-                    action = "BUY"
-                    reasons.append(f"BB 하단 반등({bb_position:.1f}%)")
-                    target_price = bb_middle
-            elif current_price > bb_upper:
-                action = "SELL"
-                reasons.append(f"BB 상단 돌파({bb_position:.1f}%)")
-            
-            # 여러 지표가 동시에 매수/매도 신호를 보낼 때 신뢰도 증가
-            buy_signals = 0
-            sell_signals = 0
-
-            # RSI 신호
-            if rsi < 30 and self.df['rsi'].diff().iloc[-1] > 0:
-                buy_signals += 1
-            elif rsi > 70 and self.df['rsi'].diff().iloc[-1] < 0:
-                sell_signals += 1
-
-            # MACD 신호
-            if macd > macd_signal and macd < 0 and macd_trend > 0:
-                buy_signals += 1
-            elif macd < macd_signal and macd > 0 and macd_trend < 0:
-                sell_signals += 1
-
-            # BB 신호
-            if current_price < bb_lower and (self.df['rsi'].diff().iloc[-1] > 0 or self.df['macd'].iloc[-1] > self.df['macd'].iloc[-2]):
-                buy_signals += 1
-            elif current_price > bb_upper:
-                sell_signals += 1
-
-            # 최종 신호 결정
-            if buy_signals >= 2:  # 2개 이상의 지표가 매수 신호
-                action = "BUY"
-                target_price = current_price * 1.05
-                reasons.append(f"복합 매수 신호({buy_signals}개)")
-            elif sell_signals >= 2:  # 2개 이상의 지표가 매도 신호
-                action = "SELL"
-                reasons.append(f"복합 매도 신호({sell_signals}개)")
-            
-            # 매매 신호가 있을 때만 로깅
+            # Pure strategy: the analyzer owns data/cooldown, never order execution.
+            # Keep the legacy latest-delta semantics for compatibility with the bot.
+            decision = LegacyCompositeStrategy().decide(Snapshot(
+                current_price, rsi, self.df['rsi'].diff().iloc[-1],
+                macd, macd_signal, self.df['macd'].diff().iloc[-1],
+                bb_lower, bb_middle, bb_upper,
+            ))
+            action = decision.action
+            reasons = [decision.reason] if decision.reason else []
+            target_price = decision.target_price
             if action != "HOLD":
-                target_price_str = f"{target_price:,}" if target_price else "없음"
-                logging.info(
-                    f"[{self.ticker}] {action} 신호 발생\n"
-                    f"이유: {' & '.join(reasons)}\n"
-                    f"현재가: {current_price:,} → 목표가: {target_price_str}"
-                )
-            
+                logging.info(f"[{self.ticker}] {action} 신호: {decision.reason}")
+
             # 매수/매도 신호가 발생하면 시간 기록
             if action in ['BUY', 'SELL']:
                 self.last_signal = action
