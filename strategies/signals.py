@@ -100,9 +100,9 @@ class ConsensusStrategy:
                       for strategy in (RSIStrategy(), MACDStrategy(), BollingerStrategy()))
         buys = sum(action == 'BUY' for _, action in votes)
         sells = sum(action == 'SELL' for _, action in votes)
-        if buys >= self.quorum:
+        if buys >= self.quorum and sells == 0:
             return Signal('BUY', f'{buys}/3 indicator consensus', votes=votes)
-        if sells >= self.quorum:
+        if sells >= self.quorum and buys == 0:
             return Signal('SELL', f'{sells}/3 indicator consensus', votes=votes)
         return Signal(votes=votes)
 

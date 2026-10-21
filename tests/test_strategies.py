@@ -1,5 +1,7 @@
 from dataclasses import FrozenInstanceError, replace
 import unittest
+from itertools import product
+from unittest.mock import patch
 
 from strategies.signals import (Snapshot, Signal, RSIStrategy, MACDStrategy, BollingerStrategy,
                                 ConsensusStrategy, LegacyCompositeStrategy, research_strategies)
@@ -47,10 +49,35 @@ class StrategyTests(unittest.TestCase):
         sell = snapshot(close=121, rsi=80, rsi_delta=-1, macd=1, macd_signal=2, macd_delta=-1)
         self.assertEqual(ConsensusStrategy(3).decide(sell).action, 'SELL')
 
-    def test_majority_conflict_policy_is_explicit(self):
-        s = snapshot(close=121, rsi=20, rsi_delta=1, macd=-1, macd_signal=-2, macd_delta=1)
-        self.assertEqual(ConsensusStrategy(2).decide(s).action, 'BUY')
-        self.assertEqual(ConsensusStrategy(3).decide(s).action, 'HOLD')
+    def test_opposing_vote_blocks_two_of_three_in_both_directions(self):
+        buy_conflict = snapshot(close=121, rsi=20, rsi_delta=1,
+                                macd=-1, macd_signal=-2, macd_delta=1)
+        sell_conflict = snapshot(close=79, rsi=80, rsi_delta=-1,
+                                 macd=1, macd_signal=2, macd_delta=-1)
+        for observation, votes, legacy_action in (
+                (buy_conflict, ('BUY', 'BUY', 'SELL'), 'BUY'),
+                (sell_conflict, ('SELL', 'SELL', 'BUY'), 'SELL')):
+            with self.subTest(votes=votes):
+                for quorum in (2, 3):
+                    signal = ConsensusStrategy(quorum).decide(observation)
+                    self.assertEqual(signal.action, 'HOLD')
+                    self.assertEqual(tuple(action for _, action in signal.votes), votes)
+                self.assertEqual(LegacyCompositeStrategy().decide(observation).action, legacy_action)
+
+    def test_consensus_contract_for_all_vote_combinations(self):
+        for votes in product(('BUY', 'SELL', 'HOLD'), repeat=3):
+            with self.subTest(votes=votes), \
+                    patch.object(RSIStrategy, 'decide', return_value=Signal(votes[0])), \
+                    patch.object(MACDStrategy, 'decide', return_value=Signal(votes[1])), \
+                    patch.object(BollingerStrategy, 'decide', return_value=Signal(votes[2])):
+                for quorum in (2, 3):
+                    expected = 'HOLD'
+                    for direction, opposite in (('BUY', 'SELL'), ('SELL', 'BUY')):
+                        if votes.count(direction) >= quorum and opposite not in votes:
+                            expected = direction
+                    signal = ConsensusStrategy(quorum).decide(snapshot())
+                    self.assertEqual(signal.action, expected)
+                    self.assertEqual(tuple(action for _, action in signal.votes), votes)
 
     def test_legacy_bands_still_require_confirmation(self):
         s = snapshot(close=79, rsi_delta=-1, macd_delta=-1)
