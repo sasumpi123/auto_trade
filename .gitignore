@@ -34,6 +34,7 @@ myenv/
 .DS_Store
 
 # Project specific
+runtime/
 .env
 *.log
 backtest_result_*.log

@@ -28,16 +28,16 @@ python -m venv myenv
 source myenv/bin/activate # Linux/Mac
 myenv\Scripts\activate # Windows
 필요 패키지 설치
-pip install -r requirements.txt
+pip install -r requirement.txt
 ```
 
 ## 환경 설정
 
 `.env` 파일을 생성하고 다음 정보를 설정합니다:
-UPBIT_ACCESS_KEY=your_access_key
-UPBIT_SECRET_KEY=your_secret_key
-SLACK_APP_TOKEN=your_slack_token
-SLACK_CHANNEL=your_slack_channel
+ACC_KEY=your_access_key
+SEC_KEY=your_secret_key
+APP_TOKEN=your_slack_token
+CHANNEL=your_slack_channel
 
 ## 트레이딩 전략
 
@@ -97,7 +97,7 @@ python main.py
 auto_trade/
 ├── main.py # 메인 실행 파일
 ├── config.py # 설정 파일
-├── requirements.txt # 필요 패키지 목록
+├── requirement.txt # 필요 패키지 목록
 ├── trading/
 │ └── auto_trade.py # 자동매매 핵심 로직
 ├── data_analyzer/
@@ -132,3 +132,4 @@ MIT License
 ## 기여
 
 버그 리포트, 기능 제안, PR은 언제나 환영합니다.
+

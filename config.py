@@ -3,16 +3,6 @@ import logging
 from dotenv import load_dotenv
 import pyupbit
 
-# 로그 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("trading_bot.log"),
-        logging.StreamHandler()
-    ]
-)
-
 # .env 파일에서 환경 변수 로드
 load_dotenv()
 
@@ -45,9 +35,11 @@ def get_top_tickers(limit=10):
                 if df is not None and not df.empty:
                     volume = df['value'].iloc[-1]  # 거래대금
                     all_volumes.append((ticker, volume))
+                else:
+                    raise ValueError(f'{ticker}: missing discovery candle')
             except Exception as e:
                 logging.warning(f"{ticker} 거래대금 조회 실패: {str(e)}")
-                continue
+                raise
         
         # 거래대금 기준 정렬
         all_volumes.sort(key=lambda x: x[1], reverse=True)
@@ -56,22 +48,17 @@ def get_top_tickers(limit=10):
         top_tickers = [item[0] for item in all_volumes[:limit]]
         
         logging.info(f"거래대금 상위 {limit}개 종목 선정 완료: {', '.join(top_tickers)}")
+        if not top_tickers:
+            raise ValueError('No valid ticker data')
         return top_tickers
         
     except Exception as e:
         logging.error(f"거래대금 상위 종목 조회 실패: {str(e)}")
-        # 실패 시 기본 티커 반환
-        default_tickers = [
-            "KRW-BTC",  # 비트코인
-            "KRW-ETH",  # 이더리움
-            "KRW-XRP",  # 리플
-            "KRW-DOGE"  # 도지코인
-        ]
-        logging.warning(f"기본 티커 사용: {', '.join(default_tickers)}")
-        return default_tickers
+        raise
 
 # 거래 대상 코인 (거래대금 상위 10개)
-TICKERS = get_top_tickers(10)
+# Network discovery is explicit at startup, never during module import.
+TICKERS = None
 
 # 거래 모드
 REAL_TRADING = False  # True: 실제 거래, False: 테스트 거래
