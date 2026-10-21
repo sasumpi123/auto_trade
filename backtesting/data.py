@@ -37,7 +37,7 @@ def validate_candles(data, bar_seconds):
 
 
 def load_csv(path):
-    frame = pd.read_csv(Path(path))
+    frame = pd.read_csv(Path(path), float_precision='round_trip')
     if 'timestamp' not in frame:
         raise ValueError('CSV requires a timestamp column')
     timestamps = [pd.Timestamp(value) for value in frame.pop('timestamp')]

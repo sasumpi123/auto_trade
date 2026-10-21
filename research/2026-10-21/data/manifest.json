@@ -1,0 +1,4574 @@
+{
+  "protocol_sha256": "dc2080dc904b4d9d7d3ea7fa3d4de664ce84d77448eedfe0fe31fbd59fd82c26",
+  "protocol": {
+    "schema_version": 1,
+    "markets": [
+      "KRW-BTC",
+      "KRW-ETH",
+      "KRW-XRP",
+      "KRW-SOL"
+    ],
+    "units_minutes": [
+      15,
+      60
+    ],
+    "start": "2026-07-23T00:00:00+00:00",
+    "train_end": "2026-09-15T00:00:00+00:00",
+    "validation_end": "2026-10-03T00:00:00+00:00",
+    "end": "2026-10-21T00:00:00+00:00",
+    "holdout_policy": "sealed_not_backtested; no parameter or strategy selection",
+    "fee_bps_per_side": [
+      5,
+      10
+    ],
+    "slippage_bps_per_side": [
+      0,
+      5,
+      10
+    ],
+    "full_spread_bps": 2,
+    "primary_fee_bps": 5,
+    "primary_slippage_bps": 5,
+    "initial_cash": "1000000",
+    "position_fraction": "0.4",
+    "cooldown_seconds": 300,
+    "min_volume_ratio": "0.5",
+    "strategies": [
+      "rsi",
+      "macd",
+      "bollinger",
+      "consensus_2of3",
+      "consensus_3of3",
+      "legacy_composite",
+      "buy_hold_40",
+      "buy_hold_100"
+    ],
+    "risk_overlay": "signal_only_no_stop_take_profit_or_averaging",
+    "selection": "fixed hypotheses; no optimization; all results reported"
+  },
+  "started_at": "2026-10-21T02:30:18.567277+00:00",
+  "datasets": {
+    "KRW-BTC-15": {
+      "availability": {
+        "earliest_observed": "2017-09-26T08:45:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:45:00+00:00",
+        "empty_before": "2017-09-26T00:00:00+00:00",
+        "nonempty_before": "2017-09-27T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 8621,
+        "expected_rows": 8640,
+        "missing": 19,
+        "missing_examples": [
+          "2026-10-18T17:15:00+00:00",
+          "2026-10-18T17:30:00+00:00",
+          "2026-10-18T17:45:00+00:00",
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T18:15:00+00:00",
+          "2026-10-18T18:30:00+00:00",
+          "2026-10-18T18:45:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T19:15:00+00:00",
+          "2026-10-18T19:30:00+00:00",
+          "2026-10-18T19:45:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T20:15:00+00:00",
+          "2026-10-18T20:30:00+00:00",
+          "2026-10-18T20:45:00+00:00",
+          "2026-10-18T21:00:00+00:00",
+          "2026-10-18T21:15:00+00:00",
+          "2026-10-18T21:30:00+00:00",
+          "2026-10-18T21:45:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "b4b406826f870b13161e68a1229cc63349ff038a1ec6e1d601493176bbdf6ff8"
+      },
+      "snapshot": "KRW-BTC-15.csv.gz",
+      "snapshot_sha256": "f32870a0c820cb2afa07922a92493ca646c8c4b8af9ed441422f81876fd650b7",
+      "splits": {
+        "train": {
+          "rows": 5184,
+          "sha256": "7d2e635926f92d7351974d2e190916a0e523e4bb761ae53cce891c6d05f7b6e7",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 1728,
+          "sha256": "28e399eebceb7704b00d917e6cf47f19ccf93c98bfe1213441dc40348152b2ec",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 1709,
+          "sha256": "b4b156d05458206562b750e117efae8905fee7d0c7a2b10ecf4f848cdae17c0a",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:45:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:18 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:18.918503+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:19 GMT",
+          "rows": 1,
+          "response_sha256": "eebcd06e9022819010bed4d173da35a9bd268485526c9937c1935068b1d7db87",
+          "fetched_at": "2026-10-21T02:30:19.197527+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:19 GMT",
+          "rows": 1,
+          "response_sha256": "5a286addb939f4f9bfaa783d284ac5a251e6b1c5c84bc0aac3ab549d683a3f70",
+          "fetched_at": "2026-10-21T02:30:19.471568+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:19 GMT",
+          "rows": 1,
+          "response_sha256": "84ab55d3964a05350234624e91c46206cb328955a185a220b5f2c87986159e39",
+          "fetched_at": "2026-10-21T02:30:19.748291+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2018-03-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:20 GMT",
+          "rows": 1,
+          "response_sha256": "d50f82f810d47471b17e4fc02c847fa98da765b4470080790b51ba8cfb26ceee",
+          "fetched_at": "2026-10-21T02:30:20.026398+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-08-12T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:20 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:20.299055+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-12-02T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:20 GMT",
+          "rows": 1,
+          "response_sha256": "d3eae5bc7c7e5035f899d2b0acf4c2bba39c06205eb716e1c75bed6c3796fb66",
+          "fetched_at": "2026-10-21T02:30:20.576002+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-10-07T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:20 GMT",
+          "rows": 1,
+          "response_sha256": "f8e1a7e7bdd7a2d4b8e19284829c2863303cb4f38093d8de109d280b59597cac",
+          "fetched_at": "2026-10-21T02:30:20.848689+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-09T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:21 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:21.120400+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-23T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:21 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:21.398832+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-30T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:21 GMT",
+          "rows": 1,
+          "response_sha256": "dd85c1b049e3c0c2d98a7b4f6384ee6d640401533eaaea4b3d42ae8acf51dde8",
+          "fetched_at": "2026-10-21T02:30:21.680608+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:21 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:21.952823+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-28T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:22 GMT",
+          "rows": 1,
+          "response_sha256": "92cd8b5662423eb47903b160200d3b27c4374492963331aa1bdec9971da8a4c8",
+          "fetched_at": "2026-10-21T02:30:22.231256+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-27T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:22 GMT",
+          "rows": 1,
+          "response_sha256": "a8264320d2bedf6a0f681b0cbce1133e84d709daea8780c508b75296c7b2615c",
+          "fetched_at": "2026-10-21T02:30:22.504413+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2017-09-27T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:22 GMT",
+          "rows": 61,
+          "response_sha256": "fa5c3215fa51233a48c0dc40ec687d8c87f39f1cbfd76d3dc8545dd8b926ca19",
+          "fetched_at": "2026-10-21T02:30:22.787083+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:23 GMT",
+          "rows": 200,
+          "response_sha256": "962f438f7fd53744484d886da6407a4cd11d176001e07186f95a7a708e3305cd",
+          "fetched_at": "2026-10-21T02:30:23.075773+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-18T22:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:23 GMT",
+          "rows": 200,
+          "response_sha256": "40d3393e78f4a97fca02711d6611549749d4a9fd5b661644539cab9a7ce30073",
+          "fetched_at": "2026-10-21T02:30:23.365706+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-16T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:23 GMT",
+          "rows": 200,
+          "response_sha256": "03c729b040791b035ca439686ea6844cc1a132c34adeb7e8fefa967d406f62de",
+          "fetched_at": "2026-10-21T02:30:23.647375+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-14T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:23 GMT",
+          "rows": 200,
+          "response_sha256": "dacb3a16da3046858aa914c713dd9618bfc4bd9fe18abdac8e6e7239f4480e90",
+          "fetched_at": "2026-10-21T02:30:23.937701+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-12T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:24 GMT",
+          "rows": 200,
+          "response_sha256": "ea0009b069ca689eafdb5f236d9bbddf9d4b3e6fcc66d2611c029a3d2f10c5a8",
+          "fetched_at": "2026-10-21T02:30:24.219907+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-10T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:24 GMT",
+          "rows": 200,
+          "response_sha256": "79b02c543344464a37dcaf78b7283dd75df18c0074806fa9a79951e56ac60666",
+          "fetched_at": "2026-10-21T02:30:24.507799+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-08T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:24 GMT",
+          "rows": 200,
+          "response_sha256": "0cc0358466fbde4eb49f86f965a6a858543667b003e2783e77c7c21d9d99165b",
+          "fetched_at": "2026-10-21T02:30:24.790679+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-06T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:25 GMT",
+          "rows": 200,
+          "response_sha256": "65b6799e6f5c731ae5cf934109bd0044cc5262534424e8a88dca484694796c51",
+          "fetched_at": "2026-10-21T02:30:25.075469+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-04T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:25 GMT",
+          "rows": 200,
+          "response_sha256": "79dad023e8a2fbe3a2949bbec0d0cd37576cd750bdd7cdbd81a253948e9c5a2e",
+          "fetched_at": "2026-10-21T02:30:25.379700+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-02T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:25 GMT",
+          "rows": 200,
+          "response_sha256": "220e61a0a8bbe299e2ba8d0b54c8a9d5248446c0422b65666e3c374cc28fb0b5",
+          "fetched_at": "2026-10-21T02:30:25.669475+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-29T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:25 GMT",
+          "rows": 200,
+          "response_sha256": "d2ecef80d3bea6959ebc7d643b71df31e21c30c810512ef77d0192fa0b23f3aa",
+          "fetched_at": "2026-10-21T02:30:25.951712+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-27T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:26 GMT",
+          "rows": 200,
+          "response_sha256": "a704ac9c28002671d069179342cf92d4573f4146dd5f6018a438bd35d115cf82",
+          "fetched_at": "2026-10-21T02:30:26.240867+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-25T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:26 GMT",
+          "rows": 200,
+          "response_sha256": "555c9566f8ac2e7ae3c1fa377aff8b1c7453a2e3c49d7c19576a84f4305bd4e3",
+          "fetched_at": "2026-10-21T02:30:26.520402+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-23T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:26 GMT",
+          "rows": 200,
+          "response_sha256": "0d33f3b5e4eda1a1cd7451cfccb1dec91ac95c8b6af197d5b5c3c73422131636",
+          "fetched_at": "2026-10-21T02:30:26.802242+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-21T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:27 GMT",
+          "rows": 200,
+          "response_sha256": "0377911b4b6e6cac0b9745369734bbf25e79b5b265b419c7de3498ca6cbbba14",
+          "fetched_at": "2026-10-21T02:30:27.104264+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-19T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:27 GMT",
+          "rows": 200,
+          "response_sha256": "fec5951c62da4fd5231ccb5c1f09379632df64de0c770d8489f8e41693c0fbb0",
+          "fetched_at": "2026-10-21T02:30:27.402249+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-17T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:27 GMT",
+          "rows": 200,
+          "response_sha256": "2907eae5e5a33173c6ec1dfebccc90e19f16c2b4fcd1d84ad53ae1a3760f4b1d",
+          "fetched_at": "2026-10-21T02:30:27.686554+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-15T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:27 GMT",
+          "rows": 200,
+          "response_sha256": "cab90a92cea72cafef58b2c4236c8b5f2a72f08ba7fb00173626e04f1748d7ff",
+          "fetched_at": "2026-10-21T02:30:27.974926+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-13T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:28 GMT",
+          "rows": 200,
+          "response_sha256": "a71af941bfd9065991059bd521047e93a417b7fc2f16e56d970fc6da008df0b7",
+          "fetched_at": "2026-10-21T02:30:28.267346+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-11T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:28 GMT",
+          "rows": 200,
+          "response_sha256": "65abf57d973e5ab68e0227631cdf22b966e25e473528bf89603665f5c15465f1",
+          "fetched_at": "2026-10-21T02:30:28.551513+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-09T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:28 GMT",
+          "rows": 200,
+          "response_sha256": "f5c23ef8884f32b9d5373c16163387190a268dc9e082c274b56e608b71465926",
+          "fetched_at": "2026-10-21T02:30:28.835811+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-07T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:29 GMT",
+          "rows": 200,
+          "response_sha256": "5362707379fa2e864b961b5e76776846fec2dcb7f5c9be5a4f0faa4a7a1a6e0d",
+          "fetched_at": "2026-10-21T02:30:29.117472+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-04T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:29 GMT",
+          "rows": 200,
+          "response_sha256": "e204d12f56d7801a6f45769cae55b1cc2acd111b389f50ede29e1090a310e843",
+          "fetched_at": "2026-10-21T02:30:29.400237+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-02T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:29 GMT",
+          "rows": 200,
+          "response_sha256": "7d283dcfa20bc9d3f281c358b55c2f6ba850de181b77da8ab63a76ac87150a07",
+          "fetched_at": "2026-10-21T02:30:29.687811+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-31T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:29 GMT",
+          "rows": 200,
+          "response_sha256": "5313acf00088c32cc66cfaf076538f76c888bb01fbfc541dde5a8a16df834661",
+          "fetched_at": "2026-10-21T02:30:29.972029+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-29T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:30 GMT",
+          "rows": 200,
+          "response_sha256": "d1b83d2500659fbe19642a180cee284953ac2d0b814553cc25f382eee4cd5a70",
+          "fetched_at": "2026-10-21T02:30:30.256249+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-27T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:30 GMT",
+          "rows": 200,
+          "response_sha256": "f073aec7c86cc63cd5cd5433e7e9c38a11b84395af79ea86e90e9b17055ca84c",
+          "fetched_at": "2026-10-21T02:30:30.543092+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-25T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:30 GMT",
+          "rows": 200,
+          "response_sha256": "8cea0eef2147fe8f9da905b246bce792b66d7eba82def0250e4f046338f9cac6",
+          "fetched_at": "2026-10-21T02:30:30.823573+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-23T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:31 GMT",
+          "rows": 200,
+          "response_sha256": "d0b021666c112e26d14f8d154f50d665a0bf13b69e4fe897c1551261db81b346",
+          "fetched_at": "2026-10-21T02:30:31.106761+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-21T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:31 GMT",
+          "rows": 200,
+          "response_sha256": "536f74f6586c868b6a8af6408c1d48ca254f8055459f715956ecb7daf25114cf",
+          "fetched_at": "2026-10-21T02:30:31.399558+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-19T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:31 GMT",
+          "rows": 200,
+          "response_sha256": "b85d262585a81281ff04e57db6f9ad463fe200acebf2cd8d5008ebf434073053",
+          "fetched_at": "2026-10-21T02:30:31.685720+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-17T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:31 GMT",
+          "rows": 200,
+          "response_sha256": "8a1af53803f11d963cd9e147c10bcda53dad5a9affe31c197bb8e738407c578a",
+          "fetched_at": "2026-10-21T02:30:31.974262+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-15T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:32 GMT",
+          "rows": 200,
+          "response_sha256": "7b13f2f75e315b73b91315d8c152634cb4c4a7fd98f217385ebac02dd6784341",
+          "fetched_at": "2026-10-21T02:30:32.256071+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-13T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:32 GMT",
+          "rows": 200,
+          "response_sha256": "f91fd542b743a5f3e07a5ccf6cf0c979e72c23cd3413e5809597d5c7090a7cb8",
+          "fetched_at": "2026-10-21T02:30:32.542782+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-10T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:32 GMT",
+          "rows": 200,
+          "response_sha256": "d06687dad549bf709c18359e00dcf25dd4f40dce5c0aaa0a480581a93207ae0f",
+          "fetched_at": "2026-10-21T02:30:32.834358+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-08T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:33 GMT",
+          "rows": 200,
+          "response_sha256": "d1bbda0000b6f43cef550a25055387e090b62d185301c6599657aef21c06a9d0",
+          "fetched_at": "2026-10-21T02:30:33.114034+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-06T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:33 GMT",
+          "rows": 200,
+          "response_sha256": "5188f4f9d30f78f4ac43c0f89f45dbe31bda9e1d42732f422a3c20f85324fdf0",
+          "fetched_at": "2026-10-21T02:30:33.402253+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-04T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:33 GMT",
+          "rows": 200,
+          "response_sha256": "08902331b3c8b3b92cffd86d83f005b51ee1997e7baf4a554b33e156a58c3e9f",
+          "fetched_at": "2026-10-21T02:30:33.689694+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-02T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:33 GMT",
+          "rows": 200,
+          "response_sha256": "8c6a7fd5be6a62664cd97d68d24b1b8a6699d8d3a999e3eb0d250d3dd39b5707",
+          "fetched_at": "2026-10-21T02:30:33.989280+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-07-31T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:34 GMT",
+          "rows": 200,
+          "response_sha256": "26c7ffd5c6d4ce0b50e236cba04cde15fb2f03934efc1e6fa6a646976841400b",
+          "fetched_at": "2026-10-21T02:30:34.279099+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-07-29T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:34 GMT",
+          "rows": 200,
+          "response_sha256": "c19c76cddc8c298a266a8c0ce8a617524f419f59474673e2cce963058c91266b",
+          "fetched_at": "2026-10-21T02:30:34.572474+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-07-27T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:34 GMT",
+          "rows": 200,
+          "response_sha256": "1b786ba8cf5f10ecc6038705c0fd67fb6f0aad791c921cec75a2268cf92be666",
+          "fetched_at": "2026-10-21T02:30:34.858457+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-07-25T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:35 GMT",
+          "rows": 200,
+          "response_sha256": "962966be3bc6b83fd09ed8023831f433aa7bbed098a4d93e9dcea0465af744fd",
+          "fetched_at": "2026-10-21T02:30:35.144599+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-07-23T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:35 GMT",
+          "rows": 200,
+          "response_sha256": "da70ed355585b44cd6842c4b98efb8b428c2cd2c224c85d85e96e538fe25e42d",
+          "fetched_at": "2026-10-21T02:30:35.427108+00:00"
+        }
+      ]
+    },
+    "KRW-BTC-60": {
+      "availability": {
+        "earliest_observed": "2017-09-25T03:00:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:00:00+00:00",
+        "empty_before": "2017-09-25T00:00:00+00:00",
+        "nonempty_before": "2017-09-26T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 2156,
+        "expected_rows": 2160,
+        "missing": 4,
+        "missing_examples": [
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T21:00:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "3fe9da5a8ccb3d10339d54506aa5f7bd923405b15135574d3fbb683a010d005b"
+      },
+      "snapshot": "KRW-BTC-60.csv.gz",
+      "snapshot_sha256": "12409be2ed500ff9f93e0c1c2597a04de9edfd890be85db9f20f55621716720b",
+      "splits": {
+        "train": {
+          "rows": 1296,
+          "sha256": "6a0b8d0be47f7645e226495086404595fc194b30b41fed57414e0c9b3c745751",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 432,
+          "sha256": "45a091e4dc5a5a59d8bc594131d5bcd464df6302c77b45d07e1ee76005cb34f4",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 428,
+          "sha256": "a48eee28d7673e2ecf5a8d9c7cc4129e4432ec3bb4f1ccf79b5618a548d71b04",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:00:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:36 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:36.241667+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:36 GMT",
+          "rows": 1,
+          "response_sha256": "464bb786db3f0f7563764eae5549b2f3b833289c62c55bb215306c68837cc586",
+          "fetched_at": "2026-10-21T02:30:36.518045+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:36 GMT",
+          "rows": 1,
+          "response_sha256": "e474509629a8a7ec6c95eaccba9f4aef97b68ea745a5346b610bd0e60c84e8a1",
+          "fetched_at": "2026-10-21T02:30:36.790247+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:37 GMT",
+          "rows": 1,
+          "response_sha256": "dca4481f96e82ffa892a1c0b27fd6eace4b8f4c05f6fe348525936504436b13b",
+          "fetched_at": "2026-10-21T02:30:37.066233+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2018-03-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:37 GMT",
+          "rows": 1,
+          "response_sha256": "f24447c0857d4da90f3a2f4712f906356bfc9103dddca0aafb84165ccfe4c2a3",
+          "fetched_at": "2026-10-21T02:30:37.346567+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-08-12T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:37 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:37.618940+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-12-02T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:37 GMT",
+          "rows": 1,
+          "response_sha256": "33ff0f8985648ec706d5b9b537e2a21391f58707dfedb14dcbb1cd4409b72e5f",
+          "fetched_at": "2026-10-21T02:30:37.898020+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-10-07T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:38 GMT",
+          "rows": 1,
+          "response_sha256": "15fdffaef4b2e66e062d07976d9ede13c05789001fbdab91e130a45d40338dab",
+          "fetched_at": "2026-10-21T02:30:38.171793+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-09T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:38 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:38.443953+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-23T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:38 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:38.715672+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-30T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:38 GMT",
+          "rows": 1,
+          "response_sha256": "6402073f54752bfb65594e02985955376a47b2bf265a35e68e611d2737ab3d77",
+          "fetched_at": "2026-10-21T02:30:38.989513+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:39 GMT",
+          "rows": 1,
+          "response_sha256": "fabf5f3ebad421a0a2763a78607b8383a3cedd1c7045978c6470b8339b252c60",
+          "fetched_at": "2026-10-21T02:30:39.260276+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:39 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:39.531958+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 1,
+            "to": "2017-09-25T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:39 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:39.807306+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:40 GMT",
+          "rows": 17,
+          "response_sha256": "53ca658caaac85378f7683f7c245b744da5fbeec9ceb2bdbcafeae33f4b4fbfe",
+          "fetched_at": "2026-10-21T02:30:40.081382+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:40 GMT",
+          "rows": 200,
+          "response_sha256": "59d3dda54bc644ece12682fbd9608d8c7c1b0459fccca83c014ee4628f31648e",
+          "fetched_at": "2026-10-21T02:30:40.363822+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-12T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:40 GMT",
+          "rows": 200,
+          "response_sha256": "86b292145bd3ca621e74498af620459ae52374e13d93980d47fd975b1d939b45",
+          "fetched_at": "2026-10-21T02:30:40.645696+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-10-04T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:40 GMT",
+          "rows": 200,
+          "response_sha256": "77ab325b37372f2b904354df00264daa43f33a2e6d5216ba2149e98abcf30573",
+          "fetched_at": "2026-10-21T02:30:40.925915+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-25T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:41 GMT",
+          "rows": 200,
+          "response_sha256": "48ba95ba3fb1fd545c9dc8e52ab7ef8d00a122f5844ff47197d11bd2cb68642a",
+          "fetched_at": "2026-10-21T02:30:41.215748+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-17T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:41 GMT",
+          "rows": 200,
+          "response_sha256": "098094aa01251c0613d104aafd8d1d84e4f27f146761064830bdfca25ac5d921",
+          "fetched_at": "2026-10-21T02:30:41.497867+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-09-09T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:41 GMT",
+          "rows": 200,
+          "response_sha256": "c2a9428c5ad22b3839d219b40288319c98bf2ae0a8ad8a80b2c4d4111c64b2d1",
+          "fetched_at": "2026-10-21T02:30:41.779528+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-31T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:42 GMT",
+          "rows": 200,
+          "response_sha256": "5f451709456ca2c248af3162edd67268f8ffcd1cf3bedc8b7acd7ea294db6a9f",
+          "fetched_at": "2026-10-21T02:30:42.064967+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-23T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:42 GMT",
+          "rows": 200,
+          "response_sha256": "06f44d27f0167aa48ed141020af51434a0dd26114d13b3e09429a15eb5da8267",
+          "fetched_at": "2026-10-21T02:30:42.348562+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-15T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:42 GMT",
+          "rows": 200,
+          "response_sha256": "7062c1a40982a14ab77cddee4b37e154966a2cfb703829cb633ad1558639aa1e",
+          "fetched_at": "2026-10-21T02:30:42.627548+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-08-06T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:42 GMT",
+          "rows": 200,
+          "response_sha256": "7171fc2f328c959d456cc302f07843e816ab4f956d021af143e5e0f2e44ac89e",
+          "fetched_at": "2026-10-21T02:30:42.910346+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-BTC",
+            "count": 200,
+            "to": "2026-07-29T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:43 GMT",
+          "rows": 200,
+          "response_sha256": "4ea79b140a8e7587855d733c4e19bfe39e1b75743e85311cc2bcddbf89dd5fcb",
+          "fetched_at": "2026-10-21T02:30:43.190769+00:00"
+        }
+      ]
+    },
+    "KRW-ETH-15": {
+      "availability": {
+        "earliest_observed": "2017-09-26T08:45:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:45:00+00:00",
+        "empty_before": "2017-09-26T00:00:00+00:00",
+        "nonempty_before": "2017-09-27T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 8621,
+        "expected_rows": 8640,
+        "missing": 19,
+        "missing_examples": [
+          "2026-10-18T17:15:00+00:00",
+          "2026-10-18T17:30:00+00:00",
+          "2026-10-18T17:45:00+00:00",
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T18:15:00+00:00",
+          "2026-10-18T18:30:00+00:00",
+          "2026-10-18T18:45:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T19:15:00+00:00",
+          "2026-10-18T19:30:00+00:00",
+          "2026-10-18T19:45:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T20:15:00+00:00",
+          "2026-10-18T20:30:00+00:00",
+          "2026-10-18T20:45:00+00:00",
+          "2026-10-18T21:00:00+00:00",
+          "2026-10-18T21:15:00+00:00",
+          "2026-10-18T21:30:00+00:00",
+          "2026-10-18T21:45:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "db7334d15a5280a6a122ba09b6e3014a0777e8dc07e8552058d2b5dd15beb487"
+      },
+      "snapshot": "KRW-ETH-15.csv.gz",
+      "snapshot_sha256": "0360d831d04d9895c42aa20d5a6c253cf60ce8a5476f0ab1933ac92a16fd1f99",
+      "splits": {
+        "train": {
+          "rows": 5184,
+          "sha256": "d32379261ab3cc7e16dae93d911270c7dcf354de9dac63e1cbfc1d4441047f20",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 1728,
+          "sha256": "a9ed7d9eeae811248472cbf65741946b6722da3b3f2d44cacec03444bf3ce5ee",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 1709,
+          "sha256": "0c70d20c01b5eed83ffa43629f78f5050c658d4b4b7a0c62613d9626d6300a52",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:45:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:43 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:43.606749+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:43 GMT",
+          "rows": 1,
+          "response_sha256": "dc3aa1900a43324ea7355cae67d9a6f20e633e346d7ff20b1ea2a5e877fb9cef",
+          "fetched_at": "2026-10-21T02:30:43.881876+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:44 GMT",
+          "rows": 1,
+          "response_sha256": "7e86405e3d7e5b35ea59fbb315e20ef89b5f9ac771a566e077b586c9bdf2da61",
+          "fetched_at": "2026-10-21T02:30:44.153552+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:44 GMT",
+          "rows": 1,
+          "response_sha256": "8cece3b3aca39c4b9434a7a77439927eb843f9c1661d396cd8593a567fb15cb2",
+          "fetched_at": "2026-10-21T02:30:44.427507+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2018-03-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:44 GMT",
+          "rows": 1,
+          "response_sha256": "d69c09ca2e130f8bbc544437b5a498ff7796c83705a9a4a6006cff085e0bc08b",
+          "fetched_at": "2026-10-21T02:30:44.703263+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-08-12T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:44 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:44.975377+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-12-02T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:45 GMT",
+          "rows": 1,
+          "response_sha256": "22aeb39073350fd46a231e70549d9c68f5c14337b974037197e158a8ed46f9a9",
+          "fetched_at": "2026-10-21T02:30:45.249963+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-10-07T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:45 GMT",
+          "rows": 1,
+          "response_sha256": "4aa97952320cbb4b67fd145c42f52db8596a83616f0837b54f426405f26ec795",
+          "fetched_at": "2026-10-21T02:30:45.525221+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-09T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:45 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:45.797769+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-23T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:46 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:46.067954+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-30T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:46 GMT",
+          "rows": 1,
+          "response_sha256": "c47ba44367b1a9105b2ff8eec84b9009ae8af78a2a03c7bdeea4c22af3b6c6a5",
+          "fetched_at": "2026-10-21T02:30:46.343875+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:46 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:30:46.615017+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-28T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:46 GMT",
+          "rows": 1,
+          "response_sha256": "ddd696b5a71f490bd984dae2f2bd362b642f2ce0c594cf67470bc1a768295819",
+          "fetched_at": "2026-10-21T02:30:46.888162+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-27T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:47 GMT",
+          "rows": 1,
+          "response_sha256": "a23b05a34b8aab8f85d56874daf0a7801e4e0d4e0776d6e1a2b8465094422931",
+          "fetched_at": "2026-10-21T02:30:47.161465+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2017-09-27T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:47 GMT",
+          "rows": 61,
+          "response_sha256": "b7a35f1b92a9295924b190654d9dd997346d45939e364c478698756ef3a20fde",
+          "fetched_at": "2026-10-21T02:30:47.435976+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:47 GMT",
+          "rows": 200,
+          "response_sha256": "5a64925df0fa224f366754ab92b1d2ec3274c46239015871cf0088b180331bc2",
+          "fetched_at": "2026-10-21T02:30:47.747862+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-18T22:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:48 GMT",
+          "rows": 200,
+          "response_sha256": "e5d604adf767d78809da659625d80469412b5fbff487d1c31b1977790b57de19",
+          "fetched_at": "2026-10-21T02:30:48.032065+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-16T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:48 GMT",
+          "rows": 200,
+          "response_sha256": "3b753f3f899cd34b028182d8858e7128295c415ee1b2abb814559d4e88af5ac5",
+          "fetched_at": "2026-10-21T02:30:48.313977+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-14T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:48 GMT",
+          "rows": 200,
+          "response_sha256": "9ef0cb5a19a872a02193d2974eceb507f3992413b88c7dc29ad1a0c54ff3d195",
+          "fetched_at": "2026-10-21T02:30:48.595971+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-12T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:48 GMT",
+          "rows": 200,
+          "response_sha256": "81bea277836801c174991ec23f155f1d55d79c458ef9c369e132ff661837afc3",
+          "fetched_at": "2026-10-21T02:30:48.876381+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-10T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:49 GMT",
+          "rows": 200,
+          "response_sha256": "e9ed610e8621d06fd327e7e30aeecdda1409989419b4d54289cdc2ecfb60ea49",
+          "fetched_at": "2026-10-21T02:30:49.160213+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-08T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:49 GMT",
+          "rows": 200,
+          "response_sha256": "6063a8820683a9d2edeb33806c6a42d2be36f57754695cb25de0b2c9d20e5f20",
+          "fetched_at": "2026-10-21T02:30:49.444273+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-06T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:49 GMT",
+          "rows": 200,
+          "response_sha256": "0bc46c1764d9eb0696b7c9f40bed83d9a9c1ab6a60dce35712ddb3078505007f",
+          "fetched_at": "2026-10-21T02:30:49.726442+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-04T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:49 GMT",
+          "rows": 200,
+          "response_sha256": "9da1b4c33a5aed7d708e5164f80a5750301b842013c5afb4b51630bac4b0b97e",
+          "fetched_at": "2026-10-21T02:30:50.008318+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-02T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:50 GMT",
+          "rows": 200,
+          "response_sha256": "89e5cc52ca50a367aed27fe03b5d979b4d237ddd0ff773b5ee653c00621ddcf1",
+          "fetched_at": "2026-10-21T02:30:50.291036+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-29T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:50 GMT",
+          "rows": 200,
+          "response_sha256": "00f1f783ce2ebf7c08ac0ca1522c0177a5cd2c425265c53d9588c43c78cb4981",
+          "fetched_at": "2026-10-21T02:30:50.571935+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-27T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:50 GMT",
+          "rows": 200,
+          "response_sha256": "8cdec4958dc806790be6671202d702ee4a6d0b0a0679407a0842bf47f8e050ba",
+          "fetched_at": "2026-10-21T02:30:50.855431+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-25T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:51 GMT",
+          "rows": 200,
+          "response_sha256": "dea307b472da30fab49e17d4439710e8b6e1cf5dfad98cd6cd0f1ab905fadd78",
+          "fetched_at": "2026-10-21T02:30:51.137582+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-23T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:51 GMT",
+          "rows": 200,
+          "response_sha256": "21d662fc768a31076e3acb39441774d2a51d01858aa142f7557b0ad37c3e03a0",
+          "fetched_at": "2026-10-21T02:30:51.419104+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-21T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:51 GMT",
+          "rows": 200,
+          "response_sha256": "368470df917c5f2970bce3e177accbf1d79a7ff2c58b569bb2bcb9e4d5ff968d",
+          "fetched_at": "2026-10-21T02:30:51.716381+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-19T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:51 GMT",
+          "rows": 200,
+          "response_sha256": "321c157a3f576efd89121023e01f9e5ad0c41dc16aba67840543f2c442954a53",
+          "fetched_at": "2026-10-21T02:30:51.999790+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-17T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:52 GMT",
+          "rows": 200,
+          "response_sha256": "20e0215500ae1b3d442f27b35265b460631757729a7aa6340ab92f4dee10d516",
+          "fetched_at": "2026-10-21T02:30:52.282616+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-15T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:52 GMT",
+          "rows": 200,
+          "response_sha256": "d0430a4818a41e97a1b30ff1835af97cfddfb58d1c1d293cf76fc6da7fb0a172",
+          "fetched_at": "2026-10-21T02:30:52.564516+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-13T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:52 GMT",
+          "rows": 200,
+          "response_sha256": "e4e1be2dd4c1463ef530fb5bac41c75edf1d2e5bebbb22bba90248d47cb4a6ba",
+          "fetched_at": "2026-10-21T02:30:52.847101+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-11T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:53 GMT",
+          "rows": 200,
+          "response_sha256": "f873a842139aee6c4a7ddb714ca6c548a6c2502a7eb0babe148cff612982dc7f",
+          "fetched_at": "2026-10-21T02:30:53.131458+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-09T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:53 GMT",
+          "rows": 200,
+          "response_sha256": "4183c8d7c4dcc2875ea3d02d306f0d21bcd222a065aa4311c3bb92eddaafbbd3",
+          "fetched_at": "2026-10-21T02:30:53.412518+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-07T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:53 GMT",
+          "rows": 200,
+          "response_sha256": "e8c4c763ffccb0d5033b6df038412a5c009d57b9c8c8d1c78f00f6206b713afd",
+          "fetched_at": "2026-10-21T02:30:53.701845+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-04T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:53 GMT",
+          "rows": 200,
+          "response_sha256": "6b12732d52d9bcd1fcdc10fb628a97ca33af0a35bc11542455abbe279173e8a7",
+          "fetched_at": "2026-10-21T02:30:53.986006+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-02T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:54 GMT",
+          "rows": 200,
+          "response_sha256": "bc78fcc562b3c57a025db441a8a4868a1533ccc9d0da1ea6594a7b9aca66b51e",
+          "fetched_at": "2026-10-21T02:30:54.268999+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-31T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:54 GMT",
+          "rows": 200,
+          "response_sha256": "6a12cbfb73f80a7a9d3586b2434ec009ae01f0a63c912bafa062590db12b3d76",
+          "fetched_at": "2026-10-21T02:30:54.548929+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-29T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:54 GMT",
+          "rows": 200,
+          "response_sha256": "1504d2cdb1b3acfb221a16f6836c8c5aef6cfb32ebb820acc5410c569327e028",
+          "fetched_at": "2026-10-21T02:30:54.838512+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-27T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:55 GMT",
+          "rows": 200,
+          "response_sha256": "f642a62976f66e1777521efeacbd006730411dfbd8c9995c738f9c3dcd280401",
+          "fetched_at": "2026-10-21T02:30:55.126850+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-25T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:55 GMT",
+          "rows": 200,
+          "response_sha256": "ed2b461b79b3ed6f00828461278ecac16378e347f62cb1534896e85037c7f9fa",
+          "fetched_at": "2026-10-21T02:30:55.421077+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-23T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:55 GMT",
+          "rows": 200,
+          "response_sha256": "04157090fdad97d0957d3a0df72e99036f22dc82d06c64c2b16aaa502fcb64a8",
+          "fetched_at": "2026-10-21T02:30:55.701294+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-21T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:55 GMT",
+          "rows": 200,
+          "response_sha256": "fc0a92df52bd2d392ce9221a47a522f5a215cd7e882386448af5c4ab1d035d02",
+          "fetched_at": "2026-10-21T02:30:55.987331+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-19T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:56 GMT",
+          "rows": 200,
+          "response_sha256": "fdc3b2a27d2e5177e8fee04fd75226f8882bff6feeacba065dbabc51005e019f",
+          "fetched_at": "2026-10-21T02:30:56.267201+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-17T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:56 GMT",
+          "rows": 200,
+          "response_sha256": "09f0df30e7c3364c0030222dce2086deaba79034fbff7ef18b1117a83b1430df",
+          "fetched_at": "2026-10-21T02:30:56.547412+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-15T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:56 GMT",
+          "rows": 200,
+          "response_sha256": "de06c879d7ef5cf5543370bea79d7efe2ddd939a6f5af5786005e3340b5f803e",
+          "fetched_at": "2026-10-21T02:30:56.860503+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-13T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:57 GMT",
+          "rows": 200,
+          "response_sha256": "43f5fc2f69787f78ff046c929f401e6c8bc14dc31a68b01c428a2adeed55237a",
+          "fetched_at": "2026-10-21T02:30:57.146898+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-10T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:57 GMT",
+          "rows": 200,
+          "response_sha256": "da34cc1f90695b82203fab97625103e39f641556f517015c099270bc7a746410",
+          "fetched_at": "2026-10-21T02:30:57.439008+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-08T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:57 GMT",
+          "rows": 200,
+          "response_sha256": "35962159d3b791d7f2653e65d343313a1273001017a6ef40e781f59e625e95c8",
+          "fetched_at": "2026-10-21T02:30:57.721247+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-06T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:57 GMT",
+          "rows": 200,
+          "response_sha256": "2e29e67b23a2fd3964ef9b9e18c1169921bff26b915f64f3f569cb68880892c4",
+          "fetched_at": "2026-10-21T02:30:58.009046+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-04T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:58 GMT",
+          "rows": 200,
+          "response_sha256": "dcd228fb0fae6178107c8249b10446250184bfb0c4f72672905fac25116191dc",
+          "fetched_at": "2026-10-21T02:30:58.294465+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-02T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:58 GMT",
+          "rows": 200,
+          "response_sha256": "0a7840a2041f1d8a1f7a18e47296355bcb921cd9b44db59d51a771de8d409f7f",
+          "fetched_at": "2026-10-21T02:30:58.593718+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-07-31T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:58 GMT",
+          "rows": 200,
+          "response_sha256": "224ea15107c7cf0c9eb7e591ded4a851b780dd4da6fd0da1cca3ac5edfb7dc4a",
+          "fetched_at": "2026-10-21T02:30:58.877066+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-07-29T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:59 GMT",
+          "rows": 200,
+          "response_sha256": "d1bd8e893f88eafda0d3017b2b4e1a5c0e8341c115a45955b152741a6cf1bc1b",
+          "fetched_at": "2026-10-21T02:30:59.159224+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-07-27T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:59 GMT",
+          "rows": 200,
+          "response_sha256": "5737cd51508a3a2cf3e7197b8f425f35cf434a15edc9db8e3fb4c0cd2b219ee0",
+          "fetched_at": "2026-10-21T02:30:59.456615+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-07-25T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:30:59 GMT",
+          "rows": 200,
+          "response_sha256": "11905887b95b4020bf41cfb0ca50b1cb74c2407cb643c8c788d5b5fe6469e433",
+          "fetched_at": "2026-10-21T02:30:59.746726+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-07-23T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:00 GMT",
+          "rows": 200,
+          "response_sha256": "159e200c9cf7900e369ea9b2c84681823edb6b116f61ee1ebb26077dc418e372",
+          "fetched_at": "2026-10-21T02:31:00.035075+00:00"
+        }
+      ]
+    },
+    "KRW-ETH-60": {
+      "availability": {
+        "earliest_observed": "2017-09-25T03:00:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:00:00+00:00",
+        "empty_before": "2017-09-25T00:00:00+00:00",
+        "nonempty_before": "2017-09-26T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 2156,
+        "expected_rows": 2160,
+        "missing": 4,
+        "missing_examples": [
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T21:00:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "870e6e9ecef631e00616a26bffcbe2333f0be24c74c97ad06401e952f818ef49"
+      },
+      "snapshot": "KRW-ETH-60.csv.gz",
+      "snapshot_sha256": "3b3239341ff4f1b29802f7f0070e42a96a310b66a1c9d13cbf9e5aa61e9eedc8",
+      "splits": {
+        "train": {
+          "rows": 1296,
+          "sha256": "647fba2b1681bf995f2e6107bb54bb73d823cb58dac0a07cadd512165f58a6a2",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 432,
+          "sha256": "e08ab3de847e517828a2431a197b97b9900249bba7999bced66dc512c8e5a6fc",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 428,
+          "sha256": "75cbc258a73e9329195bc028cae63533241a0f8d67d4e14ab020af7c25e291f1",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:00:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:00 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:00.808848+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:01 GMT",
+          "rows": 1,
+          "response_sha256": "1f52d0806d2d87903c61347cd0eff170881ead2d48bc6381eb2a37b337deebba",
+          "fetched_at": "2026-10-21T02:31:01.086656+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:01 GMT",
+          "rows": 1,
+          "response_sha256": "8b5c58f0c41c16b7908d6d5c08f64dd55ddaf3aceccf5d6744f0da8dd132da1a",
+          "fetched_at": "2026-10-21T02:31:01.366429+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:01 GMT",
+          "rows": 1,
+          "response_sha256": "3679250747c3528e0f18546363455ef6211b03078f71378ccec22eb5259df3f8",
+          "fetched_at": "2026-10-21T02:31:01.646154+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2018-03-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:01 GMT",
+          "rows": 1,
+          "response_sha256": "9e012de91af2c4f7a1fbffb52b460b9845fa1bf1a113dbc9e0471b3f66edc75f",
+          "fetched_at": "2026-10-21T02:31:01.918938+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-08-12T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:02 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:02.193300+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-12-02T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:02 GMT",
+          "rows": 1,
+          "response_sha256": "cd20674a96e00291b6013d9a25ca65cbae5fa076856d2017f8df42d6c729f2e5",
+          "fetched_at": "2026-10-21T02:31:02.468586+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-10-07T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:02 GMT",
+          "rows": 1,
+          "response_sha256": "781ed7d7b25af651d886be3b5d40f495af83cdb632e00f3e608b755a826b9f28",
+          "fetched_at": "2026-10-21T02:31:02.742624+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-09T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:02 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:03.016302+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-23T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:03 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:03.288629+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-30T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:03 GMT",
+          "rows": 1,
+          "response_sha256": "27730e3fa71c9678eb3d53eb56230ec5668f5760c37a37d8b861d78145c32a0e",
+          "fetched_at": "2026-10-21T02:31:03.565462+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:03 GMT",
+          "rows": 1,
+          "response_sha256": "ff06b38433a76b2ff45d8b6064b4b02b0269eef2de6f88a7eacba9e796558466",
+          "fetched_at": "2026-10-21T02:31:03.838056+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:04 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:04.109254+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 1,
+            "to": "2017-09-25T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:04 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:04.387147+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:04 GMT",
+          "rows": 13,
+          "response_sha256": "62d56d05ba412cbb2c860a961aeab0ebcb6593490fcdd40c83e03b8064bbf578",
+          "fetched_at": "2026-10-21T02:31:04.659081+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:04 GMT",
+          "rows": 200,
+          "response_sha256": "adfe7618f17e2abe6b2b22bc206c752a1a939172e146d46a0bcb7c8d14c12c4b",
+          "fetched_at": "2026-10-21T02:31:04.940307+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-12T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:05 GMT",
+          "rows": 200,
+          "response_sha256": "907e0b070e429de27641678a67157ccb62f269e1d95301204cb40c1b897b3904",
+          "fetched_at": "2026-10-21T02:31:05.231168+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-10-04T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:05 GMT",
+          "rows": 200,
+          "response_sha256": "eb40ea56d21cff9c0ea8942e48f0cf11189d83ad3cf9b4b634b36e0792ab9490",
+          "fetched_at": "2026-10-21T02:31:05.537642+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-25T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:05 GMT",
+          "rows": 200,
+          "response_sha256": "90d41ba0819e6d5d9a299ceb937cb3d34876817a8adc1ce3157b68e317e00759",
+          "fetched_at": "2026-10-21T02:31:05.821704+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-17T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:06 GMT",
+          "rows": 200,
+          "response_sha256": "84b1b216a65c75c2193fd41e53eeae74e519d6bcf2e1e1f8428fefd6177c57a3",
+          "fetched_at": "2026-10-21T02:31:06.102752+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-09-09T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:06 GMT",
+          "rows": 200,
+          "response_sha256": "2cebf52e7d6bfb9ec9cb776b1346e049fe0136d6f4fe1db84680c875aa6f27d4",
+          "fetched_at": "2026-10-21T02:31:06.393085+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-31T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:06 GMT",
+          "rows": 200,
+          "response_sha256": "218968e2bc26983234f63f20529860e9528f9f776e7ade83aac576024c4858c2",
+          "fetched_at": "2026-10-21T02:31:06.676291+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-23T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:06 GMT",
+          "rows": 200,
+          "response_sha256": "1cd3d5990eb4aa7f3e5d97a3185bd0708f1ad1be67b56f3cf02ece7f7388a7d2",
+          "fetched_at": "2026-10-21T02:31:06.962962+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-15T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:07 GMT",
+          "rows": 200,
+          "response_sha256": "b858ae25e3686ca88442e726b8c8fd6b8ec4653bd155abf8d3d19898b4844702",
+          "fetched_at": "2026-10-21T02:31:07.246083+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-08-06T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:07 GMT",
+          "rows": 200,
+          "response_sha256": "b9a106463b865fde8fa237ffb17e026c4f000e069a8b2cb53b2bb7612669f6c1",
+          "fetched_at": "2026-10-21T02:31:07.528505+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-ETH",
+            "count": 200,
+            "to": "2026-07-29T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:07 GMT",
+          "rows": 200,
+          "response_sha256": "c8122b1a2e5ec91769f389e161ab487de2429abe37869e53b9381cf9803c7061",
+          "fetched_at": "2026-10-21T02:31:07.813557+00:00"
+        }
+      ]
+    },
+    "KRW-XRP-15": {
+      "availability": {
+        "earliest_observed": "2017-09-26T08:45:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:45:00+00:00",
+        "empty_before": "2017-09-26T00:00:00+00:00",
+        "nonempty_before": "2017-09-27T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 8621,
+        "expected_rows": 8640,
+        "missing": 19,
+        "missing_examples": [
+          "2026-10-18T17:15:00+00:00",
+          "2026-10-18T17:30:00+00:00",
+          "2026-10-18T17:45:00+00:00",
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T18:15:00+00:00",
+          "2026-10-18T18:30:00+00:00",
+          "2026-10-18T18:45:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T19:15:00+00:00",
+          "2026-10-18T19:30:00+00:00",
+          "2026-10-18T19:45:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T20:15:00+00:00",
+          "2026-10-18T20:30:00+00:00",
+          "2026-10-18T20:45:00+00:00",
+          "2026-10-18T21:00:00+00:00",
+          "2026-10-18T21:15:00+00:00",
+          "2026-10-18T21:30:00+00:00",
+          "2026-10-18T21:45:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "2a80fbaf75ac6e34741bd06ac3519e050647cd38b25fd25a719cd50249d9b162"
+      },
+      "snapshot": "KRW-XRP-15.csv.gz",
+      "snapshot_sha256": "af56153fc8b21e763157effa00caf51772527900920fc85f45559f77965bb37c",
+      "splits": {
+        "train": {
+          "rows": 5184,
+          "sha256": "db3935ac486986827ac998aed68b92fdf73a7d2d710bb38fcfab57f2118039d8",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 1728,
+          "sha256": "fd6d5e584c93d1fbe1c6bb9ad20b2613455f98d918bec24de0d85890e960bc00",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 1709,
+          "sha256": "0f60f9ef0f5e4a64e0b1707cbaf4752d44d37495d82fbbfc64dbdeaa89f6260b",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:45:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:08 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:08.236124+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:08 GMT",
+          "rows": 1,
+          "response_sha256": "0d2634b3669c49ea25fece20fa932132368303713f3bd0425c6d95381081cfcf",
+          "fetched_at": "2026-10-21T02:31:08.518323+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:08 GMT",
+          "rows": 1,
+          "response_sha256": "b965cb90932b36f903dae4ff840b02c05ff3852e8ba29bb00884094f0a091df2",
+          "fetched_at": "2026-10-21T02:31:08.798432+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:09 GMT",
+          "rows": 1,
+          "response_sha256": "ab328ffba6133f3a22bbcf7bb0fbaccbf69dfed681ddaaec567aac0b209249e8",
+          "fetched_at": "2026-10-21T02:31:09.076621+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2018-03-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:09 GMT",
+          "rows": 1,
+          "response_sha256": "f89e534dd02111dc15d3d390f7e39ad1dcca9deac15126505c8267b5e7625186",
+          "fetched_at": "2026-10-21T02:31:09.354353+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-08-12T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:09 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:09.635192+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-12-02T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:09 GMT",
+          "rows": 1,
+          "response_sha256": "8346328c5284364e643616a1cce4f716b5aa69d646ec4f37e5180dbcec0c6e3a",
+          "fetched_at": "2026-10-21T02:31:09.910421+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-10-07T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:10 GMT",
+          "rows": 1,
+          "response_sha256": "a9698bdcc4c4868f20474b4b1229617e69af2e16fd79a4996dbf2468601415de",
+          "fetched_at": "2026-10-21T02:31:10.186180+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-09T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:10 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:10.463666+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-23T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:10 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:10.737989+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-30T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:11 GMT",
+          "rows": 1,
+          "response_sha256": "036f6b814190fbb99d12f20d99b521f339fd7ccc96bb7f51c5e2cd4c5f4dab66",
+          "fetched_at": "2026-10-21T02:31:11.020697+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:11 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:11.293848+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-28T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:11 GMT",
+          "rows": 1,
+          "response_sha256": "22b77a559cb6d0d8c93883cf665d1e47fbfeeb603e1a09c4d7076814359213b4",
+          "fetched_at": "2026-10-21T02:31:11.570146+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-27T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:11 GMT",
+          "rows": 1,
+          "response_sha256": "ed82bbfcd06da27060de60a13c65c552aa8fb7d84cd66e7cced2f599ee1772f0",
+          "fetched_at": "2026-10-21T02:31:11.844507+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2017-09-27T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:12 GMT",
+          "rows": 61,
+          "response_sha256": "7903dd3c6bc998ac28e0f2688acd1fbaebddd06125f47c84690c8b18b52c7dde",
+          "fetched_at": "2026-10-21T02:31:12.119476+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:12 GMT",
+          "rows": 200,
+          "response_sha256": "d4329f7e0f33a1107b05e20f1e736609d554ce4c16b1e991c4a09e1740a1cfcb",
+          "fetched_at": "2026-10-21T02:31:12.406215+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-18T22:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:12 GMT",
+          "rows": 200,
+          "response_sha256": "86112657cbe4cdd5832baa7c47018e4976dd98a8a5a8bd6e76b89d93536a4e0d",
+          "fetched_at": "2026-10-21T02:31:12.689039+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-16T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:12 GMT",
+          "rows": 200,
+          "response_sha256": "a35c840d165db42f9ccd9aa3440a1f85a78eaae8dd0d58e6a1d8a388a1696483",
+          "fetched_at": "2026-10-21T02:31:12.969882+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-14T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:13 GMT",
+          "rows": 200,
+          "response_sha256": "e97470629cabcfdad006d016bc45b4f315072b1bb084e04504753587f3ab8b84",
+          "fetched_at": "2026-10-21T02:31:13.253299+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-12T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:13 GMT",
+          "rows": 200,
+          "response_sha256": "d1cda36e66d7b0c353394623cf1bb8eeea64f64d3065b5ef0434ef68d6548365",
+          "fetched_at": "2026-10-21T02:31:13.538133+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-10T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:13 GMT",
+          "rows": 200,
+          "response_sha256": "eba560fb6ba85f68392af8b007b4952eaab02e2117c774004b65e2f76d746e17",
+          "fetched_at": "2026-10-21T02:31:13.819886+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-08T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:14 GMT",
+          "rows": 200,
+          "response_sha256": "410a4e383a944efe0ab807dcf161c100e54db50fd31fc3e861f2cc8fda1dc530",
+          "fetched_at": "2026-10-21T02:31:14.105271+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-06T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:14 GMT",
+          "rows": 200,
+          "response_sha256": "da76ad0e66c115138975ff41e37d70191c5d660620a3423438dabd2812e30a83",
+          "fetched_at": "2026-10-21T02:31:14.389070+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-04T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:14 GMT",
+          "rows": 200,
+          "response_sha256": "ce0b6afb728db794b77f236a98fb2e716354a0c833cbab089362342b908dd6ee",
+          "fetched_at": "2026-10-21T02:31:14.671078+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-02T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:14 GMT",
+          "rows": 200,
+          "response_sha256": "83fdcc165187f95fc76aad9c81a1a9659468811506b9275a6cf553169a985d19",
+          "fetched_at": "2026-10-21T02:31:14.953932+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-29T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:15 GMT",
+          "rows": 200,
+          "response_sha256": "a8e236ccfd229fdd18770df58cddd0998322dbcdef5d5bf89051c8005b9c75e7",
+          "fetched_at": "2026-10-21T02:31:15.244326+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-27T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:15 GMT",
+          "rows": 200,
+          "response_sha256": "f43e3850eeb5a8c145af20961bc1a1674bec696d73d859ab8446f3a808146d11",
+          "fetched_at": "2026-10-21T02:31:15.526854+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-25T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:15 GMT",
+          "rows": 200,
+          "response_sha256": "d8951da227e48452c9d22106d0ef7a96d51a805546049ba161a0d7999e78baed",
+          "fetched_at": "2026-10-21T02:31:15.808478+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-23T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:16 GMT",
+          "rows": 200,
+          "response_sha256": "fa8da942255f69a3a4a41d0fa368756fb72480c9f87812ac97629e589c47f55e",
+          "fetched_at": "2026-10-21T02:31:16.089614+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-21T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:16 GMT",
+          "rows": 200,
+          "response_sha256": "1c751d1f329723702d975393d1c2786d604e981deb9425e697ebbf398d2d6eb6",
+          "fetched_at": "2026-10-21T02:31:16.372868+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-19T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:16 GMT",
+          "rows": 200,
+          "response_sha256": "21ac37474bafacdbefd828a421994e58f52e591a04a78dad52eaf100ec407c75",
+          "fetched_at": "2026-10-21T02:31:16.658197+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-17T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:16 GMT",
+          "rows": 200,
+          "response_sha256": "ed4dc49dfc7d4719db9c3b63021b0a6e4bbbad160850d3ef21a338b3e7dbf59a",
+          "fetched_at": "2026-10-21T02:31:16.956963+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-15T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:17 GMT",
+          "rows": 200,
+          "response_sha256": "b9f53f9ef34550bef5c8f26bb74df353fe69fc5065a57985abfaf659451c0fc6",
+          "fetched_at": "2026-10-21T02:31:17.244520+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-13T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:17 GMT",
+          "rows": 200,
+          "response_sha256": "82d145e59d25effb90cd6c196209a11fe9535d316ac6337453e496f06234c570",
+          "fetched_at": "2026-10-21T02:31:17.537830+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-11T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:17 GMT",
+          "rows": 200,
+          "response_sha256": "d2b74842be4f4cf5c13d5c6eab711acc67d66dd2f4bff63c5d97e306ebc29eae",
+          "fetched_at": "2026-10-21T02:31:17.824940+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-09T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:18 GMT",
+          "rows": 200,
+          "response_sha256": "918326a96494c82d22cb05b20e0f63951c7fe1c97cc97cc48928e04c267c58ce",
+          "fetched_at": "2026-10-21T02:31:18.124952+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-07T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:18 GMT",
+          "rows": 200,
+          "response_sha256": "c0794ff41b0b48416dcc1c20fe9db8793cadee119e085c7e52a35f9d88563f2b",
+          "fetched_at": "2026-10-21T02:31:18.635971+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-04T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:18 GMT",
+          "rows": 200,
+          "response_sha256": "e85b1a0a793d2c49b49d5a2d6da58819f9a9145cf1b999b738fb98f157fd52e0",
+          "fetched_at": "2026-10-21T02:31:18.919911+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-02T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:19 GMT",
+          "rows": 200,
+          "response_sha256": "af767034ababc77eac84ad3596356cd962020df7e0d2a464ed91d230ab75074d",
+          "fetched_at": "2026-10-21T02:31:19.202818+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-31T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:19 GMT",
+          "rows": 200,
+          "response_sha256": "bec3d99014a436384bf2f8081905eedfba0194f9432ac3a3bbd5649e8d6d8380",
+          "fetched_at": "2026-10-21T02:31:19.496463+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-29T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:19 GMT",
+          "rows": 200,
+          "response_sha256": "005e5b8be71023e893d228c05ffa97afc6408866042cfeb33ebd465da49caa96",
+          "fetched_at": "2026-10-21T02:31:19.790234+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-27T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:20 GMT",
+          "rows": 200,
+          "response_sha256": "9fd2d6a5d999046f74e96cde029f5cc82eaff96c34832424cfdf298266de9585",
+          "fetched_at": "2026-10-21T02:31:20.071217+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-25T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:20 GMT",
+          "rows": 200,
+          "response_sha256": "5568a108654b4d9e041c3f12c8659afc2a00c53ca8ebc7296c1736c9d5bb3712",
+          "fetched_at": "2026-10-21T02:31:20.356781+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-23T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:20 GMT",
+          "rows": 200,
+          "response_sha256": "6f819983c1aa1fb2fae7057cd3f77c8fe75add94af0ca2ea3cba27b3fbc377ce",
+          "fetched_at": "2026-10-21T02:31:20.638430+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-21T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:20 GMT",
+          "rows": 200,
+          "response_sha256": "770b7a9f48200018d4b1960dd665c9cdfba0a245f49f7321160f8f26a35e96de",
+          "fetched_at": "2026-10-21T02:31:20.936392+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-19T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:21 GMT",
+          "rows": 200,
+          "response_sha256": "6b02bab04948a55ab665ed81bc306db9f839e273f48a28400ae6a3749e946087",
+          "fetched_at": "2026-10-21T02:31:21.230461+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-17T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:21 GMT",
+          "rows": 200,
+          "response_sha256": "d17610802acd57c1e08dda524d22656d39e266adf2116abd230915e9a614c99d",
+          "fetched_at": "2026-10-21T02:31:21.515165+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-15T03:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:21 GMT",
+          "rows": 200,
+          "response_sha256": "382ab131a4b8b019d6538fdd5b6de713579af8d56720e0459eafea4db8adc778",
+          "fetched_at": "2026-10-21T02:31:21.795786+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-13T01:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:22 GMT",
+          "rows": 200,
+          "response_sha256": "755bbd768f25d9dafd2b59527e345e4c060e2d2372d7e7e6664443a2719d9b9d",
+          "fetched_at": "2026-10-21T02:31:22.085256+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-10T23:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:22 GMT",
+          "rows": 200,
+          "response_sha256": "b22d534aa1ec7e93ac85a58fb6153f5966651bb88eea941ad6b54db91d84ef51",
+          "fetched_at": "2026-10-21T02:31:22.374933+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-08T21:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:22 GMT",
+          "rows": 200,
+          "response_sha256": "7dd2f907470fa7b9f8492e32291f25613565331a65a347096d6edced442bc055",
+          "fetched_at": "2026-10-21T02:31:22.675583+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-06T19:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:22 GMT",
+          "rows": 200,
+          "response_sha256": "cfcc76411a11204b606d8b50d4e148b18b47d4dcba1b390b084cdf897e4f9b63",
+          "fetched_at": "2026-10-21T02:31:22.970043+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-04T17:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:23 GMT",
+          "rows": 200,
+          "response_sha256": "b75da5229be10b66815efe61daa2a99d6846ce78e4bbba2d5c9ce02e3ba25c90",
+          "fetched_at": "2026-10-21T02:31:23.252255+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-02T15:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:23 GMT",
+          "rows": 200,
+          "response_sha256": "0054d62e8831e027cca9b179c223009e42c6d15528fb21268d2565dcfd2822ce",
+          "fetched_at": "2026-10-21T02:31:23.540759+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-07-31T13:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:23 GMT",
+          "rows": 200,
+          "response_sha256": "c1c17c73b2cdd838cbe4c184dc5d21095233afe0561385e5ce88936837375b72",
+          "fetched_at": "2026-10-21T02:31:23.828745+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-07-29T11:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:24 GMT",
+          "rows": 200,
+          "response_sha256": "7aca2e0c7885c94821f71c635962c711fac4bdbb9ececd4ed5a03bd29737cd72",
+          "fetched_at": "2026-10-21T02:31:24.118111+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-07-27T09:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:24 GMT",
+          "rows": 200,
+          "response_sha256": "2ea5cdf69394ec630a6fe6c1127c6d90f3c0c3fa4a588558435ee5e51226b5a7",
+          "fetched_at": "2026-10-21T02:31:24.412987+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-07-25T07:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:24 GMT",
+          "rows": 200,
+          "response_sha256": "6d3566c61b036820dcd5e72bb89f96227cc5c461bf9f31d1683a6dddc4d4b945",
+          "fetched_at": "2026-10-21T02:31:24.706787+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-07-23T05:15:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:24 GMT",
+          "rows": 200,
+          "response_sha256": "9e1f5d3718aabfa5173276c0f3667cb4097cb21d493824e6c2272745238c923f",
+          "fetched_at": "2026-10-21T02:31:24.987219+00:00"
+        }
+      ]
+    },
+    "KRW-XRP-60": {
+      "availability": {
+        "earliest_observed": "2017-09-25T13:00:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:00:00+00:00",
+        "empty_before": "2017-09-25T00:00:00+00:00",
+        "nonempty_before": "2017-09-26T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 2156,
+        "expected_rows": 2160,
+        "missing": 4,
+        "missing_examples": [
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T21:00:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "38d81e2ee425b7df2862ed7c45bf8d427c9c810992bcd280d25f1a1caeaca4f7"
+      },
+      "snapshot": "KRW-XRP-60.csv.gz",
+      "snapshot_sha256": "25de872c70daedd2bf13636e83820e2b39ad06f675f7b5b6809d49f1350bceaa",
+      "splits": {
+        "train": {
+          "rows": 1296,
+          "sha256": "0354f32b706ecc6185f2a81864f0600ad501ea5e674496f7921d40d11201db04",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 432,
+          "sha256": "94d652b755fea26d48efa79d4027ef70080d7c6f04ee92f188c816e6c7b9270f",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 428,
+          "sha256": "155b013bf96d2455c1a54cd5279562d8127059be266affe0974d59f9260e3c67",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:00:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:25 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:25.616399+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:25 GMT",
+          "rows": 1,
+          "response_sha256": "6d14e0387b5132432c0286bdd5621ecb10fd247ccd1e9a1c39aa13369625ec0c",
+          "fetched_at": "2026-10-21T02:31:25.889712+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:26 GMT",
+          "rows": 1,
+          "response_sha256": "390e0aceb228a9fdcdc2ea8734ec25deb8f399ee7deebf5656b962fdef984f2b",
+          "fetched_at": "2026-10-21T02:31:26.171573+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:26 GMT",
+          "rows": 1,
+          "response_sha256": "272d28442fec11e414a1a2ae9674804139a372b73bb6187e2d690ca1ee187952",
+          "fetched_at": "2026-10-21T02:31:26.445037+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2018-03-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:26 GMT",
+          "rows": 1,
+          "response_sha256": "647930acb3898829bc2d21aa3cfd140af38610bc2b9dc7b7d7931216896c1558",
+          "fetched_at": "2026-10-21T02:31:26.719890+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-08-12T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:26 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:26.991978+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-12-02T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:27 GMT",
+          "rows": 1,
+          "response_sha256": "84e474fdf2dc027efd52842671f37f027482d09ca7b0f4df22c273cd27a93fca",
+          "fetched_at": "2026-10-21T02:31:27.263253+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-10-07T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:27 GMT",
+          "rows": 1,
+          "response_sha256": "c83e1dce299542bad505e9551351e7825bc4a02c9a37cfbce2c1c0fbe5052301",
+          "fetched_at": "2026-10-21T02:31:27.535325+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-09T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:27 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:27.809193+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-23T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:28 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:28.082149+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-30T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:28 GMT",
+          "rows": 1,
+          "response_sha256": "62c10cb668b8da86de146b59443a325518d1e649dfdd129825e4be249dadc9a0",
+          "fetched_at": "2026-10-21T02:31:28.353866+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:28 GMT",
+          "rows": 1,
+          "response_sha256": "c23312996bce2d6cc3c82fd8a7de07ec3683a05c5bab8bbcedbac065dbb4b7aa",
+          "fetched_at": "2026-10-21T02:31:28.624727+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-24T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:28 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:28.897936+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 1,
+            "to": "2017-09-25T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:29 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:29.171709+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2017-09-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:29 GMT",
+          "rows": 11,
+          "response_sha256": "fd55034a93644fe6aa43b12e674bc918ce6855f1d163d836563bf22246e31170",
+          "fetched_at": "2026-10-21T02:31:29.443320+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:29 GMT",
+          "rows": 200,
+          "response_sha256": "6276f79ef1585921df75aa1db2f231fef499939fb7ae46a202d8373374607dc9",
+          "fetched_at": "2026-10-21T02:31:29.725761+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-12T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:29 GMT",
+          "rows": 200,
+          "response_sha256": "974bdd834f430c990407f4a411c43e4c010c0c641fc34ee5b2a9ef69516d2e61",
+          "fetched_at": "2026-10-21T02:31:30.005701+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-10-04T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:30 GMT",
+          "rows": 200,
+          "response_sha256": "33dc47738f7559c7869b40ad0fa0bbd0ebbf561909828ae6511f7ac055da143b",
+          "fetched_at": "2026-10-21T02:31:30.287578+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-25T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:30 GMT",
+          "rows": 200,
+          "response_sha256": "c4b801471daf724fb593c51528c5ce02edb8fa52d6ffde87320b841167e540c3",
+          "fetched_at": "2026-10-21T02:31:30.568422+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-17T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:30 GMT",
+          "rows": 200,
+          "response_sha256": "ede0743b4757dbf1072ae75719692e0831abf0de9edf62d59780a2d324196f0a",
+          "fetched_at": "2026-10-21T02:31:30.851834+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-09-09T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:31 GMT",
+          "rows": 200,
+          "response_sha256": "2252b131e23372e90e836be52910d806a47b8bbb503522cfba10259ecbad69a8",
+          "fetched_at": "2026-10-21T02:31:31.132194+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-31T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:31 GMT",
+          "rows": 200,
+          "response_sha256": "d11f83766604df6e7f02c9aa534beee5a53a140f608180991918719b048f4970",
+          "fetched_at": "2026-10-21T02:31:31.417574+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-23T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:31 GMT",
+          "rows": 200,
+          "response_sha256": "03af73eaaf9a906123352284760ae8393db1c93f15bcd3ea35f128b14729ca83",
+          "fetched_at": "2026-10-21T02:31:31.700221+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-15T04:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:31 GMT",
+          "rows": 200,
+          "response_sha256": "8a0fcd66670a6c7431f6743c99613fb0d07f530546151cca3e35a93fc7267ff6",
+          "fetched_at": "2026-10-21T02:31:31.979682+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-08-06T20:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:32 GMT",
+          "rows": 200,
+          "response_sha256": "381326f340bcd6fdf2ff125bf268256ef4f5acc13cc0f616c405bb9885c00543",
+          "fetched_at": "2026-10-21T02:31:32.261166+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-XRP",
+            "count": 200,
+            "to": "2026-07-29T12:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:32 GMT",
+          "rows": 200,
+          "response_sha256": "903c670dc0802278964ae5a6b9ff13819cb8b58089ef0fc7f5e541ba5a21f323",
+          "fetched_at": "2026-10-21T02:31:32.544677+00:00"
+        }
+      ]
+    },
+    "KRW-SOL-15": {
+      "availability": {
+        "earliest_observed": "2021-10-15T06:00:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:45:00+00:00",
+        "empty_before": "2021-10-15T00:00:00+00:00",
+        "nonempty_before": "2021-10-16T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 8620,
+        "expected_rows": 8640,
+        "missing": 20,
+        "missing_examples": [
+          "2026-10-18T17:00:00+00:00",
+          "2026-10-18T17:15:00+00:00",
+          "2026-10-18T17:30:00+00:00",
+          "2026-10-18T17:45:00+00:00",
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T18:15:00+00:00",
+          "2026-10-18T18:30:00+00:00",
+          "2026-10-18T18:45:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T19:15:00+00:00",
+          "2026-10-18T19:30:00+00:00",
+          "2026-10-18T19:45:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T20:15:00+00:00",
+          "2026-10-18T20:30:00+00:00",
+          "2026-10-18T20:45:00+00:00",
+          "2026-10-18T21:00:00+00:00",
+          "2026-10-18T21:15:00+00:00",
+          "2026-10-18T21:30:00+00:00",
+          "2026-10-18T21:45:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "28374a15d29337e64147bd596dc1a3ec9f67bdf68db4344b9565271b771b4421"
+      },
+      "snapshot": "KRW-SOL-15.csv.gz",
+      "snapshot_sha256": "bc54e2358cd6211463cc49c90a0d6a91291929e8570d41bcd52927962b824e1d",
+      "splits": {
+        "train": {
+          "rows": 5184,
+          "sha256": "87cfd805b93a0a98da557c91c4d6ed83d1ede40e9fd4799f02e8c5f588db5a99",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 1728,
+          "sha256": "aa452afbd7ff81f7ad240a2d266695bd7909132b9ff9e99cd245946aeb8de5ce",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:45:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 1708,
+          "sha256": "bf418bc786883db30fbb1508dccfd201faa68cc968209dc2b43cc0f7d9a82794",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:45:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:32 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:32.927732+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:33 GMT",
+          "rows": 1,
+          "response_sha256": "4fb6ba4efd95d5ab82f16e2743bb244fec7b07ea7e5aaf45338ae2a30193dcd7",
+          "fetched_at": "2026-10-21T02:31:33.201452+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:33 GMT",
+          "rows": 1,
+          "response_sha256": "dd341ad4ad8f46f8f1b05b4ae4c9f9cd465d12c34ca69c3797dab9e723a27704",
+          "fetched_at": "2026-10-21T02:31:33.476920+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:33 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:33.750233+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2020-09-04T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:34 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:34.024075+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-04-16T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:34 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:34.294434+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-08-06T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:34 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:34.566580+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:34 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:34.837695+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-29T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:35 GMT",
+          "rows": 1,
+          "response_sha256": "0e79cac16a4a1caf104ff0414f9278d6989835afebd3e39c4a69618599b7c4cd",
+          "fetched_at": "2026-10-21T02:31:35.111802+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:35 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:35.384067+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-22T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:35 GMT",
+          "rows": 1,
+          "response_sha256": "811158661385682fe87fe7cb11dc451fd482b77d7c595e048c044bbc74c7869c",
+          "fetched_at": "2026-10-21T02:31:35.657814+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-18T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:35 GMT",
+          "rows": 1,
+          "response_sha256": "c4a25cd64a80e09d59f4b989476df711c6a5e6c6ea3e93208e5688ee5c2dd3a9",
+          "fetched_at": "2026-10-21T02:31:35.930882+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-16T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:36 GMT",
+          "rows": 1,
+          "response_sha256": "1e57dfec8a5e3ae746807a41ac0b95fd4b52bf14f0a96f14336bea3a65b21692",
+          "fetched_at": "2026-10-21T02:31:36.203470+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2021-10-16T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:36 GMT",
+          "rows": 72,
+          "response_sha256": "8436a5826c00880ae5f435ba6b4470b6a82deb0cdfae4d17d63584b00968da47",
+          "fetched_at": "2026-10-21T02:31:36.477035+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:36 GMT",
+          "rows": 200,
+          "response_sha256": "e610d66c8d5cf727710dba62712279812b691ff3cf0c58094e8aa33c36fb2fb9",
+          "fetched_at": "2026-10-21T02:31:36.793130+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-18T22:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:37 GMT",
+          "rows": 200,
+          "response_sha256": "e3558b2a3886705df55baa1865d3ca615c4ff91b2c8bcc4cdd3f356232240d97",
+          "fetched_at": "2026-10-21T02:31:37.073519+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-16T15:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:37 GMT",
+          "rows": 200,
+          "response_sha256": "35891b9309188f56b924a45fdaf9d93da0a7245b416ef2ec6b5b9ba1a4567faa",
+          "fetched_at": "2026-10-21T02:31:37.354549+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-14T13:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:37 GMT",
+          "rows": 200,
+          "response_sha256": "a1b5f04fbf233c9dca26eb97000e169aeb34af3e24e6b0d43988e2201278b590",
+          "fetched_at": "2026-10-21T02:31:37.638205+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-12T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:37 GMT",
+          "rows": 200,
+          "response_sha256": "c2093285954483eb32876a99fa9a6daea6d4faf317203a80ad35aa6d0b9034dd",
+          "fetched_at": "2026-10-21T02:31:37.918555+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-10T09:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:38 GMT",
+          "rows": 200,
+          "response_sha256": "ae16a5dd3e889ac426e9aa4533a51d241a17aef2261b8fc22819b7c875d2d453",
+          "fetched_at": "2026-10-21T02:31:38.202049+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-08T07:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:38 GMT",
+          "rows": 200,
+          "response_sha256": "37646e9fee85b0a39bb9bdac4258127a0f553d5177d0b11469ac4bdac6c95752",
+          "fetched_at": "2026-10-21T02:31:38.484997+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-06T05:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:38 GMT",
+          "rows": 200,
+          "response_sha256": "fe96c6abf68f0e77204fa6c250a680b15bc8546fd7687472a2e2a75e2e41d649",
+          "fetched_at": "2026-10-21T02:31:38.767927+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-04T03:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:39 GMT",
+          "rows": 200,
+          "response_sha256": "f6890a7f082a289d3500debad7f1c03be9e94d60d85fcb18f99238d8fed69928",
+          "fetched_at": "2026-10-21T02:31:39.048965+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-02T01:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:39 GMT",
+          "rows": 200,
+          "response_sha256": "ddc5518a49d5cfff210dbcfe7910c25403486822bebf523af305f7847eae484b",
+          "fetched_at": "2026-10-21T02:31:39.328511+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-29T23:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:39 GMT",
+          "rows": 200,
+          "response_sha256": "f07ae92d128935fbd09e338c6db3f45f44cb3b1191157b1b61dc8e8a55954de0",
+          "fetched_at": "2026-10-21T02:31:39.612336+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-27T21:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:39 GMT",
+          "rows": 200,
+          "response_sha256": "dcdf9617581721dee9da0b1c0ae91cf0031b76826a1d3a2a9243efe79a0b0a48",
+          "fetched_at": "2026-10-21T02:31:39.895313+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-25T19:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:40 GMT",
+          "rows": 200,
+          "response_sha256": "cd168f71e057fe241f0cfaab5574e50285f304cac026750725f0155b50a100f8",
+          "fetched_at": "2026-10-21T02:31:40.176885+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-23T17:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:40 GMT",
+          "rows": 200,
+          "response_sha256": "d0cf841c298e20ecb7a14a979256835fae6cef195e795a875e1e89644a965fc9",
+          "fetched_at": "2026-10-21T02:31:40.457007+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-21T15:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:40 GMT",
+          "rows": 200,
+          "response_sha256": "5312e75c0acc762b9f119eafefd66738fa3ec50976754d925608a659d5b29ab2",
+          "fetched_at": "2026-10-21T02:31:40.742534+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-19T13:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:41 GMT",
+          "rows": 200,
+          "response_sha256": "aa270068079357f2950c1eb7f8fb36e9535faae5e6e48fef41f28c3feb0b6fb2",
+          "fetched_at": "2026-10-21T02:31:41.025913+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-17T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:41 GMT",
+          "rows": 200,
+          "response_sha256": "ce7e50a15b3ffffd83087a3a6e8e955690fbc5d9de479ddcecb1334bc5079cd1",
+          "fetched_at": "2026-10-21T02:31:41.307772+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-15T09:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:41 GMT",
+          "rows": 200,
+          "response_sha256": "070325a13e98cb7e180f966da7baf17b605b1bf9293aa0243bbcbe9d24b73047",
+          "fetched_at": "2026-10-21T02:31:41.589393+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-13T07:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:41 GMT",
+          "rows": 200,
+          "response_sha256": "52088e56c767dec7ddf62c904f7bf0f0c58bf919e0cec38dd3c4d43730ddd360",
+          "fetched_at": "2026-10-21T02:31:41.870543+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-11T05:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:42 GMT",
+          "rows": 200,
+          "response_sha256": "751a01ba3857b5a2ea58ebb6995411402ee236ddb600d8ec4b9d0d5b158e6ba4",
+          "fetched_at": "2026-10-21T02:31:42.150697+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-09T03:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:42 GMT",
+          "rows": 200,
+          "response_sha256": "7f1fa16364ba2247f12ad0884193d83640855b8cb83e3c9eccd237fa9c741862",
+          "fetched_at": "2026-10-21T02:31:42.430507+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-07T01:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:42 GMT",
+          "rows": 200,
+          "response_sha256": "1186cca81bb500d45b9a6a90b1d75cd000d213a668aaf40296ed6b286866b983",
+          "fetched_at": "2026-10-21T02:31:42.711862+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-04T23:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:42 GMT",
+          "rows": 200,
+          "response_sha256": "b7497d6c534fbb1817374074d044fe2862eb42bb413adce447c6764ca496bd06",
+          "fetched_at": "2026-10-21T02:31:42.991366+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-02T21:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:43 GMT",
+          "rows": 200,
+          "response_sha256": "a82fddbacad3b5956e5df0c43a25534b3dab16062d563c9cbe88263a37527cba",
+          "fetched_at": "2026-10-21T02:31:43.272915+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-31T19:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:43 GMT",
+          "rows": 200,
+          "response_sha256": "60c79097b379d97d7b7998e08810a55754ecb74bce14a7e2eaa28bb285eac735",
+          "fetched_at": "2026-10-21T02:31:43.554271+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-29T17:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:43 GMT",
+          "rows": 200,
+          "response_sha256": "a7cdcdb35390d3b0a549c6295e2ce0744f5b0ffcf9d0b35ada60c8df4b630e33",
+          "fetched_at": "2026-10-21T02:31:43.837547+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-27T15:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:44 GMT",
+          "rows": 200,
+          "response_sha256": "dc443fabd341145cb3b57c400c23f404877fb33a900c265ccb61486dae200349",
+          "fetched_at": "2026-10-21T02:31:44.119896+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-25T13:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:44 GMT",
+          "rows": 200,
+          "response_sha256": "32b826b9c7f86716be65bb65e618eaf7c6ad9da6779d2a84599bcc99f57931ef",
+          "fetched_at": "2026-10-21T02:31:44.399886+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-23T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:44 GMT",
+          "rows": 200,
+          "response_sha256": "1aa6a16fc0ac7a9b2360600d691c2a14ba1088efe3342c24b0fa9afc0851ff87",
+          "fetched_at": "2026-10-21T02:31:44.681385+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-21T09:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:44 GMT",
+          "rows": 200,
+          "response_sha256": "a95e6b95ff78fe99cd2f0e9de50a0218e438421666405ba7a0a5d8a854a0e5d2",
+          "fetched_at": "2026-10-21T02:31:44.962013+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-19T07:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:45 GMT",
+          "rows": 200,
+          "response_sha256": "d37ab1217a52af583a789dedcec7dc2d93582e338fadca30a0b5b33808b9d8ac",
+          "fetched_at": "2026-10-21T02:31:45.242467+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-17T05:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:45 GMT",
+          "rows": 200,
+          "response_sha256": "e673c4a4ddd0609c4f485c0e7b5d924e22c72d1358d841bd3033e473f613278d",
+          "fetched_at": "2026-10-21T02:31:45.523178+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-15T03:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:45 GMT",
+          "rows": 200,
+          "response_sha256": "6ea7f07011ceff015a02feb7d7cf78f8e57daccf8c7989aaa72c04bfd1582447",
+          "fetched_at": "2026-10-21T02:31:45.804805+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-13T01:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:46 GMT",
+          "rows": 200,
+          "response_sha256": "8e84f4185d1dce2eccf9e805d87ec37d29f5af0a25b6c53cf0ed35105f938c22",
+          "fetched_at": "2026-10-21T02:31:46.086266+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-10T23:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:46 GMT",
+          "rows": 200,
+          "response_sha256": "2332ec92075406483558f133fe2cad50b9663de219c1ba560461b236d2280947",
+          "fetched_at": "2026-10-21T02:31:46.369141+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-08T21:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:46 GMT",
+          "rows": 200,
+          "response_sha256": "9e17bf1f1eb48b94411edf367d30b5817ea86c4d1569afb4b0aaf7b4f3c0076e",
+          "fetched_at": "2026-10-21T02:31:46.653367+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-06T19:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:46 GMT",
+          "rows": 200,
+          "response_sha256": "ddbcead39a1d02016db7c470684ee82a6eabd37d5f51704a985c9c55b0e94d63",
+          "fetched_at": "2026-10-21T02:31:46.938936+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-04T17:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:47 GMT",
+          "rows": 200,
+          "response_sha256": "5c75f051ea149ea606da38eaef19578666f9265a2ebdac8036d06c1503b43818",
+          "fetched_at": "2026-10-21T02:31:47.219356+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-02T15:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:47 GMT",
+          "rows": 200,
+          "response_sha256": "e13e689852ff4da9d0ffc63ec2d8a679e35d86795789781a6edded7f18cfa81a",
+          "fetched_at": "2026-10-21T02:31:47.500305+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-07-31T13:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:47 GMT",
+          "rows": 200,
+          "response_sha256": "23e922d322cb69fae74f4158ee40c039173b6fba79eca6585c8db0c0d6d07b09",
+          "fetched_at": "2026-10-21T02:31:47.781824+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-07-29T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:48 GMT",
+          "rows": 200,
+          "response_sha256": "643404f26f3aaa111bd3cde18ff3c9336d9a91800f499a6122cd7dba091f7b28",
+          "fetched_at": "2026-10-21T02:31:48.064252+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-07-27T09:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:48 GMT",
+          "rows": 200,
+          "response_sha256": "7936c3cc9fc9e4a58df60df13ccb5a7048ede79165f79488f6046c2f196c5a12",
+          "fetched_at": "2026-10-21T02:31:48.346644+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-07-25T07:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:48 GMT",
+          "rows": 200,
+          "response_sha256": "721a3f0a484732b9699825ca2269bf31e4691d2c8b9ad86b5db9c02a85e6b345",
+          "fetched_at": "2026-10-21T02:31:48.627993+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/15",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-07-23T05:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:48 GMT",
+          "rows": 200,
+          "response_sha256": "c1073686603a5a0982e37e6a2e859485e4003fe4f18dffe3f337c89dbf5eaca4",
+          "fetched_at": "2026-10-21T02:31:48.911508+00:00"
+        }
+      ]
+    },
+    "KRW-SOL-60": {
+      "availability": {
+        "earliest_observed": "2021-10-15T06:00:00+00:00",
+        "latest_completed_observed": "2026-10-20T23:00:00+00:00",
+        "empty_before": "2021-10-15T00:00:00+00:00",
+        "nonempty_before": "2021-10-16T00:00:00+00:00",
+        "full_history_continuity_verified": false
+      },
+      "quality": {
+        "passed": false,
+        "rows": 2155,
+        "expected_rows": 2160,
+        "missing": 5,
+        "missing_examples": [
+          "2026-10-18T17:00:00+00:00",
+          "2026-10-18T18:00:00+00:00",
+          "2026-10-18T19:00:00+00:00",
+          "2026-10-18T20:00:00+00:00",
+          "2026-10-18T21:00:00+00:00"
+        ],
+        "reason": "Missing bars; dataset quarantined, never silently filled",
+        "dataset_sha256": "f8f1c8e04243a4a909543b3b5d8ce3784cfc9fcac119cf23e7d4468246b0a1b2"
+      },
+      "snapshot": "KRW-SOL-60.csv.gz",
+      "snapshot_sha256": "37025349ed92337b716edb4e08bce0737ef7164ef4ab624b5d319c67ad889911",
+      "splits": {
+        "train": {
+          "rows": 1296,
+          "sha256": "26a92f8c9226c6e15b1436943fda76366ab4a8b522c1cfc9bdd78daab0e1b271",
+          "first_open": "2026-07-23T00:00:00+00:00",
+          "last_open": "2026-09-14T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "validation": {
+          "rows": 432,
+          "sha256": "852fabf876d2b6b84811d09580f2b8002a8032a6821ba74aa1644f783e3bc8e1",
+          "first_open": "2026-09-15T00:00:00+00:00",
+          "last_open": "2026-10-02T23:00:00+00:00",
+          "planned_for_evaluation": true
+        },
+        "test": {
+          "rows": 427,
+          "sha256": "aabce1298fcbdc762792aa31b24c497ac0945ed2f8e0708ffd4b1f3eb1dbb50e",
+          "first_open": "2026-10-03T00:00:00+00:00",
+          "last_open": "2026-10-20T23:00:00+00:00",
+          "planned_for_evaluation": false
+        }
+      },
+      "requests": [
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2017-01-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:49 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:49.705837+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:49 GMT",
+          "rows": 1,
+          "response_sha256": "35b955f336cbc4732d6e1502e740f4970c0abd76173547ac6fa0d428c1c2b24b",
+          "fetched_at": "2026-10-21T02:31:49.979585+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-11-26T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:50 GMT",
+          "rows": 1,
+          "response_sha256": "a2c671c75dc9e81136286cfebb1c90fc1a51a571c9bf26fd7a43d13e243fc851",
+          "fetched_at": "2026-10-21T02:31:50.250221+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2019-06-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:50 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:50.521863+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2020-09-04T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:50 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:50.796702+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-04-16T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:51 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:51.068348+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-08-06T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:51 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:51.341609+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-01T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:51 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:51.614760+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-29T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:51 GMT",
+          "rows": 1,
+          "response_sha256": "e805a04d998d426856284fc074e46be6d738a245e0530ff3ee68f0b78b13156e",
+          "fetched_at": "2026-10-21T02:31:51.888159+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-15T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:52 GMT",
+          "rows": 0,
+          "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "fetched_at": "2026-10-21T02:31:52.160432+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-22T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:52 GMT",
+          "rows": 1,
+          "response_sha256": "aa67008f8df6acc4bcb817de6431316e31349420b5cc70005ab568878afe5411",
+          "fetched_at": "2026-10-21T02:31:52.432325+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-18T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:52 GMT",
+          "rows": 1,
+          "response_sha256": "1b37bda280c7151859baad02cef4f0e175c4d57bccff8f50e08c3c6eb7f2818a",
+          "fetched_at": "2026-10-21T02:31:52.706815+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 1,
+            "to": "2021-10-16T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:52 GMT",
+          "rows": 1,
+          "response_sha256": "e5b5e29e3aa3fdf5ceec4d9a07a19d40dfb870b8f93475b9eb20d097ab1c4760",
+          "fetched_at": "2026-10-21T02:31:52.977757+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2021-10-16T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:53 GMT",
+          "rows": 18,
+          "response_sha256": "912375db679e3997b9959cb5faea2082c313596da8aab424fb1f0a435e318277",
+          "fetched_at": "2026-10-21T02:31:53.250778+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-21T00:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:53 GMT",
+          "rows": 200,
+          "response_sha256": "1cb4478197a9b6bb69a6dba7a81e20915f89c1c08164f9443a0e8b2788e03ca1",
+          "fetched_at": "2026-10-21T02:31:53.531163+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-12T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:53 GMT",
+          "rows": 200,
+          "response_sha256": "3ab9f3be2f0cc9cc5f9da01db6c0484bb27b348a2476404e33d23b5023af0979",
+          "fetched_at": "2026-10-21T02:31:53.814196+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-10-04T03:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:54 GMT",
+          "rows": 200,
+          "response_sha256": "804af870c770d39d2f688c5b75397062c3342403e18d36def92e0580ceb4d74b",
+          "fetched_at": "2026-10-21T02:31:54.094335+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-25T19:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:54 GMT",
+          "rows": 200,
+          "response_sha256": "d2c2368054fb91fdd5c8e6cbc833f915820d97a059830f9e6947a54a419fefd8",
+          "fetched_at": "2026-10-21T02:31:54.374734+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-17T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:54 GMT",
+          "rows": 200,
+          "response_sha256": "cea00801818358a94206629eb8c9d58c12a0ed11af3dd0fa08b72c3c722d78fb",
+          "fetched_at": "2026-10-21T02:31:54.861882+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-09-09T03:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:55 GMT",
+          "rows": 200,
+          "response_sha256": "92d512d7c0fa65dfa81cdc9ebdd49d0b2043cf63b3316ee40b1ccbf5b5a0a11a",
+          "fetched_at": "2026-10-21T02:31:55.142860+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-31T19:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:55 GMT",
+          "rows": 200,
+          "response_sha256": "283969c14831386ee1fe1a40b42f7c7f7cc7b3cb7b53e22b42412d956c327553",
+          "fetched_at": "2026-10-21T02:31:55.425373+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-23T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:55 GMT",
+          "rows": 200,
+          "response_sha256": "8384c956b532cdd1ef86416da1a18674b1289dc3edc7e38f5ba615c36007ea32",
+          "fetched_at": "2026-10-21T02:31:55.706620+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-15T03:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:55 GMT",
+          "rows": 200,
+          "response_sha256": "4a9f2b78dcc46bb4f909ebface63d1b3eea7ab1b3c5b37edae0410efaac8ba2d",
+          "fetched_at": "2026-10-21T02:31:55.988826+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-08-06T19:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:56 GMT",
+          "rows": 200,
+          "response_sha256": "8362f56422595bc873645de7de97ca3cba94b0929b29819a8ff15ae0a6e05f23",
+          "fetched_at": "2026-10-21T02:31:56.272459+00:00"
+        },
+        {
+          "url": "https://api.upbit.com/v1/candles/minutes/60",
+          "params": {
+            "market": "KRW-SOL",
+            "count": 200,
+            "to": "2026-07-29T11:00:00+00:00"
+          },
+          "server_date": "Wed, 21 Oct 2026 02:31:56 GMT",
+          "rows": 200,
+          "response_sha256": "b3d662c375aa7c0310870da526b69c5065496832cb8e3787041c0da9d0a07784",
+          "fetched_at": "2026-10-21T02:31:56.552556+00:00"
+        }
+      ]
+    }
+  },
+  "endpoint": "https://api.upbit.com/v1/candles/minutes/{unit}",
+  "auth": "none; public GET only",
+  "availability_scope": "existence probes, not full-history gap audit",
+  "completed_at": "2026-10-21T02:31:56.697965+00:00"
+}
