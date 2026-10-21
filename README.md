@@ -85,6 +85,25 @@ STOP_LOSS = 0.05 # 손절 라인 (5%)
 python main.py
 ```
 
+## 오프라인 전략 연구 및 백테스트
+
+기존 봇은 호환 전략을 유지합니다. 새 RSI·MACD·볼린저 단독 및 2/3·3/3 합의 전략은
+실거래에 연결되지 않은 연구 후보입니다. 로컬 CSV 또는 합성 데이터로만 비교합니다.
+
+```bash
+# 숫자는 연구 비용 가정 예시이며 현재 업비트 요율이 아닙니다.
+python -m backtesting --demo --fee-bps 5 --slippage-bps 3 --spread-bps 2 --output runtime/research-demo
+python -m backtesting --csv candles.csv --bar-seconds 60 --fee-bps 5 --slippage-bps 3 --spread-bps 2 --output runtime/research-csv
+python -m unittest discover -v
+```
+
+출력 폴더는 새 경로여야 합니다. JSON 비교 보고서, 전략별 체결·신호·평가금액 CSV와 지표표를 저장합니다.
+CSV timestamp는 시간대를 포함한 **봉 시작 시각**이어야 합니다. 완료된 봉의 신호는 다음 봉 시가에
+비용을 적용해 모의 체결하며, 신호만의 비교를 위해 연구 기본값에는 손절·익절·물타기를 적용하지 않습니다.
+자세한 정의·가정·한계와 기존 봇과의 차이는 [연구 설계](docs/STRATEGY_RESEARCH.md)를 참고하세요.
+
+**실제 거래소 주문·인증 계좌 조회·운영 배포는 이 연구에서 수행하지 않습니다.**
+
 ## 로그 및 모니터링
 
 - 모든 거래 내역과 시스템 로그는 `trading_bot.log` 파일에 기록됩니다
