@@ -1,5 +1,6 @@
 # P2: 인증된 GitHub 읽기 전용 관측
 
+> P3 이후 최우선 조건은 추가 지출 0원/로컬 SQLite/공식 Plus 로그인입니다. 이 문서의 과거 API·외부 원장 활성화 제안은 [P3 로컬 설계](P3_LOCAL_WORKER.md)의 금지/미구현 경계보다 우선하지 않습니다.
 ## 범위와 권한 경계
 
 P1 실행 미연결 상태를 유지하면서 webhook을 사실이 아닌 **재조회 힌트**로 취급하는 REST 수집기를 추가합니다. Issue 본문/댓글은 메모리에서만 해시/정확한 승인 구문을 검사합니다. P2 결과는 관측 후보이며 실행 허가가 아닙니다. `enabled=false`, 빈 builder/reviewer ID 목록, `REAL_TRADING=False`, P1 Fake-only 타입 제약과 예약 정책은 변경하지 않습니다.

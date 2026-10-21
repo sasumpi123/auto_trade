@@ -203,8 +203,18 @@ class ObservationJournal:
             row = db.execute('SELECT c.seq,c.version,o.metadata FROM current c JOIN observations o ON o.seq=c.seq WHERE c.target=? AND c.resource=?',
                              (target, resource)).fetchone()
             # Any newer pending/failed verification invalidates cached candidate status.
-            latest = db.execute('SELECT MAX(seq) FROM observations WHERE target=? AND resource=?', (target, resource)).fetchone()[0]
-            uncertain = db.execute("SELECT 1 FROM observations WHERE seq>? AND status!='VERIFIED' LIMIT 1", (row[0] if row else 0,)).fetchone()
+            # Scope uncertainty to this resource and API-verified workflow-run aliases.
+            # A new unmapped run is not proof that any arbitrary PR changed.
+            related = [(target, resource)]
+            if target == 'pr':
+                related.extend(('run', run) for run, metadata in db.execute(
+                    "SELECT resource,metadata FROM observations WHERE target='run' AND status='VERIFIED'")
+                    if json.loads(metadata)['pr'] == resource)
+            latest = max(db.execute('SELECT COALESCE(MAX(seq),0) FROM observations WHERE target=? AND resource=?',
+                                    (kind, number)).fetchone()[0] for kind, number in related)
+            uncertain = any(db.execute(
+                "SELECT 1 FROM observations WHERE seq>? AND target=? AND resource=? AND status!='VERIFIED' LIMIT 1",
+                (row[0] if row else 0, kind, number)).fetchone() for kind, number in related)
             if not row or uncertain or (latest and latest > row[0]):
                 return None
             return {'version': row[1], 'snapshot': json.loads(row[2]), 'execution_enabled': False,

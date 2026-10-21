@@ -183,3 +183,14 @@ DB는 명시적으로 새로 만들며 덮어쓰지 않습니다. 만료/모호�
 ## P2 GitHub 읽기 전용 검증
 
 [인증·이벤트·별도 관측 DB·P3 전제](docs/P2_GITHUB_READONLY.md)를 참고하세요. master 코드로 실제 REST 상태를 재조회하지만 실행/Push/병합과 연결하지 않습니다. 자동화와 실거래는 비활성 상태이며 API 권한 부족은 검증 보류입니다. 테스트는 Fake HTTP만 사용합니다.
+
+## P3: 추가 지출 0원 로컬 모의 Worker
+
+[Mac M3·Plus CLI·로컬 SQLite·launchd 설계와 확인 사항](docs/P3_LOCAL_WORKER.md)을 참고하세요. 실제 CLI/API 과금/게시/병합은 비활성이고, Plus 한도·추가 크레딧 미사용을 증명하지 못하면 중단합니다. API 키/서버/유료 DB는 필요하지 않으며 금지합니다.
+
+```bash
+python -m automation.local_runner --dry-run
+python -m automation.local_runner --dry-run --database runtime/new-p3.sqlite3 --scenario revision
+```
+
+launchd 예제는 작성만 했고 설치/등록하지 않았습니다. 실제 구독 인증정보를 추출·복사하지 않습니다.

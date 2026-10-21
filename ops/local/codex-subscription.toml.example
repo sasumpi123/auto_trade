@@ -1,0 +1,7 @@
+# Inert review reference. Never copy, export or parse authentication credentials.
+# User completes official `codex login` on the Mac. No API key authentication.
+forced_login_method = "chatgpt"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+[sandbox_workspace_write]
+network_access = false

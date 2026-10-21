@@ -1,5 +1,6 @@
 # P1: SQLite 영속 원장과 Fake-only 개발 오케스트레이터
 
+> P3 이후 최우선 조건은 추가 지출 0원/로컬 SQLite/공식 Plus 로그인입니다. 이 문서의 과거 API·외부 원장 활성화 제안은 [P3 로컬 설계](P3_LOCAL_WORKER.md)의 금지/미구현 경계보다 우선하지 않습니다.
 ## 활성화 상태와 신뢰 경계
 
 이 구현은 **로컬 Dry-run 기반**입니다. GitHub/Codex/Reviewer는 정확한 Fake 타입만 허용하고 HTTP·모델·Git·Push·실제 PR 생성·실제 병합·운영 봇 실행 코드를 갖지 않습니다. CLI에 live 모드나 API 키 인자가 없습니다. `.github/automation/policy.json`의 `enabled=false`, 빈 builder/reviewer ID, 비활성 worker 예제, `REAL_TRADING=False`를 유지합니다. 기존 읽기 전용 observer를 유료 작업자나 영속 서비스로 연결하지 않습니다.
