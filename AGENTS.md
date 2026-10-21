@@ -57,3 +57,11 @@
 - 이벤트 본문 대신 인증된 API를 재조회하고 불변 ID/hash/head 및 CI run-job-Check 연결을 확인합니다. 오류/권한 부족/미검증은 보류합니다.
 - 관측 DB는 runner 로컬 companion이며 공유 실행 원장이 아닙니다. body/token/raw event는 저장·출력하지 않습니다.
 - 현재 observer에 외부 Secret/App key/쓰기 권한을 주지 않습니다. 상세 제한과 P3 사용자 설정은 `docs/P2_GITHUB_READONLY.md`를 따릅니다.
+
+## P3 최우선: 추가 지출 0원
+
+- Plus 기존 구독료 외 추가 지출 0원. API 과금/크레딧 구매/한도 확대/유료 runner/유료 서버·DB·호스팅을 금지합니다.
+- `zero-cost.json`의 fake-only 및 모든 live 실행/게시/병합 false를 유지합니다. 계정/0원 증빙 불가 또는 인증·구독 quota 오류는 중단합니다.
+- 공식 ChatGPT 로그인만 향후 검토하며 auth.json/Keychain/토큰을 추출·복사·공유하거나 API 인증으로 fallback하지 않습니다.
+- P3 Fake-only task store와 broker는 P1/P2 제약을 우회하지 않습니다. 무인 활성화는 P4 검증 및 별도 사용자 승인 전 금지입니다.
+- Mac launchd 예제는 비활성입니다. 등록/계정 설정/GitHub 권한·Secrets 변경을 임의 수행하지 않습니다. 상세 경계는 `docs/P3_LOCAL_WORKER.md`를 따릅니다.

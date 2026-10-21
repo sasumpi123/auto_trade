@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "mode": "fake-only",
+  "runtime": "local-macos-python312-sqlite-launchd",
+  "extra_spend_krw": 0,
+  "preferred_auth": "chatgpt-plus-official-login",
+  "allow_api_billing": false,
+  "allow_credit_purchase": false,
+  "allow_usage_expansion": false,
+  "allow_paid_runner": false,
+  "allow_paid_hosting_or_database": false,
+  "allow_auth_export": false,
+  "allow_live_worker": false,
+  "allow_live_publish": false,
+  "allow_merge": false,
+  "on_quota_or_auth_error": "halt",
+  "on_missing_independent_review": "wait",
+  "on_unproven_zero_cost": "halt"
+}
