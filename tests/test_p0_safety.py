@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from urllib.parse import parse_qs
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -698,7 +699,7 @@ class SafetyTests(unittest.TestCase):
     def test_private_adapter_uses_identifier_and_no_sell_price(self):
         session = Mock()
         session.request.return_value.json.return_value = {'uuid': 'fake'}
-        broker = UpbitBroker('fake-key', 'fake-secret-' * 4, enabled=True, session=session)
+        broker = UpbitBroker('fake-key', 'fake-secret-' * 8, enabled=True, session=session)
         broker.submit('ask', TICKER, Decimal('2'), 'unique-intent')
         kwargs = session.request.call_args.kwargs
         self.assertEqual(kwargs['json']['identifier'], 'unique-intent')
@@ -713,7 +714,7 @@ class SafetyTests(unittest.TestCase):
         broker = UpbitBroker('fake', 'x' * 64, enabled=True, session=session)
         self.assertEqual(len(broker.open_orders()), 100)
         self.assertEqual(session.request.call_count, 2)
-        self.assertEqual(session.request.call_args.kwargs['params']['states[]'], ['wait', 'watch'])
+        self.assertEqual(parse_qs(session.request.call_args.kwargs['params'])['states[]'], ['wait', 'watch'])
 
 
 if __name__ == '__main__':

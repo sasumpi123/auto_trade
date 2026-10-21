@@ -1,7 +1,41 @@
 """Private Upbit REST adapter. Constructed only after explicit real-mode opt-in."""
 import hashlib
+from collections.abc import Mapping
+from decimal import Decimal
 from urllib.parse import urlencode, unquote
 import uuid
+
+
+def request_parameters(params):
+    """One ordered snapshot for both transmission and Upbit's decoded hash input.
+
+    Do not sort keys, use unquote_plus, hash JSON bytes, or decode the secret key.
+    See https://docs.upbit.com/kr/reference/auth (Python reference example).
+    """
+    if params is None:
+        params = {}
+    if not isinstance(params, Mapping):
+        raise ValueError('Request parameters must be an ordered mapping')
+
+    def scalar(value):
+        if isinstance(value, bool) or not isinstance(value, (str, int, Decimal)):
+            raise ValueError('Only strings, integers and finite Decimals are supported')
+        if isinstance(value, Decimal) and not value.is_finite():
+            raise ValueError('Non-finite parameter')
+        return str(value)
+
+    snapshot = {}
+    for key, value in params.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError('Parameter names must be non-empty strings')
+        if isinstance(value, (list, tuple)):
+            if not key.endswith('[]') or not value:
+                raise ValueError('Repeated values require a non-empty [] parameter')
+            snapshot[key] = [scalar(item) for item in value]
+        else:
+            snapshot[key] = scalar(value)
+    encoded = urlencode(snapshot, doseq=True)
+    return snapshot, encoded, unquote(encoded)
 
 
 class UpbitBroker:
@@ -18,16 +52,23 @@ class UpbitBroker:
 
     def _request(self, method, path, params=None):
         import jwt
-        params = params or {}
+        if (method, path) not in {('GET', 'accounts'), ('GET', 'order'),
+                                  ('GET', 'orders/open'), ('POST', 'orders')}:
+            raise ValueError('Unsupported broker operation')
+        defaults = getattr(self.session, 'params', None)
+        if isinstance(defaults, (Mapping, list, tuple, str)) and defaults:
+            raise ValueError('Session-level query parameters could change the signed request')
+        body, encoded_query, hash_input = request_parameters(params)
         payload = {'access_key': self.access_key, 'nonce': str(uuid.uuid4())}
-        if params:
-            query = unquote(urlencode(params, doseq=True)).encode()
-            payload.update(query_hash=hashlib.sha512(query).hexdigest(), query_hash_alg='SHA512')
-        token = jwt.encode(payload, self.secret_key, algorithm='HS256')
+        if hash_input:
+            payload.update(query_hash=hashlib.sha512(hash_input.encode('utf-8')).hexdigest(),
+                           query_hash_alg='SHA512')
+        token = jwt.encode(payload, self.secret_key, algorithm='HS512')
         response = self.session.request(
             method, 'https://api.upbit.com/v1/' + path,
             headers={'Authorization': 'Bearer ' + token},
-            **({'json': params} if method == 'POST' else {'params': params}),
+            # The encoded GET query is passed verbatim; JSON uses the same snapshot.
+            **({'json': body} if method == 'POST' else {'params': encoded_query}),
             timeout=(3.05, 10), allow_redirects=False,
         )
         response.raise_for_status()
@@ -37,6 +78,10 @@ class UpbitBroker:
         return result
 
     def submit(self, side, ticker, value, identifier):
+        if side not in ('bid', 'ask'):
+            raise ValueError('Invalid order side')
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError('Order identifier is required')
         params = {'market': ticker, 'side': side, 'identifier': identifier}
         params.update({'ord_type': 'price', 'price': str(value)} if side == 'bid'
                       else {'ord_type': 'market', 'volume': str(value)})
