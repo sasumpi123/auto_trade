@@ -1,0 +1,37 @@
+# INERT DESIGN TEMPLATE. Outside workflows/; never executed by this PR.
+# Do not activate by just changing an if flag. See docs/DEVELOPMENT_AUTOMATION.md.
+name: Proposed isolated Codex worker
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  codex:
+    if: ${{ false }} # Requires reviewed broker, atomic ledger, metered budget and independent reviewer.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: codex-build
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: master
+          persist-credentials: false
+      - name: Require an explicitly reviewed CLI pin
+        env:
+          APPROVED_CLI_VERSION: ${{ vars.CODEX_CLI_VERSION }}
+          APPROVED_MODEL: ${{ vars.CODEX_MODEL }}
+        run: |
+          [[ "$APPROVED_CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          [[ "$APPROVED_MODEL" =~ ^[a-zA-Z0-9._-]+$ ]] || exit 1
+      # Last step: no credentialed publish/test/merge step in this worker job.
+      - name: Isolated implementation example, not an independent review
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # verified v1 commit
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: ${{ vars.CODEX_CLI_VERSION }}
+          model: ${{ vars.CODEX_MODEL }}
+          permission-profile: ':workspace'
+          safety-strategy: drop-sudo
+          allow-bots: false
+          prompt-file: .github/automation/worker-prompt.md
+          output-file: /tmp/auto-trade-codex-summary.txt

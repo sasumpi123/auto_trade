@@ -162,3 +162,7 @@ BTC·ETH·XRP·SOL KRW의 15분/1시간봉 공개 OHLCV 수집과 고정 비용 
 python -m backtesting.historical collect --data runtime/new-snapshot
 python -m backtesting.historical evaluate --data research/2026-10-21/data --output runtime/reproduced
 ```
+
+## 개발 자동화 제안
+
+승인 이슈 → 격리 구현 → 독립 ChatGPT 검토 → 보호된 병합의 [아키텍처·권한·비용·보안·설정 경계](docs/DEVELOPMENT_AUTOMATION.md)를 참고하세요. 현재는 비밀 없는 읽기 전용 이벤트 관찰과 오프라인 정책 테스트만 구현했습니다. 유료 모델 작업자·수정 push·자동 병합은 연결/활성화하지 않았습니다. 키/권한 변경은 사용자 설정과 별도 검토가 필요합니다.
