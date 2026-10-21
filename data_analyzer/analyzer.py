@@ -6,16 +6,6 @@ import traceback
 import time
 from utils.decorators import send_error_alert
 
-# 로그 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("trading_bot.log"),  # 로그를 파일에 기록
-        logging.StreamHandler()  # 로그를 콘솔에 출력
-    ]
-)
-
 class DataAnalyzer:
     def __init__(self, ticker):
         self.ticker = ticker
@@ -35,8 +25,7 @@ class DataAnalyzer:
             logging.info(f"데이터 조회 결과: {type(df)}")
             
             if df is None or df.empty:
-                logging.error("데이터 조회 실패")
-                return
+                raise ValueError('Candle fetch failed; stale data must not be traded')
                 
             logging.info("데이터 형변환 시작")
             df = df.astype({
@@ -120,6 +109,11 @@ class DataAnalyzer:
     def analyze(self, index=-1):
         """매매 신호 분석"""
         try:
+            if self.df.empty or len(self.df) < 20:
+                raise ValueError('Insufficient candles for analysis')
+            columns = ['close', 'volume', 'rsi', 'macd', 'macd_signal', 'bb_upper', 'bb_lower', 'bb_middle']
+            if not np.isfinite(self.df[columns].iloc[-2:].to_numpy(dtype=float)).all():
+                raise ValueError('Non-finite market data or indicators')
             # 거래량 확인
             volume = self.df['volume'].iloc[index]
             avg_volume = self.df['volume'].rolling(window=20).mean().iloc[index]
@@ -280,16 +274,7 @@ class DataAnalyzer:
             
         except Exception as e:
             logging.error(f"분석 중 오류 발생: {str(e)}")
-            return {
-                'action': 'HOLD',
-                'reason': None,
-                'target_price': None,
-                'strategy_status': {
-                    'RSI': 'N/A',
-                    'MACD': 'N/A',
-                    'BB': 'N/A'
-                }
-            }
+            raise
 
     def get_strategy_status(self, index=-1):
         """현재 전략 상태 반환"""

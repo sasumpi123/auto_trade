@@ -5,3 +5,5 @@ python-dotenv
 requests
 slack-sdk
 tqdm
+PyJWT>=2
+websockets>=17.3,<18

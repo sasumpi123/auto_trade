@@ -21,6 +21,7 @@ wheels/
 *.egg
 
 # Virtual Environment
+.venv/
 venv/
 env/
 ENV/
@@ -34,7 +35,16 @@ myenv/
 .DS_Store
 
 # Project specific
+runtime/
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
 *.log
 backtest_result_*.log
 backtest_results_*.csv

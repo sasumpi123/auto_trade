@@ -11,6 +11,8 @@ class NotificationService:
     def send_message(self, channel_type, message):
         """슬랙 메시지 전송"""
         try:
+            if not SLACK_APP_TOKEN:
+                return False
             if channel_type not in SLACK_CHANNELS:
                 logging.error(f"알 수 없는 채널 타입: {channel_type}")
                 return False
@@ -74,3 +76,4 @@ class NotificationService:
             f"MACD: {strategy_status.get('MACD', 'N/A')}\n"
             f"BB: {strategy_status.get('BB', 'N/A')}"
         )
+
