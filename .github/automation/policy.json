@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "repository": "sasumpi123/auto_trade",
+  "base_branch": "master",
+  "approved_label": "autodev:approved",
+  "maintainer_ids": [45135977],
+  "builder_ids": [],
+  "independent_reviewer_ids": [],
+  "max_attempts_per_issue": 3,
+  "max_consecutive_failures": 2,
+  "max_reserved_cents_per_attempt": 500,
+  "max_reserved_cents_per_issue": 1500,
+  "max_reserved_cents_per_day": 5000,
+  "max_changed_files": 20,
+  "required_checks": ["Python 3.12 (ubuntu-latest)", "Python 3.12 (macos-latest)", "Python 3.12 (windows-latest)", "Python 3.12 safety gate"],
+  "trusted_ci_workflow": ".github/workflows/tests.yml",
+  "allowed_prefixes": ["tests/", "docs/", "backtesting/", "data_analyzer/", "utils/"],
+  "protected_prefixes": [".github/", "automation/", "tools/", "AGENTS.md", "config.py", "main.py", "trading/", "services/", ".env", "requirement.txt", "research/", "strategies/"]
+}

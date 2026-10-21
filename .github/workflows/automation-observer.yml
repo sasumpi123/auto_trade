@@ -1,0 +1,39 @@
+name: Development automation observer (read only)
+on:
+  issues:
+    types: [labeled, edited, reopened]
+  issue_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted, dismissed]
+  pull_request:
+    types: [synchronize, closed]
+  workflow_run:
+    workflows: [Python safety tests]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: automation-observer-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' || github.event.sender.id == 45135977 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Observe metadata without bodies, secrets, model calls or writes
+        run: |
+          if [ -f tools/automation_plan.py ]; then
+            python tools/automation_plan.py
+          else
+            echo "Observer is not on the trusted master yet; no execution."
+          fi
