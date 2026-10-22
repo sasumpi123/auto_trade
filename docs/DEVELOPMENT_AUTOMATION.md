@@ -59,3 +59,7 @@ Mac sleep/offline/프로세스 중단 후 원장·lease·현재 GitHub 상태·�
 MergeReader의 실제 REST/고정 GraphQL query 결과는 읽기 전용 READ_ONLY_VERIFIED이며 실행/예약/게시 권한이 아닙니다. MERGE_ELIGIBLE은 exact Fake 서비스와 P3 patch/receipt/명세/head가 일치할 때만 생성되는 15초 모의 후보입니다. 최종 재조회·Fake 서버 CAS·intent/receipt를 기록하고 중단/응답 유실은 HALTED로 격리합니다. 자동 재전송·재부팅 후 자동 재개는 없습니다.
 
 PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 보류를 Fake HTTP로 재현했습니다. 과거 generic 로그만으로 실제 최초 실패를 확정할 수 없어 권한/스키마 원인은 미확인으로 남깁니다. 새 고정 진단 코드는 PENDING/exit 2를 유지하며 master 병합 후에만 trusted observer에 반영됩니다. 상세 조사·한계·P5 설정은 P4 문서를 참조하세요.
+
+## P5 로컬 통합 준비
+
+[P5_LOCAL_INTEGRATION.md](P5_LOCAL_INTEGRATION.md)에 읽기 전용 Mac Preflight, GET 전용 GitHub 진단, 기존 Fake-only 원장 Controller 검사, 파일 내구 checkpoint와 복구 한계, 타이머 없는 disabled launchd 예제, 사용자 설정 순서를 정리했습니다. 실제 모델·자동 게시·병합·실거래는 비활성입니다. Plus 로그인만으로 구매 크레딧 미사용을 증명하지 않으며 신뢰할 수 있는 포함량 전용 제어가 없으면 HALTED, 독립 리뷰 미지원이면 WAIT_REVIEW입니다. MacBook/Plus 계정 실측은 수행하지 않았습니다.
