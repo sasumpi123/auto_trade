@@ -10,6 +10,7 @@ import threading
 from typing import Protocol
 from uuid import uuid4
 
+from .local_checkpoint import LocalCheckpoint
 from .events import canonical
 from .store import validate_policy
 from .worker_contracts import fingerprint, require, uid, WorkerBlocked
@@ -122,13 +123,13 @@ class SQLiteTaskStore:
     def __init__(self, path, policy, *, witness):
         self.path = Path(path).absolute()
         require(not self.path.is_symlink() and self.path.is_file(), 'existing_task_store_required')
-        require(type(witness) is FakeWitness, 'dry_run_witness_required')
+        require(type(witness) in (FakeWitness, LocalCheckpoint), 'dry_run_witness_required')
         self.policy, self.witness = copy.deepcopy(policy), witness
         self.read()
 
     @classmethod
     def create(cls, path, policy, *, witness):
-        require(type(witness) is FakeWitness and witness.value is None, 'new_witness_required')
+        require(type(witness) in (FakeWitness, LocalCheckpoint) and witness.value is None, 'new_witness_required')
         state = initial(policy)
         descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(descriptor)
