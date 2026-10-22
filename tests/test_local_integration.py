@@ -148,6 +148,23 @@ class DurablePreparation(unittest.TestCase):
         self.assertFalse(result['execution_enabled'])
         self.assertEqual(result['status'], 'PENDING')
 
+    @unittest.skipUnless(os.name == 'posix', 'macOS /var alias')
+    def test_system_parent_alias_does_not_reject_private_real_directory(self):
+        private = self.directory / 'nested'
+        private.mkdir(mode=0o700)
+        (private / self.checkpoint.name).write_bytes(self.checkpoint.read_bytes())
+        (private / self.checkpoint.name).chmod(0o600)
+        alias = self.directory / 'alias'
+        alias.symlink_to(self.directory, target_is_directory=True)
+        witness = LocalCheckpoint(alias / 'nested' / self.checkpoint.name)
+        witness.verify(self.store.read())
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX symlink')
+    def test_checkpoint_file_symlink_still_rejected(self):
+        alias = self.directory / 'alias.json'
+        alias.symlink_to(self.checkpoint)
+        with self.assertRaises(WorkerBlocked): LocalCheckpoint(alias)
+
     @unittest.skipUnless(os.name == 'posix', 'POSIX permissions')
     def test_world_readable_checkpoint_rejected(self):
         self.checkpoint.chmod(0o644)

@@ -21,7 +21,6 @@ class LocalCheckpoint:
 
     @staticmethod
     def _secure(path, directory=False):
-        require(path.absolute() == path.resolve(), 'checkpoint_symlink_path')
         info = path.lstat()
         require(not stat.S_ISLNK(info.st_mode), 'checkpoint_symlink')
         require(stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode), 'checkpoint_type')

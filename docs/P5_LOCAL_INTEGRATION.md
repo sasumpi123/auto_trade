@@ -31,7 +31,7 @@ python3.12 -m automation.local_preflight --dry-run --database "$HOME/Library/App
 
 공식 인증 참조: [Codex auth](https://developers.openai.com/codex/auth/), [Plus Codex](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan), [pricing](https://developers.openai.com/codex/pricing/), [config](https://developers.openai.com/codex/config-reference/). P3 예제는 `forced_login_method="chatgpt"`입니다. 사용자는 설치된 버전의 공식 문서와 `codex login --help`를 확인한 후 직접 ChatGPT 로그인을 진행해야 합니다. 이번 작업에서는 로그인/모델 시험을 하지 않았습니다.
 
-**공식 문서와 실제 계정 검증을 구분합니다.** 기존 P3/P4가 공식 ChatGPT 인증 경로를 참조하지만, 이번 환경은 공식 문서 HTTPS 조회가 네트워크에서 거부되어 최신 문서 본문을 재검증하지 못했습니다. 위 링크는 확인할 공식 출처이며 이번에 읽었다는 주장이 아닙니다. ChatGPT Plus 로그인만으로 포함량 전용 실행을 증명하지 않습니다.
+**공식 문서와 실제 계정 검증을 구분합니다.** 2026-10-22 공식 auth/pricing 본문을 조회했습니다. auth는 `codex login`의 브라우저 ChatGPT 인증, `codex login status`, `forced_login_method="chatgpt"`를 명시합니다. pricing은 Plus의 CLI/웹/IDE 및 자동 코드 리뷰 통합 포함과 추가 ChatGPT 크레딧 확장을 명시하며 Work와 Codex가 usage/credits/limits를 공유한다고 설명합니다. 이는 포함량 전용 실행이나 구매 크레딧 미사용 증명이 아닙니다. help 문서는 이번에 HTTP 오류로 본문 미확인입니다. 문서의 인증 캐시 복사/API 인증 대안은 이 프로젝트에서 금지하므로 따르지 않습니다.
 
 `SubscriptionContract`는 chatgpt/plus, 인증 유효, 최신 포함 quota, 구매 크레딧 비사용, 0원 증명을 각각 요구합니다. API 키/대체 endpoint 이름은 값 없이 감지하여 차단합니다. 테스트의 `SubscriptionEvidence` boolean은 **Fake fixture**일 뿐 공식 계정 증빙 어댑터가 아닙니다. 사람이 true로 채운 JSON/로그인 성공/잔액 화면만으로 실제 모델 실행을 허가하지 않습니다. 실제 preflight는 항상 미검증 증거로 HALTED하며 execute는 항상 거부합니다.
 
@@ -72,40 +72,40 @@ launchctl bootout gui/$(id -u) /ABSOLUTE/REVIEWED/com.auto-trade.dry-run.plist
 
 ## 독립 ChatGPT 리뷰 연결 가능성
 
-공식 확인 대상: [ChatGPT Automations](https://learn.chatgpt.com/docs/automations), [GitHub 연결](https://help.openai.com/en/articles/11145903-connecting-github-to-chatgpt), GitHub [Reviews](https://docs.github.com/en/rest/pulls/reviews). 이번 네트워크에서는 최신 본문과 실제 Plus 계정 UI를 확인하지 못했습니다.
+공식 확인 대상: [ChatGPT Automations](https://learn.chatgpt.com/docs/automations), [GitHub 연결](https://help.openai.com/en/articles/11145903-connecting-github-to-chatgpt), GitHub [Reviews](https://docs.github.com/en/rest/pulls/reviews). 공식 Automations 본문을 조회했습니다. 지원 플랜의 웹/모바일 GitHub PR activity trigger, 앱 사전 연결/저장소 접근, Scheduled에서 실행 확인을 명시하며 desktop/CLI/IDE에서는 이벤트 trigger를 지원하지 않는다고 설명합니다. 실제 Plus 계정 UI, 표준 Review 게시, 별도 GitHub user.id 동작은 확인하지 못했습니다.
 
 | 항목 | 이번 확인 상태 | 차단 조건 |
 |---|---|---|
-| GitHub PR 생성 이벤트 → ChatGPT Work 작업 | 실제 Plus UI/제품 지원 미확인 | 작업 생성 안 함 |
-| Plus 기본 포함량 및 추가 크레딧 비사용 | 미확인 | 0원 증거 전 HALTED |
+| GitHub PR 생성 이벤트 → ChatGPT Work 작업 | 공식 문서상 eligible plan 웹/모바일 지원; 실제 Plus UI 미확인 | 작업 생성 안 함 |
+| Plus 기본 포함량 및 추가 크레딧 비사용 | 공식 pricing상 포함/추가 크레딧 확장; 포함량 전용 강제 미확인 | 0원 증거 전 HALTED |
 | PR diff + 최신 head SHA 읽기 | P4 공식 GitHub API fixture 검증; ChatGPT 연결은 미확인 | 오래된/누락 head 거부 |
 | 표준 APPROVED/CHANGES_REQUESTED 게시 | 실제 Work 기능 미확인 | 댓글을 Review로 승격하지 않음 |
 | 별도 GitHub user.id로 독립성 | 실제 계정/역할 미설정 | builder와 같거나 unknown이면 차단 |
 | 로컬 Controller의 리뷰 결과 조회 | P4 REST read-only 검증 계약 존재; 실환경 권한 미확인 | PENDING/WAIT_REVIEW |
 
-사용자 설정 순서: ChatGPT 설정의 Apps/연결 기능에서 공식 GitHub 연결 제공 여부와 대상 저장소 scope를 확인 → Automations/Work UI가 실제 계정에 존재하는지 확인 → 문서에 명시된 PR 이벤트 trigger/action 지원과 포함 사용량 정책 확인 → 표준 Review 게시와 별도 GitHub ID 지원을 확인합니다. UI 명칭/지원이 없으면 그 지점에서 중단합니다. 확인 전 작업 생성이나 권한 승인하지 않습니다. 정확한 현재 UI를 보지 못했으므로 존재하지 않는 버튼 경로를 지어내지 않습니다. 지원된다면 사용자만 최소 scope로 연결/이벤트 작업 생성/권한 승인을 수행합니다. 비공식 API, 브라우저 자동화, 세션 스크래핑, 유료 API는 대안으로 사용하지 않습니다. 미지원이면 WAIT_REVIEW와 사람의 독립 표준 리뷰 절차를 유지하며 Codex가 대리 승인하지 않습니다.
+사용자 설정 순서: ChatGPT 설정의 Apps/연결 기능에서 공식 GitHub 연결 제공 여부와 대상 저장소 scope를 확인 → Automations/Work UI가 실제 계정에 존재하는지 확인 → 문서에 명시된 PR 이벤트 trigger/action 지원과 포함 사용량 정책 확인 → 표준 Review 게시와 별도 GitHub ID 지원을 확인합니다. UI 명칭/지원이 없으면 그 지점에서 중단합니다. 확인 전 작업 생성이나 권한 승인하지 않습니다. 공식 안내에 따라 연결을 승인한 뒤 웹/모바일 ChatGPT에 PR 이벤트와 수행할 작업을 설명해 작업 생성을 요청하고 Scheduled에서 검토하는 흐름입니다. 이번에는 생성하지 않습니다. 개별 계정의 버튼/권한 UI는 직접 확인해야 합니다. 지원된다면 사용자만 최소 scope로 연결/이벤트 작업 생성/권한 승인을 수행합니다. 비공식 API, 브라우저 자동화, 세션 스크래핑, 유료 API는 대안으로 사용하지 않습니다. 미지원이면 WAIT_REVIEW와 사람의 독립 표준 리뷰 절차를 유지하며 Codex가 대리 승인하지 않습니다.
 
 ## GitHub 실환경 점검
 
-2026-10-22: 기존 HTTPS Git 인증으로 `git ls-remote origin HEAD` 성공, master=8754f614c83b849bf16f800b941fcab9deaf7296 (PR #13). 그러나 gh API repository/master/actions-permissions 호출은 프록시 CONNECT 403으로 실패했습니다. **현재 branch protection/App/권한/독립 계정이 재확인됐다고 주장하지 않습니다.** 사용자 보고 및 P4 관측의 master 보호 비활성을 해제할 새 증거가 없으므로 실제 merge 허가는 항상 false입니다.
+2026-10-22: 기존 HTTPS Git 인증으로 `git ls-remote origin HEAD` 성공, master=8754f614c83b849bf16f800b941fcab9deaf7296 (PR #13). 최초 API 조회는 프록시 CONNECT 403으로 실패했으나 이후 접근 가능해져 재조회했습니다. repository는 private=false/visibility=public, master는 protected=false/protection.enabled=false/required checks·contexts 빈 목록, `/rules/branches/master`는 []입니다. 따라서 실제 merge 허가는 항상 false입니다. 상세 protection과 Actions 기본 workflow 권한은 integration 권한 403, repository installation은 401로 미확인입니다. 응답의 repository admin=true만으로 endpoint 전체 접근이나 App 역할 분리를 추론하지 않습니다. 권한을 확대하지 않았습니다.
 
 `local_github_diagnostics`는 고정 GET 6종만 수행합니다. 접근 실패는 API_ACCESS_UNVERIFIED이며 Issue 계약 누락과 구분합니다. 성공은 좁은 응답 조회일 뿐 보호 정책 전체 검증/설치 App 전체 목록/실제 token scope 증명이 아닙니다. `/installation`은 repository에 접근 가능한 설치 정보이며 모든 App/개별 권한 열거가 아닙니다. threads/CODEOWNERS/독립 ID/과금은 PENDING으로 남깁니다. 상세 검증은 P4의 정확한 TaskReference/head 기반 reader를 사용하며 권한 부족을 성공 처리하지 않습니다.
 
-저장소 workflow는 표준 ubuntu-latest/macos-latest/windows-latest Python 3.12이며 Safety gate가 세 플랫폼 성공을 요구합니다. 공개 저장소 표준 hosted runner 무료 조건은 [GitHub 공식 billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)을 사용자가 현재 플랜/정책과 대조해야 합니다. public 여부의 실 API 응답, larger/self-hosted 유료 인프라 사용 여부, 계정 billing까지 이번에 검증하지 못했습니다. 새 runner/서버/DB/artifact 저장 과금 경로를 추가하지 않았습니다.
+저장소 workflow는 표준 ubuntu-latest/macos-latest/windows-latest Python 3.12이며 Safety gate가 세 플랫폼 성공을 요구합니다. 공개 저장소 표준 hosted runner 무료 조건은 [GitHub 공식 billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)을 사용자가 현재 플랜/정책과 대조해야 합니다. 공개 여부는 API로 확인했고 workflow는 표준 hosted runner만 사용합니다. 계정 billing/외부 인프라 비용까지 검증한 것은 아닙니다. 새 runner/서버/DB/artifact 저장 과금 경로를 추가하지 않았습니다.
 
 사용자만 master 보호/ruleset에 P4의 정확한 필수 CI, strict 최신 브랜치, 독립 리뷰, stale 승인 폐기/last-push 승인, thread resolution, admins 포함 적용, force/delete 금지와 bypass 제한을 검토/설정해야 합니다. CODEOWNERS 요구 시 실제 owner 권한/승인을 검증합니다. 현재 builder/reviewer 목록을 임의 채우지 않습니다. base/head 경합의 서버 원자성도 P4 Fake를 실제 보증으로 대체하지 않습니다.
 
-P2의 일반 PR은 `/autodev issue N spec SHA256` 승인 Issue 계약이 없으면 ISSUE_CONTRACT_MISSING으로 정상 보류합니다. 실제 API 오류/인증 만료/권한 부족/스키마 오류는 별도 진단이며 계약 누락으로 단정하지 않습니다. 이번 API 실패 때문에 실제 observer run 최초 실패 원인을 추가로 확정하지 못했습니다. Python CI 성공과 observer PENDING은 서로 다른 결과입니다.
+P2의 일반 PR은 `/autodev issue N spec SHA256` 승인 Issue 계약이 없으면 ISSUE_CONTRACT_MISSING으로 정상 보류합니다. 실제 API 오류/인증 만료/권한 부족/스키마 오류는 별도 진단이며 계약 누락으로 단정하지 않습니다. 이번 PR observer의 실패 원인은 로그 접근/고정 진단 확인 전까지 확정하지 않습니다. Python CI 성공과 observer PENDING은 서로 다른 결과입니다.
 
 ## 테스트와 남은 승인
 
-기존 413개를 유지하고 P5 27개를 추가했습니다. Fake 정상 후보/수정 후 새 head, quota/크레딧/0원 증빙/인증 실패, 리뷰 미지원, 보호 없음/승인 취소, sleep lease 만료, 중복 claim, publish 응답 유실, 내구 재시작/손상/롤백/commit gap, 비활성 launchd/안전 진단을 검사합니다. 기존 P1~P4가 동시 CAS·중단 intent·실제 자식 프로세스 종료·Review/CI 경합을 함께 검사합니다. Mac 전원 손실/실제 OS 동작, 실제 Plus UI, 실제 무료 model E2E를 Fake 테스트 성공으로 대체하지 않습니다.
+기존 413개를 유지하고 P5 29개를 추가했습니다. Fake 정상 후보/수정 후 새 head, quota/크레딧/0원 증빙/인증 실패, 리뷰 미지원, 보호 없음/승인 취소, sleep lease 만료, 중복 claim, publish 응답 유실, 내구 재시작/손상/롤백/commit gap, 비활성 launchd/안전 진단을 검사합니다. 기존 P1~P4가 동시 CAS·중단 intent·실제 자식 프로세스 종료·Review/CI 경합을 함께 검사합니다. Mac 전원 손실/실제 OS 동작, 실제 Plus UI, 실제 무료 model E2E를 Fake 테스트 성공으로 대체하지 않습니다.
 
 | 결과 구분 | 상태 |
 |---|---|
 | 구현 및 테스트 | Linux Python 3.12 전체 결과는 PR에 기록. 타 OS CI는 동일 head 실제 결과 확인 필요 |
 | 실제 MacBook 검증 | 없음. 사용자 실행 및 결과 검토 필요 |
 | 사용자 설정 필요 | 도구/공식 로그인, private 로컬 저장소/로그, GitHub 최소 권한/보호/독립 리뷰어, UI 기능 지원 확인 |
-| 무료/기능 미확인 차단 | 포함량 전용 강제, 구매 크레딧 비사용, Work 표준 독립 리뷰, 강한 anti-rollback, GitHub 실 API 보호 증거 |
+| 무료/기능 미확인 차단 | 포함량 전용 강제, 구매 크레딧 비사용, Work 표준 독립 리뷰, 강한 anti-rollback, GitHub 보호 미설정 및 상세 권한 부족 |
 
 이 항목들을 충족해도 이번 PR은 활성화 권한을 반환하지 않습니다. 실제 실행은 별도 사용자 승인과 후속 구현/검증이 필요합니다.
