@@ -1,7 +1,7 @@
 """P7 metadata handoffs use existing Fake HTTP world; network/model writes forbidden."""
 import copy
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import closing, redirect_stdout, redirect_stderr
 from io import StringIO
 import json
 import os
@@ -238,7 +238,7 @@ class ReworkAndManualTests(HandoffFixture):
         self.assertEqual(result['workflow_state'],'WAIT_CODEX_REWORK')
         self.assertIn(packet['head'],result['rework_request'])
         self.assertIn('untrusted_findings',result['rework_request'])
-        with sqlite3.connect(self.journal_path) as db:
+        with closing(sqlite3.connect(self.journal_path)) as db:
             self.assertNotIn('Clarify behavior',db.execute('SELECT data FROM state').fetchone()[0])
 
     def test_new_commit_invalidates_prior_review_and_allows_one_fresh_request(self):
