@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-10-22T04:40:00.673435+00:00",
+  "mode": "read-only",
+  "automation_status": "DISABLED",
+  "activation_authorized": false,
+  "actual_model_calls": 0,
+  "execution_enabled": false,
+  "publish_enabled": false,
+  "merge_enabled": false,
+  "checks": [
+    {
+      "check": "repository",
+      "status": "READY",
+      "reason": "PUBLIC_REPOSITORY_ID_VERIFIED",
+      "repository_id": 888367411
+    },
+    {
+      "check": "master",
+      "status": "READY",
+      "reason": "MASTER_SHA_OBSERVED",
+      "sha": "c106207eb1152c97c8169b4a96f3b8f2c70f66d1"
+    },
+    {
+      "check": "branch_protection",
+      "status": "BLOCKED",
+      "reason": "PROTECTION_NOT_ENABLED_OR_UNVERIFIED"
+    },
+    {
+      "check": "branch_rules",
+      "status": "USER_ACTION_REQUIRED",
+      "reason": "NO_ACTIVE_RULES",
+      "count": 0
+    },
+    {
+      "check": "protection_endpoint",
+      "status": "PENDING",
+      "reason": "HTTP_403_PERMISSION_OR_RATE_LIMIT"
+    },
+    {
+      "check": "actions_permissions",
+      "status": "PENDING",
+      "reason": "HTTP_403_PERMISSION_OR_RATE_LIMIT"
+    },
+    {
+      "check": "repository_installation",
+      "status": "PENDING",
+      "reason": "HTTP_401_AUTH_UNVERIFIED"
+    },
+    {
+      "check": "standard_independent_review",
+      "status": "PENDING",
+      "reason": "WAIT_REVIEW",
+      "approved_user_ids": [],
+      "feedback_review_ids": []
+    },
+    {
+      "check": "observed_review_identity",
+      "status": "BLOCKED",
+      "reason": "ONLY_PR_AUTHOR_OBSERVED",
+      "author_id": 45135977,
+      "reviewer_ids": [
+        45135977
+      ]
+    },
+    {
+      "check": "pr",
+      "status": "READY",
+      "reason": "PR_IDENTITY_OBSERVED",
+      "number": 14,
+      "head": "881aed0d37e38e789a051168246d3516c3ca5474",
+      "author_id": 45135977
+    },
+    {
+      "check": "observer",
+      "status": "PENDING",
+      "reason": "ISSUE_CONTRACT_MISSING"
+    },
+    {
+      "check": "required_ci",
+      "status": "PENDING",
+      "reason": "CI_RUN_PR_HEAD_WORKFLOW_BINDING_UNVERIFIED"
+    },
+    {
+      "check": "review_threads",
+      "status": "READY",
+      "reason": "THREADS_READ_COMPLETE",
+      "count": 0
+    },
+    {
+      "check": "observer_run_relation",
+      "status": "PENDING",
+      "reason": "RUN_PR_RELATION_UNVERIFIED",
+      "ci_run_id": 39712609870,
+      "pr_reference_count": 0
+    },
+    {
+      "check": "codeowners",
+      "status": "USER_ACTION_REQUIRED",
+      "reason": "CODEOWNERS_ABSENT_AT_BASE_SHA",
+      "base": "c106207eb1152c97c8169b4a96f3b8f2c70f66d1"
+    },
+    {
+      "check": "observation_consistency",
+      "status": "READY",
+      "reason": "MASTER_STABLE_DURING_SAMPLE_NOT_ATOMIC"
+    },
+    {
+      "check": "included_quota",
+      "status": "PENDING",
+      "reason": "OFFICIAL_ACCOUNT_RATE_LIMITS_NOT_OBSERVED"
+    },
+    {
+      "check": "purchased_credit_consumption",
+      "status": "BLOCKED",
+      "reason": "NO_VERIFIED_INCLUDED_ONLY_ENFORCEMENT"
+    },
+    {
+      "check": "auto_recharge",
+      "status": "USER_ACTION_REQUIRED",
+      "reason": "ACCOUNT_BILLING_CONTROLS_NOT_OBSERVED"
+    },
+    {
+      "check": "paid_reset",
+      "status": "BLOCKED",
+      "reason": "RESET_OR_EXPANSION_NOT_PERMITTED"
+    },
+    {
+      "check": "chatgpt_event_task",
+      "status": "PENDING",
+      "reason": "OFFICIAL_ELIGIBLE_PLAN_SUPPORT_ACCOUNT_UNVERIFIED"
+    },
+    {
+      "check": "chatgpt_review_writer",
+      "status": "PENDING",
+      "reason": "WORK_STANDARD_REVIEW_AND_DISTINCT_ID_UNVERIFIED"
+    },
+    {
+      "check": "macbook",
+      "status": "PENDING",
+      "reason": "NOT_CONNECTED_NOT_REQUIRED_FOR_CLOUD_INSPECTION"
+    },
+    {
+      "check": "cloud_durable_controller",
+      "status": "BLOCKED",
+      "reason": "NO_VERIFIED_ZERO_COST_PERSISTENT_TRIGGER_AND_TRUSTED_CHECKPOINT"
+    },
+    {
+      "check": "activation_approval",
+      "status": "USER_ACTION_REQUIRED",
+      "reason": "SEPARATE_ACTIVATION_APPROVAL_REQUIRED"
+    }
+  ]
+}

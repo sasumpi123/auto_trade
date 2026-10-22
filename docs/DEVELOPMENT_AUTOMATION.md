@@ -63,3 +63,7 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 ## P5 로컬 통합 준비
 
 [P5_LOCAL_INTEGRATION.md](P5_LOCAL_INTEGRATION.md)에 읽기 전용 Mac Preflight, GET 전용 GitHub 진단, 기존 Fake-only 원장 Controller 검사, 파일 내구 checkpoint와 복구 한계, 타이머 없는 disabled launchd 예제, 사용자 설정 순서를 정리했습니다. 실제 모델·자동 게시·병합·실거래는 비활성입니다. Plus 로그인만으로 구매 크레딧 미사용을 증명하지 않으며 신뢰할 수 있는 포함량 전용 제어가 없으면 HALTED, 독립 리뷰 미지원이면 WAIT_REVIEW입니다. MacBook/Plus 계정 실측은 수행하지 않았습니다.
+
+## P6-A Cloud 준비 상태
+
+[P6_CLOUD_INTEGRATION_READINESS.md](P6_CLOUD_INTEGRATION_READINESS.md)와 `python -m automation.cloud_readiness --pr N`은 Mac 없이 가능한 공식 GitHub 읽기/비용·독립성 준비 상태를 보고합니다. 전체 DISABLED/exit 2를 유지합니다. PR #14에서 관측된 COMMENTED actor는 작성자와 같은 ID여서 별도 ChatGPT 대화의 검토를 GitHub 독립 승인으로 승격하지 않습니다. 공식 App Server quota 읽기 기능은 문서화돼 있지만 구매 크레딧 미소비 강제 증거가 아닙니다. 추천은 사용자가 시작하는 Cloud 개발과 수동 검토 단계이며 실제 자동 실행/게시/병합은 허가하지 않습니다.
