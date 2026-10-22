@@ -67,3 +67,7 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 ## P6-A Cloud 준비 상태
 
 [P6_CLOUD_INTEGRATION_READINESS.md](P6_CLOUD_INTEGRATION_READINESS.md)와 `python -m automation.cloud_readiness --pr N`은 Mac 없이 가능한 공식 GitHub 읽기/비용·독립성 준비 상태를 보고합니다. 전체 DISABLED/exit 2를 유지합니다. PR #14에서 관측된 COMMENTED actor는 작성자와 같은 ID여서 별도 ChatGPT 대화의 검토를 GitHub 독립 승인으로 승격하지 않습니다. 공식 App Server quota 읽기 기능은 문서화돼 있지만 구매 크레딧 미소비 강제 증거가 아닙니다. 추천은 사용자가 시작하는 Cloud 개발과 수동 검토 단계이며 실제 자동 실행/게시/병합은 허가하지 않습니다.
+
+## P7 사용자 주도 Cloud 리뷰 핸드오프
+
+[P7_CLOUD_REVIEW_WORKFLOW.md](P7_CLOUD_REVIEW_WORKFLOW.md)에 Android에서 복사해 쓸 리뷰 요청·재작업·수동 병합 전 점검 순서를 정리했습니다. `automation.review_handoff`, `automation.rework_handoff`, `automation.manual_merge_readiness`는 exact head/base와 최신 읽기 표본을 사용하며 모델·GitHub 쓰기를 호출하지 않습니다. 로컬 재작업 영수증은 중복 발급/PR당 최대 2회 요청을 관리하지만 P1/P3 실행 원장이나 trusted anti-rollback 증거가 아닙니다. 수동 검토 완료 UI와 P4 독립 GitHub 승인은 별개이며 자동 병합 상태는 항상 AUTOMATED_MERGE_BLOCKED입니다. Work 이벤트는 [별도 안내](P7_CHATGPT_WORK_SETUP.md)만 제공하고 생성하지 않습니다.
