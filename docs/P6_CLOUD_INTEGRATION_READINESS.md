@@ -195,4 +195,4 @@ python -m unittest discover -v
 python tools/check_safety.py
 ```
 
-기존 442개와 신규 32개를 유지합니다. 전체 474개, OS별 실제 CI run/head/결과는 이 개발 PR에 기록합니다. Linux/macOS/Windows hosted CI 성공은 실제 MacBook이나 실제 계정의 무료 모델 E2E 성공이 아닙니다. policy.enabled=false, zero-cost의 모든 실운영 허용 false, REAL_TRADING=False, live worker/push/PR/merge/launchd/거래/배포 OFF를 유지합니다. 부분 READY와 전체 자동화 허가를 혼동하지 않습니다.
+기존 442개와 신규 33개를 유지합니다. 전체 475개, OS별 실제 CI run/head/결과는 이 개발 PR에 기록합니다. Linux/macOS/Windows hosted CI 성공은 실제 MacBook이나 실제 계정의 무료 모델 E2E 성공이 아닙니다. policy.enabled=false, zero-cost의 모든 실운영 허용 false, REAL_TRADING=False, live worker/push/PR/merge/launchd/거래/배포 OFF를 유지합니다. 부분 READY와 전체 자동화 허가를 혼동하지 않습니다.

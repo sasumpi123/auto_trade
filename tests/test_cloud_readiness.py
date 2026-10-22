@@ -3,13 +3,15 @@ import copy
 from dataclasses import replace
 import json
 from pathlib import Path
+from contextlib import redirect_stderr
+from io import StringIO
 import subprocess
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
 from automation.cloud_readiness import (GhReadOnly, ReadinessInspector, cost_readiness,
-                                         review_readiness, REPOSITORY, STATES)
+                                         review_readiness, REPOSITORY, STATES, Parser)
 from automation.github_graphql import QUERIES
 from automation.github_read import VerificationPending
 from automation.worker_contracts import Feedback, WorkerBlocked
@@ -246,6 +248,12 @@ class GhTransportTests(unittest.TestCase):
             inspector=ReadinessInspector(policy,client)
             inspector._extra('access','/installation')
             self.assertEqual(inspector.rows[0]['reason'],reason)
+
+    def test_cli_argument_errors_do_not_echo_accidentally_pasted_credentials(self):
+        output=StringIO()
+        with redirect_stderr(output),self.assertRaises(SystemExit):
+            Parser().parse_args(['--token','private-canary'])
+        self.assertNotIn('private-canary',output.getvalue())
 
     def test_enabled_policy_rejected(self):
         with self.assertRaises(ValueError):ReadinessInspector({'enabled':True})

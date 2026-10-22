@@ -287,8 +287,14 @@ class ReadinessInspector:
                               'OWNER_RULES_AND_PERMISSIONS_REQUIRE_P4_VALIDATION' if present else 'CODEOWNERS_ABSENT_AT_BASE_SHA',base=base))
 
 
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        # Never echo unknown arguments; they might contain accidentally pasted secrets.
+        self.exit(2, "Invalid readiness arguments; no inspection performed.\n")
+
+
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = Parser(description=__doc__)
     parser.add_argument('--pr', type=int, required=True)
     parser.add_argument('--observer-ci-run', type=int)
     args = parser.parse_args()
