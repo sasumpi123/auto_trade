@@ -91,6 +91,9 @@ class SQLiteLedger:
         self.policy_hash = hashlib.sha256(canonical(self.policy).encode()).hexdigest()
         self.clock = clock
         with self._connection() as connection:
+            # Keep schema, projection, attempts and budgets in one read snapshot.
+            # Another WAL writer may commit while an opener validates the ledger.
+            connection.execute('BEGIN')
             self._validate(connection, full=True)
 
     @classmethod
