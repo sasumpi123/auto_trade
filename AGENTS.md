@@ -65,3 +65,11 @@
 - 공식 ChatGPT 로그인만 향후 검토하며 auth.json/Keychain/토큰을 추출·복사·공유하거나 API 인증으로 fallback하지 않습니다.
 - P3 Fake-only task store와 broker는 P1/P2 제약을 우회하지 않습니다. 무인 활성화는 P4 검증 및 별도 사용자 승인 전 금지입니다.
 - Mac launchd 예제는 비활성입니다. 등록/계정 설정/GitHub 권한·Secrets 변경을 임의 수행하지 않습니다. 상세 경계는 `docs/P3_LOCAL_WORKER.md`를 따릅니다.
+
+## P4 독립 리뷰와 병합 검증
+
+- P2 REST/GraphQL 관측은 읽기 전용 증거이며 P3 실행 권한으로 변환하지 않습니다.
+- MERGE_ELIGIBLE은 exact Fake 서비스에서만 가능한 모의 후보입니다. 실제 merge는 항상 비활성입니다.
+- 불변 reviewer ID·정확한 head·최신 CI·threads·CODEOWNERS·보호 규칙·bypass 증거가 없으면 보류합니다. 권한 부족/미지원 규칙을 성공 처리하지 않습니다.
+- Plus 표준 Review 자동 게시와 0원/포함량이 실제 확인되지 않으면 WAIT_REVIEW/Fake-only를 유지합니다.
+- 중단된 intent/모호한 receipt는 HALTED이며 자동 재전송/자동 복구 실행을 금지합니다. 상세 제한과 P5 전제는 `docs/P4_REVIEW_MERGE_GATE.md`를 따릅니다.

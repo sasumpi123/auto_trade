@@ -60,6 +60,8 @@ class GitHubREST:
             r'/pulls/[1-9][0-9]*(?:/(?:files|reviews))?',
             r'/branches/[A-Za-z0-9_.-]+(?:/protection)?',
             r'/rules/branches/[A-Za-z0-9_.-]+',
+            r'/rulesets(?:/[1-9][0-9]*)?',
+            r'/collaborators/[A-Za-z0-9-]+/permission',
             r'/commits/[0-9a-f]{40}/check-runs',
             r'/actions/runs(?:/[1-9][0-9]*(?:/attempts/[1-9][0-9]*/jobs)?)?',
             r'/actions/workflows/[1-9][0-9]*',
@@ -114,7 +116,7 @@ class GitHubREST:
             if len(items) < 100:
                 if total is not None and total != len(result):
                     raise VerificationPending('incomplete_collection')
-                ids = [x[identity] for x in result]
+                ids = [x[identity] for x in result] if identity is not None else []
                 if len(ids) != len(set(ids)):
                     raise VerificationPending('duplicate_collection')
                 return result

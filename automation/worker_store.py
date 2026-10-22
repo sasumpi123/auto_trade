@@ -58,12 +58,21 @@ def validate(state, policy):
         require(len(tasks) == item['attempts'] <= 3 and sum(t['cents'] for t in tasks) == item['reserved'] <= 1500, 'issue_budget_integrity')
         require(sum(t['status'] in ACTIVE for t in tasks) <= 1 and item['failures'] >= 0, 'task_integrity')
     require(state['revision'] == len(state['audit']) and [a['revision'] for a in state['audit']] == list(range(1, state['revision'] + 1)), 'audit_integrity')
+    for task_id, row in state.get('merge', {}).items():
+        require(task_id in state['tasks'] and row['reference']['task'] == task_id
+                and row['head'] == state['tasks'][task_id]['head'] and row['base'] == state['tasks'][task_id]['base'], 'merge_task_integrity')
+        require(row['status'] in ('MERGE_ELIGIBLE', 'MERGE_INTENT', 'FAKE_MERGED', 'HALTED')
+                and type(row['expires']) is int and row['expires'] > 0, 'merge_state_integrity')
+        if row['status'] == 'FAKE_MERGED':
+            require(row['receipt'] is not None and row['receipt']['task'] == task_id
+                    and row['receipt']['head'] == row['head'] and row['receipt']['base'] == row['base'], 'merge_receipt_integrity')
 
 
 def mutate(state, policy, event, kind, metadata, apply):
     uid(event)
     require(kind in ('CLAIM', 'DISPATCH', 'OUTPUT', 'PREPARE', 'PUBLISHED', 'FAIL', 'HALT', 'RENEW',
-                     'REVIEW', 'CI', 'RECONCILE', 'APPROVAL_CHECK', 'RECEIPT'), 'invalid_audit_kind')
+                     'REVIEW', 'CI', 'RECONCILE', 'APPROVAL_CHECK', 'RECEIPT', 'MERGE_GATE', 'MERGE_INTENT',
+                     'FAKE_MERGED', 'MERGE_HALT', 'MERGE_RECEIPT', 'REVIEW_FEEDBACK'), 'invalid_audit_kind')
     digest = fingerprint([kind, metadata])
     old = state['events'].get(event)
     if old:
