@@ -37,7 +37,7 @@ class GhReadOnly:
         if self.requests > 120:
             raise VerificationPending('request_limit')
         try:
-            response = self.run(['gh', 'api', '--include', *arguments], input=payload,
+            response = self.run(['gh', 'api', '--hostname', 'github.com', '--include', *arguments], input=payload,
                                 capture_output=True, text=True, timeout=15, check=False)
             if len(response.stdout.encode()) > 2_000_000:
                 raise VerificationPending('invalid_response')

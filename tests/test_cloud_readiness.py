@@ -204,7 +204,7 @@ class GhTransportTests(unittest.TestCase):
         with patch('subprocess.run',return_value=self.response()) as run:
             client=GhReadOnly();client.rest('/repos/'+REPOSITORY)
         args,kwargs=run.call_args
-        self.assertEqual(args[0],['gh','api','--include','--method','GET','/repos/'+REPOSITORY])
+        self.assertEqual(args[0],['gh','api','--hostname','github.com','--include','--method','GET','/repos/'+REPOSITORY])
         self.assertNotIn('shell',kwargs)
 
     def test_forbidden_writes_and_other_repository(self):
