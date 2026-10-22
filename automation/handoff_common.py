@@ -16,7 +16,7 @@ from .review_gate import ReviewGate
 ROOT = Path(__file__).resolve().parents[1]
 SHA = re.compile(r'[0-9a-f]{40}')
 DIGEST = re.compile(r'[0-9a-f]{64}')
-SECRET = re.compile(r'(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|AKIA[A-Z0-9]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|https?://[^\s/@]+:[^\s/@]+@|(?:api[_ -]?key|token|password|secret|authorization|cookie)\s*[=:]\s*\S+)', re.I)
+SECRET = re.compile(r'(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{16,}|xapp-[A-Za-z0-9-]{16,}|AKIA[A-Z0-9]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|https?://[^\s/@]+:[^\s/@]+@|(?:[A-Za-z_][A-Za-z0-9_]*(?:key|token|password|secret)|api[_ -]?key|access[_ -]?key|secret[_ -]?key|key|token|password|secret|authorization|cookie)["\x27]?\s*[=:]\s*\S+)', re.I)
 WORKFLOW_STATES = {
     'DEVELOPMENT_COMPLETE':'PR이 있으면 인계 자료를 생성하세요. 이 도구는 PR을 게시하지 않습니다.',
     'PR_READY_FOR_REVIEW':'리뷰 요청문을 복사하여 별도의 ChatGPT 대화에 전달하세요.',

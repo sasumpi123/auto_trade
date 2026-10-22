@@ -151,7 +151,7 @@ python -m unittest discover -v
 python tools/check_safety.py
 ```
 
-기존 476개와 신규 63개를 함께 실행합니다. Fake HTTP/Mock으로 정상/실패/진행/skip, 표준·자기·오래된 리뷰, 새 head, 중복 요청/동시 발급, 승인 취소, 악성/비밀 본문, API 오류, closed PR, snapshot/영수증 손상·rollback·crash gap을 검증합니다. Linux/macOS/Windows Python 3.12 및 Safety gate의 실제 run/head/결과는 개발 PR에 기록합니다.
+기존 476개와 신규 64개를 함께 실행합니다. Fake HTTP/Mock으로 정상/실패/진행/skip, 표준·자기·오래된 리뷰, 새 head, 중복 요청/동시 발급, 승인 취소, 악성/비밀 본문, API 오류, closed PR, snapshot/영수증 손상·rollback·crash gap을 검증합니다. Linux/macOS/Windows Python 3.12 및 Safety gate의 실제 run/head/결과는 개발 PR에 기록합니다.
 
 P8에서는 다음을 해결해야 합니다. 이번에 정책을 완화하거나 지원을 가정하지 않습니다.
 

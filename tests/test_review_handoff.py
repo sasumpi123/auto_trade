@@ -442,6 +442,10 @@ class JournalAndInputTests(HandoffFixture):
         for text in ('token=private-canary','a'*501,'unsafe\ncommand'):
             with self.assertRaises(VerificationPending):safe_text(text)
 
+    def test_common_exchange_and_api_credential_assignments_are_rejected(self):
+        for text in ('UPBIT_SECRET_KEY=private-canary','ACC_KEY: private-canary','APP_TOKEN=private-canary','{"OPENAI_API_KEY":"private-canary"}'):
+            with self.subTest(text=text),self.assertRaises(VerificationPending):safe_text(text)
+
     def test_sensitive_filename_and_all_states_have_safe_next_steps(self):
         self.assertTrue(display_path('docs/token=private-canary.md').startswith('WITHHELD_PATH_'))
         self.assertEqual(len(WORKFLOW_STATES),10)
