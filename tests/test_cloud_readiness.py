@@ -257,3 +257,31 @@ class GhTransportTests(unittest.TestCase):
 
     def test_enabled_policy_rejected(self):
         with self.assertRaises(ValueError):ReadinessInspector({'enabled':True})
+
+
+class P1SnapshotRegressionTests(unittest.TestCase):
+    def test_open_ledger_validation_uses_one_snapshot_during_concurrent_commit(self):
+        # Deterministic reproduction of the existing concurrent-open/claim race.
+        from tests import test_p1_ledger as p1
+        from automation.store import SQLiteLedger
+        p1.P1LedgerTests.setUp(self)
+        p1.P1LedgerTests.prepare(self)
+        claim=p1.P1LedgerTests.event(self,'CLAIM',worker=str(uuid4()),expected_version=self.ledger.get(1)['version'],cents=500)
+        original=SQLiteLedger._validate
+        committed=[]
+        writer=self.ledger
+        class ConnectionProxy:
+            def __init__(self,connection):self.connection=connection
+            def execute(self,sql,*arguments):
+                if sql.startswith('SELECT * FROM attempts') and not committed:
+                    # The reader has fetched the old issue projection. WAL permits
+                    # another writer to commit without invalidating a read snapshot.
+                    committed.append(writer.submit(claim).outcome)
+                return self.connection.execute(sql,*arguments)
+        def guarded(reader,connection,*,full=False):
+            return original(reader,ConnectionProxy(connection) if full else connection,full=full)
+        with patch.object(SQLiteLedger,'_validate',guarded):
+            reopened=SQLiteLedger(self.path,p1.policy(),clock=self.clock)
+        self.assertEqual(committed,['APPLIED'])
+        self.assertEqual(reopened.get(1)['attempts'],1)
+        self.assertEqual(reopened.day_reserved('2026-01-01'),500)

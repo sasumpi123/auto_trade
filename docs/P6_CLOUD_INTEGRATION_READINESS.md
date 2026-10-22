@@ -195,4 +195,6 @@ python -m unittest discover -v
 python tools/check_safety.py
 ```
 
-기존 442개와 신규 33개를 유지합니다. 전체 475개, OS별 실제 CI run/head/결과는 이 개발 PR에 기록합니다. Linux/macOS/Windows hosted CI 성공은 실제 MacBook이나 실제 계정의 무료 모델 E2E 성공이 아닙니다. policy.enabled=false, zero-cost의 모든 실운영 허용 false, REAL_TRADING=False, live worker/push/PR/merge/launchd/거래/배포 OFF를 유지합니다. 부분 READY와 전체 자동화 허가를 혼동하지 않습니다.
+기존 442개와 신규 34개를 유지합니다. 전체 476개, OS별 실제 CI run/head/결과는 이 개발 PR에 기록합니다. Linux/macOS/Windows hosted CI 성공은 실제 MacBook이나 실제 계정의 무료 모델 E2E 성공이 아닙니다. policy.enabled=false, zero-cost의 모든 실운영 허용 false, REAL_TRADING=False, live worker/push/PR/merge/launchd/거래/배포 OFF를 유지합니다. 부분 READY와 전체 자동화 허가를 혼동하지 않습니다.
+
+추가 회귀 수정: 전체 suite 반복 중 기존 P1 동시 open/claim 검사가 Reservation projection mismatch로 실패했습니다. 초기 validation이 독립 SELECT들을 autocommit 상태로 실행하면 writer commit 전의 issue와 commit 후 attempts/budgets가 섞일 수 있었습니다. `SQLiteLedger.__init__`에서 읽기 BEGIN으로 validation 전체를 동일 snapshot에 묶었습니다. 읽기 중 다른 WAL writer의 commit을 결정적으로 끼워 넣는 신규 테스트는 수정 전 실패하고 수정 후 통과합니다. 예약/한도/무결성 검사는 완화하지 않으며 초기화나 write 기능을 추가하지 않습니다.
