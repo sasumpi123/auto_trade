@@ -194,3 +194,11 @@ python -m automation.local_runner --dry-run --database runtime/new-p3.sqlite3 --
 ```
 
 launchd 예제는 작성만 했고 설치/등록하지 않았습니다. 실제 구독 인증정보를 추출·복사하지 않습니다.
+
+## P4: 독립 리뷰·최종 모의 병합 게이트
+
+[표준 Review 인증, REST/GraphQL 최종 검증, Fake Merge와 P5 설정](docs/P4_REVIEW_MERGE_GATE.md)을 참고하세요. 실제 관측 결과는 읽기 전용이며 `MERGE_ELIGIBLE`은 Fake 후보만 의미합니다. 실제 CLI·자동 게시·병합은 비활성이고 독립 자동 리뷰가 없으면 WAIT_REVIEW로 유지합니다. 중단된 intent/응답 유실은 자동 재전송하지 않습니다.
+
+```bash
+python -m unittest tests.test_review_merge_gate -v
+```

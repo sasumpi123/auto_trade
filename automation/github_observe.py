@@ -12,6 +12,7 @@ from uuid import UUID
 from .events import canonical
 from .github_read import VerificationPending, positive
 from .github_verify import Snapshot
+from .observer_diagnostics import diagnostic
 
 ACTIONS = {
     'issues': {'opened', 'edited', 'labeled', 'unlabeled', 'reopened', 'closed'},
@@ -241,9 +242,9 @@ def observe(verifier, journal, delivery, hint):
             snapshot = verifier.verify(**{hint.target: hint.resource})
         outcome = journal.complete(seq, snapshot)
         return {'decision': outcome, 'reason': snapshot.reason if outcome != 'PENDING' else 'superseded_observation', 'execution_enabled': False}
-    except Exception:
+    except Exception as error:
         journal.complete(seq)
-        return {'decision': 'PENDING', 'reason': 'github_state_unverified', 'execution_enabled': False}
+        return {'decision': 'PENDING', 'reason': 'github_state_unverified', 'diagnostic': diagnostic(error), 'execution_enabled': False}
 
 
 def p1_reference(snapshot, ledger):

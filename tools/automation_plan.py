@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from automation.github_read import GitHubREST
 from automation.github_verify import GitHubVerifier
 from automation.github_observe import ObservationJournal, observe, route
+from automation.observer_diagnostics import diagnostic
 
 
 def main():
@@ -34,9 +35,10 @@ def main():
                          f"actions:{os.environ['GITHUB_RUN_ID']}:{os.environ['GITHUB_RUN_ATTEMPT']}", hint)
         print(json.dumps({**result, 'read_only': True, 'model_calls': 0}))
         return 2 if result['decision'] == 'PENDING' else 0
-    except Exception:
+    except Exception as error:
         # No exception string, traceback, payload, identifier or token.
-        print('{"decision":"PENDING","reason":"observation_unverified","execution_enabled":false,"read_only":true,"model_calls":0}')
+        print(json.dumps({'decision': 'PENDING', 'reason': 'observation_unverified', 'diagnostic': diagnostic(error),
+                          'execution_enabled': False, 'read_only': True, 'model_calls': 0}))
         return 2
 
 

@@ -13,7 +13,7 @@
 | P1 | [SQLite Fake-only 실행 원장](P1_LEDGER.md), 중복/예산/lease/복원 격리 | 실제 이벤트로 우회 연결 금지 |
 | P2 | [인증된 GitHub GET 관측](P2_GITHUB_READONLY.md), ID/hash/head/리뷰/CI provenance | 보호 규칙 권한, 실제 HTTP E2E, rulesets/threads |
 | P3 | [로컬 Worker·patch guard·Fake Publisher·CAS/SQLite](P3_LOCAL_WORKER.md), 0원 정책/launchd 예제 | 실제 Plus/M3/격리/포함량·추가 크레딧 차단 증명/내구 checkpoint |
-| P4 | 인터페이스/미구현 경계 문서화만 | 독립 ChatGPT 리뷰 연동, 실제 게시·최종 병합 안전성 및 별도 사용자 승인 |
+| P4 | [독립 Review Gate·REST/GraphQL 최종 검증·Fake Merge/리뷰 재작업](P4_REVIEW_MERGE_GATE.md) | 실제 Plus 표준 Review 게시/사용량/권한 확인, 내구 checkpoint, 서버 base race 검증 및 별도 사용자 승인 |
 
 ## 목표 운영 방식
 
@@ -39,7 +39,7 @@ Worker는 GitHub writer·Secrets·host 파일·주변 환경·네트워크를 �
 
 Mac sleep/offline/프로세스 중단 후 원장·lease·현재 GitHub 상태·독립 checkpoint를 먼저 대조합니다. 증빙 없이는 자동 resume하지 않습니다. P3 FakeWitness는 내구 anti-rollback 구현이 아니며 실제 프로세스/디스크 rollback 검증은 추가 작업입니다. 원장 삭제·복원·환급으로 한도를 초기화하지 않습니다. 공유 서비스를 필수로 두지 않으며 선택적 CoordinationStore/FakeSharedStore는 설계/경합 시험용입니다.
 
-## CI 및 P4 진입 체크리스트
+## CI 및 P5 진입 체크리스트
 
 기존 Python 3.12 Linux/macOS/Windows 전체 테스트와 safety gate를 유지합니다. 현재 공개 저장소의 standard runner는 [GitHub 공식 문서](https://docs.github.com/en/billing/concepts/product-billing/github-actions)의 무료 범위입니다. 캐시 업로드를 제거하고 artifact/유료 runner를 추가하지 않았습니다. 공개 여부/무료 조건이 바뀌면 중단해야 합니다. skipped/neutral/누락/다른 SHA/동명 위조 Check는 통과가 아닙니다.
 
@@ -49,7 +49,13 @@ Mac sleep/offline/프로세스 중단 후 원장·lease·현재 GitHub 상태·�
 - [ ] 로컬 내구 checkpoint·잠자기/프로세스 복구·P2 API 재조회 및 실제 outbox 부분 성공 조정
 - [ ] 사용자 Plus의 GitHub PR 이벤트/예약 Work 가용성과 정확한 commit_id의 독립 표준 리뷰 게시 확인. 미지원이면 대기 유지
 - [ ] 사용자만 별도 builder/reviewer 불변 ID와 최소 GitHub 게시 권한을 검토. 이번 PR은 빈 목록/기존 권한 유지
-- [ ] P4 rulesets/CODEOWNERS/review threads/최신 head-base/CI/우회 금지/최종 CAS 검증. 실제 merge API는 아직 없음
+- [ ] P4의 rulesets/CODEOWNERS/review threads/최신 head-base/CI 검증을 실제 계정의 읽기 권한으로 확인. Fake CAS는 실제 GitHub expected-base 원자성을 증명하지 않음. 실제 merge API 없음
 - [ ] 0원 및 독립 검증 통과 후에도 사용자 명시적 활성화 승인이 별도로 필요
 
 실제 업비트 주문, 실거래 모드, 운영 배포, 검증되지 않은 전략의 실거래 채택, 인증정보 출력, 검증 우회 병합은 계속 금지합니다. PR은 Codex가 직접 병합하지 않고 별도 ChatGPT가 리뷰합니다.
+
+## P4 최종 검증 경계
+
+MergeReader의 실제 REST/고정 GraphQL query 결과는 읽기 전용 READ_ONLY_VERIFIED이며 실행/예약/게시 권한이 아닙니다. MERGE_ELIGIBLE은 exact Fake 서비스와 P3 patch/receipt/명세/head가 일치할 때만 생성되는 15초 모의 후보입니다. 최종 재조회·Fake 서버 CAS·intent/receipt를 기록하고 중단/응답 유실은 HALTED로 격리합니다. 자동 재전송·재부팅 후 자동 재개는 없습니다.
+
+PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 보류를 Fake HTTP로 재현했습니다. 과거 generic 로그만으로 실제 최초 실패를 확정할 수 없어 권한/스키마 원인은 미확인으로 남깁니다. 새 고정 진단 코드는 PENDING/exit 2를 유지하며 master 병합 후에만 trusted observer에 반영됩니다. 상세 조사·한계·P5 설정은 P4 문서를 참조하세요.
