@@ -23,7 +23,16 @@ class PreflightTests(unittest.TestCase):
 
     def report(self,**kw):return inspect(state=self.state,outbox=self.outbox,**kw)
     def snapshot(self):
-        return {str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        result={}
+        for p in self.root.rglob('*'):
+            if not p.is_file():continue
+            if os.name=='nt' and p.suffix=='.lock':
+                # Windows byte locks also prohibit reads through another handle.
+                # Keep presence/identity/size/mtime checks; hash every actual state/DB.
+                info=p.stat();value=('locked-file-metadata',info.st_ino,info.st_size,info.st_mtime_ns)
+            else:value=p.read_bytes()
+            result[str(p.relative_to(self.root))]=value
+        return result
 
     def test_missing_runtime_is_pending_and_not_created(self):
         before=self.snapshot()
