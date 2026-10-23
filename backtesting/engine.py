@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 
 from strategies.signals import Strategy, research_strategies
+from .risk import RiskOverlay
 from .data import dataset_hash, indicators, snapshot_at, validate_candles
 
 
@@ -94,6 +95,7 @@ class Fill:
     fee: Decimal
     cash_after: Decimal
     realized_pnl: Decimal | None
+    reason: str = "signal"
 
 
 @dataclass
@@ -103,23 +105,30 @@ class SimulationPortfolio:
     quantity: Decimal = Decimal('0')
     entry_cost: Decimal = Decimal('0')
     fees: Decimal = Decimal('0')
+    entry_notional: Decimal = Decimal('0')
+    averaging_used: bool = False
     fills: list[Fill] = field(default_factory=list)
 
     def execute(self, pending, timestamp, opening, config):
         side = pending['action']
         price = config.costs.price(opening, side)
         if side == 'BUY':
-            if self.quantity:
+            averaging = pending.get('averaging') is True
+            if self.quantity and (not averaging or self.averaging_used):
                 return False
-            budget = min(config.initial_cash * config.position_fraction, self.cash)
+            if averaging and not self.quantity:
+                raise ValueError('Cannot average an empty position')
+            budget = min(pending['budget'], self.cash) if averaging else min(config.initial_cash * config.position_fraction, self.cash)
             quantity = (budget / (price * (1 + config.costs.fee_rate))).quantize(Decimal('0.00000001'), rounding=ROUND_DOWN)
             notional = quantity * price
             if quantity <= 0 or notional < config.min_order:
                 return False
             fee = notional * config.costs.fee_rate
             self.cash -= notional + fee
-            self.quantity = quantity
-            self.entry_cost = notional + fee
+            self.quantity += quantity
+            self.entry_cost += notional + fee
+            self.entry_notional += notional
+            self.averaging_used = averaging
             realized = None
         elif side == 'SELL':
             if not self.quantity:
@@ -131,13 +140,15 @@ class SimulationPortfolio:
             realized = notional - fee - self.entry_cost
             self.quantity = Decimal('0')
             self.entry_cost = Decimal('0')
+            self.entry_notional = Decimal('0')
+            self.averaging_used = False
         else:
             raise ValueError('Only BUY/SELL may execute')
         if self.cash < 0:
             raise ValueError('Simulation must not borrow cash')
         self.fees += fee
         self.fills.append(Fill(side, pending['signal_bar'], pending['decided_at'], timestamp,
-                               quantity, price, notional, fee, self.cash, realized))
+                               quantity, price, notional, fee, self.cash, realized, pending.get('reason', 'signal')))
         return True
 
 
@@ -183,7 +194,10 @@ class BacktestEngine:
             raise ValueError('Insufficient common indicator warm-up plus a following execution bar')
         return PreparedCandles(frame, features, snapshots, first, dataset_hash(frame), self.config.bar_seconds)
 
-    def run(self, data, strategy: Strategy, *, evaluation_start=None):
+    def run(self, data, strategy: Strategy, *, evaluation_start=None, overlay=None):
+        overlay = RiskOverlay() if overlay is None else overlay
+        if not isinstance(overlay, RiskOverlay):
+            raise ValueError('Explicit research RiskOverlay required')
         config = self.config
         if not isinstance(strategy.name, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,63}', strategy.name):
             raise ValueError('Strategy names must be safe, unique report identifiers')
@@ -209,7 +223,12 @@ class BacktestEngine:
                 continue
             # A signal from the previous COMPLETED bar executes at this bar's OPEN.
             if pending is not None:
-                portfolio.execute(pending, timestamp, row.open, config)
+                executed = portfolio.execute(pending, timestamp, row.open, config)
+                if not executed and pending.get('averaging'):
+                    # At the execution open, minimum/rounding may make averaging impossible.
+                    # Operating policy then stops; no invented successful averaging receipt.
+                    portfolio.execute({**pending, 'action': 'SELL', 'reason': 'stop_average_unfilled'},
+                                      timestamp, row.open, config)
                 pending = None
             equity = portfolio.cash + portfolio.quantity * decimal(row.close)
             peak = max(peak, equity)
@@ -218,6 +237,14 @@ class BacktestEngine:
             curve.append({'timestamp': timestamp + pd.Timedelta(seconds=config.bar_seconds),
                           'cash': portfolio.cash, 'quantity': portfolio.quantity,
                           'close': decimal(row.close), 'equity': equity, 'drawdown': drawdown})
+            risk = overlay.decide(portfolio, decimal(row.close), config)
+            if risk is not None:
+                # Completed-close observation, before signal-only filters. No intrabar high/low.
+                pending = {**risk, 'signal_bar': timestamp,
+                           'decided_at': timestamp + pd.Timedelta(seconds=config.bar_seconds),
+                           'scheduled': True}
+                signals.append(pending)
+                continue
             snapshot = snapshots[i]
             if snapshot is None:
                 continue
@@ -254,6 +281,13 @@ class BacktestEngine:
             'win_rate_pct': Decimal(sum(pnl > 0 for pnl in closed)) / len(closed) * 100 if closed else None,
             'realized_pnl': realized, 'unrealized_pnl': unrealized,
             'ending_cash': portfolio.cash, 'ending_quantity': portfolio.quantity,
+            'invested_bar_pct': Decimal(sum(row['quantity'] > 0 for row in curve)) / len(curve) * 100,
+            'mean_market_exposure_pct': sum((row['quantity'] * row['close'] / row['equity'] * 100
+                for row in curve), Decimal('0')) / len(curve),
+            'max_market_exposure_pct': max(row['quantity'] * row['close'] / row['equity'] * 100 for row in curve),
+            'averaging_fill_count': sum(fill.reason == 'average_once' for fill in portfolio.fills),
+            'take_profit_count': sum(fill.reason == 'take_profit_5' for fill in portfolio.fills),
+            'stop_count': sum(fill.reason in ('stop_5', 'stop_average_unfilled') for fill in portfolio.fills),
         }
         return BacktestResult(strategy.name, prepared.data_hash, config, first, metrics,
                               tuple(portfolio.fills), tuple(curve), tuple(signals), pending)
