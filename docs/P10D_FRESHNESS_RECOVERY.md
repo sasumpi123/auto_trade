@@ -85,3 +85,5 @@ backup_json="$HOME/auto_trade-cold-backup/paper-state.json"
 Cloud에서는 Fake HTTP Date/전체 순위/공백 분봉/스트림과 실제 격리 PAPER 원장·잠금만 사용했다. 기존 BTC 보유 원장의 조회 실패 전후 bytes 동일, 기존 HALTED 재시작·조회 차단, 정상/손상/미확정 원장 진단, 백업 비교와 비인가 복구 차단을 테스트한다. 같은 head의 3 OS 테스트/skip/Safety 결과는 PR에 기록한다.
 
 Mac에서는 공식 문서 시각 의미, Date 헤더와 시계, 실제 실패 시장의 순위/시각(원문·비밀 없는 요약), 원장/백업 대사, APFS 권한/잠금, Ctrl+C/시간 제한/SSH 단절·절전/재부팅을 추가 확인해야 한다. 기존 HALTED 원장은 복구 승인 전 공개 연결 금지다. 실기기 성공, 실제 24h 순위 검증 완료, 기존 HALT 복구 완료라고 보고하지 않는다. 추가 지출/모델 호출/실제 주문/Slack/launchd/자동 병합은 모두 OFF다.
+
+P10-E 후속: [감사형 수동 복구 프로토콜](P10E_MANUAL_PAPER_RECOVERY.md)이 추가되었다. 실제 원장 변경 CLI는 여전히 BLOCKED이며, 독립 증거·일회성 승인·롤백 기준이 없는 현재 사용자 원장은 그대로 HALTED다. Fake 전환 검증을 실제 복구 완료로 해석하지 않는다.

@@ -97,6 +97,10 @@ class ExecutionEngine:
                 saved = self.store.load()
                 if saved is not None:
                     self._validate(saved)
+                    if 'manual_recovery' in saved:
+                        # Audit completion is not permission to restart. Reject BEFORE
+                        # assigning/writing state, including the legacy main.py path.
+                        raise TradingHalted('Manual PAPER recovery requires separate restart approval')
                     self.state = saved
                 self._journal_writable = True
                 pending = [o for o in self.state['orders'].values() if o['status'] != 'settled']

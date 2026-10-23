@@ -158,7 +158,7 @@ def inspect(*, root=ROOT, state=None, outbox=None):
                 # No prices or private halt reasons/order contents leave this tool.
                 available = type(metrics.get('거래 횟수')) is int
                 checks['paper_ledger'] = ('READY_LOCAL_RECONCILIATION_ONLY' if not pending
-                    and not result['halted'] and available else 'BLOCKED_PENDING_HALTED_OR_MISMATCH')
+                    and not result['halted'] and available and 'manual_recovery' not in saved else 'BLOCKED_PENDING_HALTED_OR_MISMATCH')
     except FileNotFoundError:
         checks['paper_ledger'] = 'PENDING_FILE_MISSING_NO_INITIALIZATION'
     except Exception:
