@@ -89,3 +89,5 @@ python -m ops.paper_rehearsal > "$HOME/auto-trade-private-reports/p10-rehearsal.
 5. 실제 시장 데이터 PAPER 연결과 Slack Bot/채널/무료 조건·한 명의 소비자 설정은 각각 명시적 승인 후 별도 구현·검토. 본 PR에는 운영 시작/전송 스케줄 명령이 없다.
 
 현재 판정은 **오프라인 준비 도구 제공, 실제 PAPER 운영 승인 불가**다. 기존 전략·주문·체결·복구 정책, 0원 및 자동화 OFF 설정은 변경하지 않는다.
+
+P10-C 공개 데이터 PAPER 관찰 도구의 offline 기본값, 기존 원장만 재사용하는 명시적 시간 제한 실행, 순위 조회 변경 및 SSH 종료/복구 절차는 [P10C_PAPER_OPERATIONS.md](P10C_PAPER_OPERATIONS.md)를 따릅니다. 실제 주문/Slack/launchd/자동화는 활성화하지 않습니다.
