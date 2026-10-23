@@ -34,6 +34,17 @@ def _worker(state,seconds,top,tickers,stop,pipe):
     finally:pipe.close()
 
 
+def receive_message(receiver, timeout=0):
+    """Windows may raise BrokenPipe/aborted-I/O from poll itself, not just recv."""
+    try:
+        if receiver.poll(timeout):return 'message',receiver.recv()
+        return 'waiting',None
+    except InterruptedError:
+        return 'waiting',None  # SIGINT interrupted Windows wait; retain the status channel.
+    except (EOFError,OSError):
+        return 'closed',None
+
+
 def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15):
     """Hard process deadline incl. discovery, candle reads and shutdown. No auto-restart."""
     ctx=multiprocessing.get_context('spawn')
@@ -45,7 +56,7 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15):
     for sig in signals:
         handlers[sig]=signal.signal(sig,request_stop)
     deadline=time.monotonic()+seconds;wall_deadline=time.time()+seconds
-    stop_deadline=None;last=None;forced=False
+    stop_deadline=None;last=None;forced=False;channel_open=True
     try:
         process.start();sender.close()
         while process.is_alive():
@@ -55,13 +66,19 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15):
                 if stop_deadline is None:stop_deadline=now+grace
             if stop_deadline is not None and now>=stop_deadline:
                 process.kill();forced=True;break
-            if receiver.poll(.1):
-                try:last=receiver.recv();emit(last)
-                except EOFError:break
+            kind,message=receive_message(receiver,.1) if channel_open else ('closed',None)
+            if kind=='message':last=message;emit(last)
+            elif kind=='closed':
+                # Lost status transport cannot authorize success. Request cooperative shutdown
+                # before resorting to the same deadline/kill path; never auto-restart.
+                channel_open=False;stop.set()
+                if stop_deadline is None:stop_deadline=now+grace
+                time.sleep(.05)
         process.join(5)
-        while receiver.poll():
-            try:last=receiver.recv();emit(last)
-            except EOFError:break
+        while channel_open:
+            kind,message=receive_message(receiver)
+            if kind!='message':break
+            last=message;emit(last)
         if process.is_alive():process.kill();process.join(5);forced=True
         if forced or process.exitcode!=0 or last is None or last.get('status')!='STOPPED':
             result={'status':'HALTED','reason':'FORCED_STOP_OR_UNCONFIRMED_SESSION',
