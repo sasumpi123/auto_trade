@@ -31,6 +31,7 @@ jobs:
       UPBIT_ACCESS_KEY: ''
       UPBIT_SECRET_KEY: ''
       SLACK_APP_TOKEN: ''
+      SLACK_BOT_TOKEN: ''
     steps:
       - name: Check out the exact PR head
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

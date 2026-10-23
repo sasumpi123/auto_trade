@@ -2,6 +2,7 @@
 
 This is a bounded guard, not an exhaustive secret/history scanner.
 """
+import json
 import ast
 import os
 from pathlib import Path, PurePosixPath
@@ -17,9 +18,9 @@ TOKEN_PATTERNS = (
     re.compile(r'-----BEGIN (?:[A-Z ]+)?PRIVATE KEY-----'),
 )
 CREDENTIAL_NAMES = {'acc_key', 'sec_key', 'app_token', 'access_key', 'secret_key',
-                    'upbit_access_key', 'upbit_secret_key', 'slack_app_token', 'api_key'}
+                    'upbit_access_key', 'upbit_secret_key', 'slack_app_token', 'slack_bot_token', 'api_key'}
 CI_CREDENTIAL_NAMES = ('ACC_KEY', 'SEC_KEY', 'APP_TOKEN', 'UPBIT_ACCESS_KEY',
-                       'UPBIT_SECRET_KEY', 'SLACK_APP_TOKEN')
+                       'UPBIT_SECRET_KEY', 'SLACK_APP_TOKEN', 'SLACK_BOT_TOKEN')
 
 
 def is_placeholder(value):
@@ -89,11 +90,38 @@ def audit_files(root, paths):
     return sorted(set(issues))
 
 
+def audit_invariants(root):
+    """Bounded literal policy checks; does not prove account billing or runtime safety."""
+    issues = []
+    try:
+        policy = json.loads((root / '.github/automation/policy.json').read_text())
+        cost = json.loads((root / '.github/automation/zero-cost.json').read_text())
+        if policy.get('enabled') is not False:
+            issues.append('Automation must remain disabled')
+        expected = ('allow_api_billing', 'allow_credit_purchase', 'allow_usage_expansion',
+                    'allow_paid_runner', 'allow_paid_hosting_or_database', 'allow_auth_export',
+                    'allow_live_worker', 'allow_live_publish', 'allow_merge')
+        if (cost.get('enabled') is not False or cost.get('mode') != 'fake-only'
+            or type(cost.get('extra_spend_krw')) is not int or cost['extra_spend_krw'] != 0
+            or any(cost.get(k) is not False for k in expected)
+            or any(v is not False for k,v in cost.items() if k.startswith('allow_'))
+            or cost.get('on_unproven_zero_cost') != 'halt'):
+            issues.append('Zero-cost execution policy violation')
+        module = ast.parse((root / 'config.py').read_text(encoding='utf-8'))
+        values = [n.value for n in ast.walk(module) if isinstance(n, ast.Assign)
+                  and any(isinstance(t, ast.Name) and t.id == 'SLACK_NOTIFICATIONS_ENABLED' for t in n.targets)]
+        if len(values)!=1 or not isinstance(values[0], ast.Constant) or values[0].value is not False:
+            issues.append('Slack default must remain literal False')
+    except (OSError, ValueError, SyntaxError, TypeError):
+        issues.append('Required safety policy unavailable; failing closed')
+    return issues
+
+
 def check_repository(root):
     tracked = subprocess.run(['git', '-C', str(root), 'ls-files', '--cached', '-z'],
                              capture_output=True, check=True).stdout.decode('utf-8').split('\0')
     paths = [name for name in tracked if name]
-    issues = audit_files(root, paths)
+    issues = audit_files(root, paths) + audit_invariants(root)
     protected = ['.env', '.env.local', 'config/.env.production', 'server.key',
                  'server.pem', 'server.p12', 'server.pfx', 'credentials-local.json',
                  'secrets-local.json', '.venv/bin/python', 'runtime/paper-state.json']

@@ -71,3 +71,7 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 ## P7 사용자 주도 Cloud 리뷰 핸드오프
 
 [P7_CLOUD_REVIEW_WORKFLOW.md](P7_CLOUD_REVIEW_WORKFLOW.md)에 Android에서 복사해 쓸 리뷰 요청·재작업·수동 병합 전 점검 순서를 정리했습니다. `automation.review_handoff`, `automation.rework_handoff`, `automation.manual_merge_readiness`는 exact head/base와 최신 읽기 표본을 사용하며 모델·GitHub 쓰기를 호출하지 않습니다. 로컬 재작업 영수증은 중복 발급/PR당 최대 2회 요청을 관리하지만 P1/P3 실행 원장이나 trusted anti-rollback 증거가 아닙니다. 수동 검토 완료 UI와 P4 독립 GitHub 승인은 별개이며 자동 병합 상태는 항상 AUTOMATED_MERGE_BLOCKED입니다. Work 이벤트는 [별도 안내](P7_CHATGPT_WORK_SETUP.md)만 제공하고 생성하지 않습니다.
+
+## 영구 불변 원칙과 Slack
+
+매 작업 지침은 AGENTS.md, 상세 계약은 [PROJECT_INVARIANTS.md](PROJECT_INVARIANTS.md)를 따릅니다. Safety gate는 비활성·0원 정책을 정적으로 추가 검사하며 실제 과금/권한의 증명이 아닙니다. [SLACK_NOTIFICATIONS.md](SLACK_NOTIFICATIONS.md)의 기존 서비스/outbox는 기본 OFF입니다. 개발 이벤트는 Fake 포맷만 제공하며 observer/Work 이벤트를 Slack에 연결하지 않습니다. 현재 개발 PR 작성 권한을 운영 알림·무인 실행 승인으로 해석하지 않습니다.

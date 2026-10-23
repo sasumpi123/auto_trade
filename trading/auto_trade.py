@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 import threading
 import time
+import uuid
 
 from config import (
     REAL_TRADING, START_CASH, MIN_TRADING_AMOUNT, CASH_USAGE_RATIO,
@@ -13,6 +14,7 @@ from config import (
 )
 from data_analyzer.analyzer import DataAnalyzer
 from services.performance_service import PerformanceAnalyzer
+from services.notification_service import format_fill, format_event, format_report
 from .execution import ExecutionEngine, TradingHalted, number
 
 
@@ -37,6 +39,7 @@ class AutoTrade:
         self.analyzers = {t: analyzer_factory(t) for t in self.tickers}
         self.price_cache = defaultdict(lambda: deque(maxlen=1))
         self.notification = notification
+        self._notification_session = uuid.uuid4().hex
         self.performance_analyzer = PerformanceAnalyzer(self.tickers)
         self.max_per_coin = number(start_cash) * number(CASH_USAGE_RATIO)
         self.stop_loss = number(STOP_LOSS)
@@ -74,9 +77,11 @@ class AutoTrade:
             self.performance_analyzer.tickers = self.tickers
             self._sync_views()
             self._initialized = True
+            self._notify_lifecycle('START', '성공')
         except Exception as exc:
             self.engine.halt(exc)
             self.engine.close()
+            self._notify_lifecycle('RECOVERY_REQUIRED', '미확인')
             raise
 
     def _halt(self, exc):
@@ -84,9 +89,10 @@ class AutoTrade:
         self.engine.halt(exc)
         if self.notification:
             try:
-                self.notification.send_error_alert(str(exc))
+                self.notification.send_error_alert(format_event('HALTED', event_id='halted:'+self._notification_session,
+                    mode='LIVE' if self.real_trading else 'PAPER',status='실패'))
             except Exception:
-                logging.exception('Error notification failed')
+                logging.warning('Local error notification unavailable')
 
     def request_stop(self):
         # A signal must not release the journal lock during an in-flight order.
@@ -102,6 +108,16 @@ class AutoTrade:
             finally:
                 self.wm = None
                 self.engine.close()
+                self._notify_lifecycle('STOP', '성공')
+
+    def _notify_lifecycle(self, kind, status):
+        if self.notification:
+            try:
+                self.notification.send_status_update(format_event(kind, event_id=kind,
+                    mode='LIVE' if self.real_trading else 'PAPER', status=status,
+                    subject=','.join(self.tickers), values={'전략':'기존 RSI/MACD/BB'}))
+            except Exception:
+                logging.warning('Local notification unavailable; no order retry')
 
     def start(self):
         try:
@@ -136,7 +152,7 @@ class AutoTrade:
                     if self.performance_analyzer.check_daily_report_time():
                         report = self.performance_analyzer.generate_daily_report()
                         if self.notification:
-                            self.notification.send_report(report)
+                            self.notification.send_report(self.notification_report())
                         self.performance_analyzer.clear_old_data()
                     last_report = now
         except Exception as exc:
@@ -246,7 +262,36 @@ class AutoTrade:
         message = f'현금: {self.engine.cash}, 보유: {self.engine.state["positions"]}, 지표: {status}'
         logging.info(message)
         if self.notification:
-            self.notification.send_status_update(message)
+            self.notification.send_status_update(format_event('STATUS',event_id='status',
+                mode='LIVE' if self.real_trading else 'PAPER',
+                values={'현금':str(self.engine.cash)+' KRW','전략':'기존 RSI/MACD/BB'},subject=','.join(self.tickers)))
+
+    def notification_report(self):
+        # Only durable settled amounts; missing marks remain N/A.
+        from datetime import datetime, timezone
+        orders = [o for o in self.engine.state['orders'].values() if o['status']=='settled']
+        sells = [o for o in orders if o['side']=='ask' and 'profit_amount' in o]
+        profits = [number(o['profit_amount']) for o in sells]
+        equity = self.engine.cash
+        for ticker, pos in self.engine.state['positions'].items():
+            quantity = number(pos['quantity'])
+            if quantity and not self.price_cache[ticker]:
+                equity = None
+                break
+            if quantity:
+                equity += quantity * number(self.price_cache[ticker][-1])
+        start = number(self.start_cash)
+        data = {'시작 자산':start, '종료 평가자산':equity, '현금':self.engine.cash,
+                '실현 손익':sum(profits, Decimal(0)) if sells else None,
+                '거래 횟수':len(orders),
+                '수수료 합계':sum((number(o['paid_fee']) for o in orders),Decimal(0)),
+                '승률':Decimal(sum(p>0 for p in profits))*100/len(profits) if profits else None,
+                '누적 수익률':(equity/start-1)*100 if equity is not None and start else None,
+                '보유 포지션': '; '.join(f'{t}: {p["quantity"]} 코인, 평균가 {p["avg_price"]} KRW/코인'
+                    for t,p in self.engine.state['positions'].items()) or '보유 없음'}
+        # Cost-basis accounting/reporting period has not been independently validated.
+        return format_report(data,event_id='report:'+datetime.now(timezone.utc).date().isoformat(),
+                             mode='LIVE' if self.real_trading else 'PAPER')
 
     def _record_trade(self, ticker):
         # Execution is already durable before reporting; reporting errors never retry orders.
@@ -258,6 +303,6 @@ class AutoTrade:
                  'reason': order['reason'], 'profit': float(order.get('profit_rate', 0)),
                  'profit_amount': float(order.get('profit_amount', 0))}
         self.performance_analyzer.add_trade(ticker, trade)
-        logging.info('Confirmed %s fill: %s', 'real' if self.real_trading else 'paper', trade)
+        logging.info('Confirmed %s fill persisted', 'real' if self.real_trading else 'paper')
         if self.notification:
-            self.notification.send_trade_alert(str(trade))
+            self.notification.send_trade_alert(format_fill(order, mode='LIVE' if self.real_trading else 'PAPER'))
