@@ -276,3 +276,33 @@ _transition(x['state'],x['backup'],x['sha'],x['approval'],authority=authority)
         self.assertEqual(r['status'],'HALTED_UNCONFIRMED_ATTEMPT_NO_RETRY')
         self.assertTrue(self.authority.consumed);self.assertEqual(self.state.read_bytes(),self.before)
         self.assertFalse((self.root/'.paper-recovery').exists())
+
+    def test_approval_expiring_during_final_replay_cannot_start_atomic_write(self):
+        from unittest.mock import Mock
+        t=time.time()
+        with patch('trading.state_store.StateStore.save') as save:
+            r=self.transition(clock=Mock(side_effect=[t,t,t,t+1000]))
+        save.assert_not_called();self.assertEqual(self.state.read_bytes(),self.before)
+        self.assertEqual(r['status'],'HALTED_UNCONFIRMED_ATTEMPT_NO_RETRY')
+        self.assertEqual((self.bundle/'before.json').read_bytes(),self.before)
+
+    def test_fractional_btc_reported_price_preserves_decimal_precision(self):
+        # Synthetic PAPER buy at the reported price, not the user's real ledger.
+        self.state=self.root/'fractional-paper.json'
+        engine=ExecutionEngine(self.state,1000000);engine.open()
+        try:
+            engine.buy('KRW-BTC',109212000,400000)
+            engine.halt('PAPER_SESSION_FAILURE')
+        finally:engine.close()
+        self.before=self.state.read_bytes();self.sha=digest(self.before)
+        self.backup.write_bytes(self.before)
+        self.plan=inspect_plan(self.state,self.backup,self.sha)['plan']
+        self.approval['plan_sha256']=fingerprint(self.plan)
+        self.authority=FakeAuthority(self.plan,self.approval)
+        self.assertEqual(self.transition()['status'],'PENDING_SEPARATE_READ_ONLY_VERIFICATION')
+        saved=json.loads(self.state.read_bytes())
+        self.assertEqual(saved['positions']['KRW-BTC']['quantity'],'0.003662601179357579753140680511')
+        self.assertEqual(__import__('decimal').Decimal(saved['cash']),600000)
+        self.assertEqual((self.bundle/'before.json').read_bytes(),self.before)
+        self.assertEqual(verify_transition(self.state,self.approval['attempt_id'],authority=self.authority)['status'],
+                         'RECOVERY_VERIFIED_NO_START_AUTHORITY')

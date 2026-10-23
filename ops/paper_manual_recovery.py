@@ -199,6 +199,9 @@ def _transition(state,backup,expected_sha,approval,*,authority=None,clock=time.t
         owner_check(store);approval_check(plan,approval,clock())
         require(digest(p.read_bytes())==expected_sha and digest(b.read_bytes())==plan['backup_sha256'],'SOURCE_OR_BACKUP_CAS_MISMATCH')
         require(locked_plan(p,b,expected_sha)[3]==plan,'PLAN_CHANGED_BEFORE_WRITE')
+        # Replaying a large ledger can outlast an approval. Recheck AFTER that
+        # work, immediately before starting the atomic write.
+        owner_check(store);approval_check(plan,approval,clock())
         store.save(target)
         require(p.read_bytes()==after,'POST_WRITE_MISMATCH')
         exclusive_write(bundle/'commit.json',encoded({'after_sha256':after_sha,'intent_sha256':digest(encoded(record))}))
