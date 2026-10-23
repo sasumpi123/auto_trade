@@ -18,6 +18,8 @@ def validate_state(saved, path, initial_cash):
     markets=set(saved['positions']) | set(saved['signals']) | {o['ticker'] for o in saved['orders'].values()}
     if any(not MARKET.fullmatch(t) for t in markets):
         raise ValueError('PAPER_INVALID_MARKET_IN_LEDGER')
+    if 'manual_recovery' in saved:
+        raise ValueError('PAPER_MANUAL_RECOVERY_RESTART_NOT_APPROVED')
     if saved.get('halt_reason') or any(o['status']!='settled' for o in saved['orders'].values()):
         raise ValueError('PAPER_RECOVERY_REQUIRED')
     metrics=report_metrics(saved,initial_cash,{},now=time.monotonic(),verified=True)
@@ -50,13 +52,16 @@ class ExistingPaperStore(StateStore):
                 raise ValueError('PAPER_LOCK_UNVERIFIED')
             if os.name=='posix' and info.st_uid!=os.getuid():raise ValueError('PAPER_LOCK_UNVERIFIED')
             lock_handle(handle,initialize=False)
-            saved=validate_state(_json(p.read_text(encoding='utf-8')),p,self.initial_cash)
+            saved=self.validate_existing(p)
             if self.prepare is not None:
                 self.preparation_snapshot=state_summary(saved)
                 self.prepare(saved)  # Lock held; engine has not loaded/saved/opened yet.
         except Exception:
             handle.close();raise
         self._lock=handle
+
+    def validate_existing(self,path):
+        return validate_state(_json(path.read_text(encoding='utf-8')),path,self.initial_cash)
 
     def load(self):return _json(self.path.read_text(encoding='utf-8'))
 
