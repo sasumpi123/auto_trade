@@ -5,6 +5,9 @@ Explicit initialization only. In-flight requests are UNKNOWN after restart, neve
 from datetime import datetime, timezone
 import hashlib
 import math
+import os
+from pathlib import Path
+from .process_lock import OutboxOwnership
 import sqlite3
 import threading
 import time
@@ -17,26 +20,41 @@ class MessageQueue:
             or type(min_interval) not in (int, float) or not math.isfinite(min_interval) or min_interval < 2):
             raise ValueError('Notification limits cannot exceed the safe defaults')
         self.clock, self.daily_limit, self.min_interval = clock, daily_limit, min_interval
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.delivery_lock = threading.RLock()
         self.path = path
-        if path is None:
-            self.db = sqlite3.connect(':memory:', check_same_thread=False)
-        else:
-            from pathlib import Path
-            p = Path(path)
-            if p.is_symlink() or not p.parent.is_dir():
-                raise ValueError('Unsafe outbox path')
-            if initialize:
-                import os
-                fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                os.close(fd)
-            elif not p.is_file():
-                raise ValueError('Outbox requires explicit initialization')
-            import os
-            if os.name == 'posix' and (p.stat().st_uid != os.getuid() or p.stat().st_mode & 0o077 or p.parent.stat().st_mode & 0o077):
-                raise ValueError('Outbox and parent must be owner-private')
-            self.db = sqlite3.connect(p, check_same_thread=False)
+        self._owner = None
+        self._closed = False
+        self._pid = os.getpid()
+        self.db = None
         try:
+            if path is None:
+                self.db = sqlite3.connect(':memory:', check_same_thread=False)
+            else:
+                p = Path(path).absolute()
+                if p.is_symlink() or not p.parent.is_dir():
+                    raise ValueError('Unsafe outbox path')
+                # Preserve explicit initialization errors without touching existing data.
+                if initialize and p.exists():
+                    raise FileExistsError('Outbox already exists')
+                if not initialize and not p.is_file():
+                    raise ValueError('Outbox requires explicit initialization')
+                p = p.parent.resolve() / p.name
+                if os.name == 'posix' and (p.parent.stat().st_uid != os.getuid() or p.parent.stat().st_mode & 0o077):
+                    raise ValueError('Outbox parent must be owner-private')
+                self._owner = OutboxOwnership(p)
+                self._owner.acquire()  # BEFORE database creation/connect/recovery.
+                if initialize:
+                    fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                    os.close(fd)
+                info = p.lstat()
+                if p.is_symlink() or info.st_nlink != 1:
+                    raise ValueError('Unsafe outbox identity')
+                if os.name == 'posix' and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+                    raise ValueError('Outbox must be owner-private')
+                self.path = p
+                self._identity = (info.st_dev, info.st_ino)
+                self.db = sqlite3.connect(p, check_same_thread=False)
             if path is None or initialize:
                 self.db.executescript('''
                     CREATE TABLE messages(id TEXT PRIMARY KEY, channel TEXT, text TEXT,
@@ -52,14 +70,33 @@ class MessageQueue:
             self.db.execute("UPDATE messages SET state='UNKNOWN' WHERE state='SENDING'")
             self.db.commit()
         except Exception:
-            self.db.close()
+            if self.db is not None:
+                self.db.close()
+            if self._owner is not None:
+                self._owner.close()
             raise
 
+    def check_owner(self):
+        if self._closed or self._pid != os.getpid():
+            raise RuntimeError('Outbox closed or inherited across processes')
+        if self._owner is not None:
+            self._owner.check()
+            info = self.path.lstat()
+            if self.path.is_symlink() or (info.st_dev, info.st_ino) != self._identity or info.st_nlink != 1:
+                raise RuntimeError('Outbox database identity changed')
+
     def close(self):
-        self.db.close()
+        # Serialize with a complete delivery, not just its SQLite transactions.
+        with self.delivery_lock, self.lock:
+            if not self._closed:
+                self.db.close()
+                if self._owner is not None:
+                    self._owner.close()
+                self._closed = True
 
     def enqueue(self, event_id, channel, text, priority=0):
         with self.lock, self.db:
+            self.check_owner()
             # Event identity includes its channel; a repeated event is never re-sent.
             key = hashlib.sha256((channel + ':' + event_id).encode()).hexdigest()
             if self.db.execute('SELECT 1 FROM messages WHERE id=?', (key,)).fetchone():
@@ -72,6 +109,7 @@ class MessageQueue:
 
     def reserve(self):
         with self.lock:
+            self.check_owner()
             self.db.execute('BEGIN IMMEDIATE')
             try:
                 now = self.clock()
@@ -100,6 +138,7 @@ class MessageQueue:
 
     def finish(self, key, state, retry_after=None):
         with self.lock, self.db:
+            self.check_owner()
             attempts = self.db.execute('SELECT attempts FROM messages WHERE id=?', (key,)).fetchone()[0]
             if state == 'RATE_LIMITED' and attempts < 2 and retry_after is not None:
                 self.db.execute("UPDATE messages SET state='QUEUED',due=? WHERE id=?",
@@ -109,6 +148,7 @@ class MessageQueue:
 
     # Legacy rate limiter API (uses the same durable quota records).
     def can_send_message(self):
+        self.check_owner()
         now = self.clock()
         day = datetime.fromtimestamp(now, timezone.utc).date().isoformat()
         count, last = self.db.execute('SELECT count(*),max(at) FROM sends WHERE day=?', (day,)).fetchone()
@@ -116,5 +156,6 @@ class MessageQueue:
 
     def log_message_sent(self):
         now = self.clock()
-        with self.db:
+        with self.lock, self.db:
+            self.check_owner()
             self.db.execute('INSERT INTO sends VALUES(?,?,?)', ('legacy', now, datetime.fromtimestamp(now, timezone.utc).date().isoformat()))

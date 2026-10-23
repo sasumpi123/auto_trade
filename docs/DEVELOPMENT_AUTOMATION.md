@@ -89,3 +89,7 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 ## P9-B 복구와 PAPER 통합
 
 [P9B_CLOUD_RECOVERY.md](P9B_CLOUD_RECOVERY.md)는 기존 HandoffJournal의 개별 손상/롤백과 공동 롤백 한계, 사용자 보관 메타데이터 비교를 설명합니다. 요약 일치도 신뢰 witness가 아니며 HALTED/UNKNOWN_NOT_RESET을 유지합니다. [PAPER_END_TO_END_VALIDATION.md](PAPER_END_TO_END_VALIDATION.md)는 기존 실제 PAPER 코드와 Mock Slack 전체 경로, 최소 결함 수정, 단일 소비자/백업/사용자 MacBook 체크리스트를 제공합니다. 실제 운영/Slack/모델/게시·병합 활성화는 없습니다.
+
+## P10-A MacBook 오프라인 준비
+
+[MacBook 체크리스트](P10_MAC_PREFLIGHT.md)와 [백업·복구](P10_BACKUP_RECOVERY.md)를 추가했습니다. 기존 PAPER 상태 잠금의 OS 방식을 재사용해 outbox 연결 전부터 close까지 단일 소유권을 유지하고 SENDING 복구와 전송 중 종료를 보호합니다. `python -m ops.local_preflight`는 외부 API/설정 import/상태 변경 없이 진단하며 실행 허가를 반환하지 않습니다. `python -m ops.paper_rehearsal`은 기존 P9-B 테스트와 최소 추가 회귀 테스트를 임시 데이터로 실행해 비밀 없는 요약을 출력합니다. MacBook·실제 Slack·네트워크 운영은 미검증, 자동 실행/게시/병합/Slack/launchd는 계속 비활성입니다. 공동 롤백·영수증 소실은 HALTED/UNKNOWN_NOT_RESET 유지입니다.

@@ -132,6 +132,13 @@ class NotificationService:
             return False
 
     def flush_one(self):
+        if self.queue is None:
+            return self._flush_one()
+        # close() cannot release ownership while a request is in flight.
+        with self.queue.delivery_lock:
+            return self._flush_one()
+
+    def _flush_one(self):
         """Explicit delivery, never called from order processing or observers."""
         if not self.enabled:
             return 'DISABLED'
@@ -151,6 +158,7 @@ class NotificationService:
                 text += '\n동일 이벤트 추가 발생: '+str(repeats[0])+'회 (로컬 집계)'
             if self.client is None:
                 self.client = WebClient(token=self.token, timeout=5, retry_handlers=[])
+            self.queue.check_owner()
             result = self.client.chat_postMessage(channel=channel, text=text,
                 unfurl_links=False, unfurl_media=False)
             state = 'SENT' if result.get('ok') is True and result.get('ts') and result.get('channel') == channel else 'UNKNOWN'
