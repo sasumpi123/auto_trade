@@ -64,6 +64,13 @@ class RepositorySafetyTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('git'), 'Git is required for repository integration checks')
     def test_git_ignore_and_forced_tracked_env_are_checked(self):
         subprocess.run(['git', 'init', '-q', str(self.root)], check=True, capture_output=True)
+        # Repository-level checks now require the disabled policy fixtures too.
+        (self.root / 'config.py').write_text('REAL_TRADING=False\nSLACK_NOTIFICATIONS_ENABLED=False\n')
+        policies = self.root / '.github/automation'
+        policies.mkdir(parents=True)
+        source = Path(__file__).resolve().parents[1] / '.github/automation'
+        for name in ('policy.json', 'zero-cost.json'):
+            shutil.copyfile(source/name, policies/name)
         ignore = Path(__file__).resolve().parents[1] / '.gitignore'
         (self.root / '.gitignore').write_text(ignore.read_text(encoding='utf-8'), encoding='utf-8')
         subprocess.run(['git', '-C', str(self.root), 'add', 'config.py', '.gitignore'], check=True, capture_output=True)

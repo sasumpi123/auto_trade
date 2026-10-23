@@ -9,7 +9,10 @@ load_dotenv()
 # 환경 변수 및 API 키
 UPBIT_ACCESS_KEY = os.getenv("ACC_KEY")
 UPBIT_SECRET_KEY = os.getenv("SEC_KEY")
-SLACK_APP_TOKEN = os.getenv("APP_TOKEN")
+# Legacy APP_TOKEN accepted only when it actually has bot-token syntax.
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN") or os.getenv("APP_TOKEN")
+SLACK_APP_TOKEN = SLACK_BOT_TOKEN  # compatibility alias, not an app-level token
+SLACK_NOTIFICATIONS_ENABLED = False  # separate reviewed approval required
 SLACK_CHANNEL = os.getenv("CHANNEL")
 
 # Slack 채널 설정

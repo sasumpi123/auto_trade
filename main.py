@@ -26,14 +26,14 @@ class TradingBot:
         try:
             self.auto_trader = AutoTrade(
                 start_cash=START_CASH, tickers=get_top_tickers(10), real_trading=REAL_TRADING,
-                notification=NotificationService() if SLACK_APP_TOKEN else None,
+                notification=NotificationService(),
             )
             signal.signal(signal.SIGINT, self.signal_handler)
             signal.signal(signal.SIGTERM, self.signal_handler)
             self.auto_trader.start()
             return 0
         except Exception:
-            logging.exception('Bot halted. Inspect journal before restarting; no orders retried.')
+            logging.error('Bot halted. Inspect journal before restarting; no orders retried; raw exception withheld.')
             return 1
         finally:
             if self.auto_trader:
