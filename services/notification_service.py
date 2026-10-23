@@ -157,15 +157,18 @@ class NotificationService:
             self.queue.finish(key, state)
         except SlackApiError as exc:
             state = 'FAILED'
-            if exc.response.status_code == 429:
-                state = 'RATE_LIMITED'
-                try:
-                    delay = int(exc.response.headers.get('Retry-After', '60'))
-                except (ValueError, TypeError):
-                    delay = 60
-                self.queue.finish(key, state, delay)
-            else:
-                self.queue.finish(key, state)
+            try:
+                if exc.response.status_code == 429:
+                    state = 'RATE_LIMITED'
+                    try:
+                        delay = int(exc.response.headers.get('Retry-After', '60'))
+                    except (ValueError, TypeError):
+                        delay = 60
+                    self.queue.finish(key, state, delay)
+                else:
+                    self.queue.finish(key, state)
+            except Exception:
+                state = 'UNKNOWN'  # Keep durable SENDING; restart must not resend.
         except Exception:
             # Ambiguous result: no retry and no raw exception/response logging.
             state = 'UNKNOWN'

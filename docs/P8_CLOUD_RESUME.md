@@ -64,3 +64,5 @@ python -m utils.slack_preflight --outbox runtime/notifications.sqlite --format j
 ## 다음 단계
 
 무료 Cloud 영수증 영속성과 공동 롤백 감지 증명, 사용자 주도 검토 이력 전달 계약, 수수료 포함 원가배분/일간 경계·전략별 집계 검증, 별도 승인 후의 실환경 Slack 권한/무료 조건 확인이 필요합니다. 현재 단계에서 이를 해결한 것으로 보고하거나 무인 기능을 활성화하지 않습니다.
+
+P9-B 보강: `rework_history.rework_state=HALTED`와 UNKNOWN_NOT_RESET을 명시합니다. `--journal`/`--recovery-evidence`를 지정한 복구 점검은 exit2이며 정상 사본도 실행 허가가 아닙니다. 비밀 없는 요약의 prefix 비교와 공동 롤백의 탐지 한계는 [P9B_CLOUD_RECOVERY.md](P9B_CLOUD_RECOVERY.md)를 따릅니다. 일반 PR 관찰 workflow_state와 재작업 복구 상태를 구분합니다.

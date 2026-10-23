@@ -85,3 +85,7 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 ## P9-A PAPER 성과 정산
 
 [수수료 포함 읽기 전용 회계 계약](P9_PERFORMANCE_ACCOUNTING.md)을 추가했습니다. 기록 순서/settled_at와 원장 수치를 검증해 이동평균 순원가·부분 매도 배분·누적/일간 확정 순손익을 계산합니다. UTC/KST 일간 평가손익/총수익률은 스냅샷 부재로 N/A입니다. 원문 전략을 추정하지 않으며 기존 거래/복구 원장과 자동화 설정은 그대로입니다. 실제 Slack/모델/자동 게시·병합/실거래/운영 배포는 계속 비활성입니다.
+
+## P9-B 복구와 PAPER 통합
+
+[P9B_CLOUD_RECOVERY.md](P9B_CLOUD_RECOVERY.md)는 기존 HandoffJournal의 개별 손상/롤백과 공동 롤백 한계, 사용자 보관 메타데이터 비교를 설명합니다. 요약 일치도 신뢰 witness가 아니며 HALTED/UNKNOWN_NOT_RESET을 유지합니다. [PAPER_END_TO_END_VALIDATION.md](PAPER_END_TO_END_VALIDATION.md)는 기존 실제 PAPER 코드와 Mock Slack 전체 경로, 최소 결함 수정, 단일 소비자/백업/사용자 MacBook 체크리스트를 제공합니다. 실제 운영/Slack/모델/게시·병합 활성화는 없습니다.
