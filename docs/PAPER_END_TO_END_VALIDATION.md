@@ -30,10 +30,10 @@
 | 실제 시장 데이터/장시간 PAPER 운영 | 미검증, 사용자 승인 필요 |
 | MacBook 파일 권한·sleep/wake·전원 종료·디스크 장애 | MacBook 접근 없음, 미검증 |
 | Slack Bot/채널/chat:write/계정 무료 조건 | 미검증, 실제 발송 OFF |
-| outbox 단일 소비자 | 운영 필수 조건, 프로세스 간 독점 소유를 새로 강제하지 않음 |
+| outbox 단일 소비자 | P9-B 시점에는 운영 필수 조건. P10에서 MessageQueue 수명 OS 잠금으로 보강 |
 | Cloud 영수증 전역 롤백 방지 | 미구현, UNKNOWN_NOT_RESET / HALTED |
 
-MessageQueue의 SQLite 트랜잭션은 개별 작업 선점/시도 한도를 보호하지만 운영 프로세스 독점 소유 증명이 아닙니다. 두 소비자를 동시에 열거나 활성 소비자 옆에서 재시작 복구용 인스턴스를 열지 않습니다. constructor는 SENDING→UNKNOWN을 수행하므로 실제 소비자 정지 후에만 열어야 합니다. 읽기 전용 점검에는 utils.slack_preflight를 사용합니다. 금융 원장과 outbox는 서로의 백업/권한/이벤트 원장을 대체하지 않습니다.
+MessageQueue의 SQLite 트랜잭션은 개별 작업 선점/시도 한도를 보호하지만 운영 프로세스 독점 소유 증명이 아닙니다. P10에서는 별도의 OS 수명 잠금이 DB 연결/복구 전 협력 소비자의 동시 접근을 차단합니다. 두 소비자를 동시에 열거나 활성 소비자 옆에서 재시작 복구용 인스턴스를 열지 않습니다. constructor는 SENDING→UNKNOWN을 수행하므로 실제 소비자 정지 후에만 열어야 합니다. 읽기 전용 점검에는 utils.slack_preflight를 사용합니다. 금융 원장과 outbox는 서로의 백업/권한/이벤트 원장을 대체하지 않습니다.
 
 ## 사용자용 MacBook 운영 전 체크리스트
 
@@ -65,3 +65,5 @@ python -m utils.slack_preflight --outbox runtime/notifications.sqlite --format j
 ## MacBook 없이 계속할 수 있는 일
 
 기존 CLI 출력/복구 비교/Mock 장애 주입의 추가 검토, 사용자 보관 증빙 절차 검토, 안전한 cold backup 운영 절차 설계, 단일 소비자 독점 소유 방식 제안 및 검토는 가능합니다. 단, 새로운 원장/스케줄/유료 저장소를 도입하거나 무료 내구성/계정 권한을 추정하지 않습니다. 다음 단계는 사용자 실환경 검증 준비와 무료·독립 롤백 기준의 타당성 검토이며 실제 활성화는 별도 승인입니다.
+
+P10 오프라인 사전 점검과 현재 단일 소유권/백업 경계는 [P10_MAC_PREFLIGHT.md](P10_MAC_PREFLIGHT.md) 및 [P10_BACKUP_RECOVERY.md](P10_BACKUP_RECOVERY.md)를 따릅니다.

@@ -27,7 +27,7 @@ class SignalAnalyzer(HoldAnalyzer):
         return {'action':action,'reason':'매수 신호' if action=='BUY' else '매도 신호','target_price':None}
 
 
-class PaperSlackTests(unittest.TestCase):
+class PaperSlackFixture:
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name);self.path=self.root/'paper.json'
@@ -69,6 +69,8 @@ class PaperSlackTests(unittest.TestCase):
             self.wall+=3;self.service.flush_one()
         self.fail('Mock outbox did not drain')
 
+
+class PaperSlackTests(PaperSlackFixture, unittest.TestCase):
     def test_signal_to_paper_ledger_accounting_outbox_and_mock_slack(self):
         bot=self.bot();self.tick(bot,10000,'BUY');self.tick(bot,10200,'SELL')
         self.assertEqual([o['side'] for o in self.orders(bot)],['bid','ask'])

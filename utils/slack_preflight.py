@@ -13,7 +13,8 @@ ROOT=Path(__file__).resolve().parents[1]
 STATES={'QUEUED','SENDING','SENT','FAILED','UNKNOWN','RATE_LIMITED'}
 
 
-def preflight(path=None, *, root=ROOT):
+def preflight(path=None, *, root=ROOT, immutable=False):
+    """immutable is only for an exclusively locked cold snapshot with no sidecars."""
     result={'kind':'slack-offline-preflight','network_calls':0,'message_sent_by_this_tool':False,
             'delivery_notice':'enqueue는 로컬 수락이며 Slack 전달 성공이 아닙니다.',
             'counts':None,'recorded_attempts':None,'queued_is_delivered':False,
@@ -38,7 +39,7 @@ def preflight(path=None, *, root=ROOT):
             raise ValueError('unsafe_input')
         if os.name=='posix' and (p.stat().st_uid!=os.getuid() or p.stat().st_mode&0o077):
             raise ValueError('unsafe_input')
-        with closing(sqlite3.connect(p.as_uri()+'?mode=ro',uri=True,timeout=1)) as db:
+        with closing(sqlite3.connect(p.as_uri()+'?mode=ro'+('&immutable=1' if immutable else ''),uri=True,timeout=1)) as db:
             db.execute('PRAGMA query_only=ON');db.execute('PRAGMA trusted_schema=OFF')
             db.set_progress_handler(lambda:1,5_000_000)
             db.execute('BEGIN')

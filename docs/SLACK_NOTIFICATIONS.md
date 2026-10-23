@@ -24,7 +24,7 @@
 
 SQLite 단일 연결 lock 및 BEGIN IMMEDIATE 선점, 채널별 최소 2초·UTC 일일 최대 900 **시도**(재시도 포함), 오류/체결 우선. 상태는 유형별 5분 bucket 중복 억제, 이벤트 ID별 영속 중복 억제. 반복 이벤트 수는 duplicates 테이블에서 집계하며 전송 직전까지의 반복 수를 첨부합니다. 전송 이후 반복만으로 별도 요약을 자동 발송하지 않습니다. 거래 중단은 실행 세션 ID로 구분하고 같은 세션의 중복 중단을 억제합니다. 최대 50,000 ID 후 새 enqueue 차단: 삭제·초기화로 중복 검사를 우회하지 말고 별도 보관/조정 설계가 필요합니다.
 
-429는 Retry-After 2~3600초 범위로 최대 총 2회 시도합니다. timeout/예외/불완전 응답은 UNKNOWN으로 종료하며 무한 재시도하지 않습니다. 전송 직전 SENDING을 commit하므로 프로세스 종료 후 SENDING은 UNKNOWN으로 바뀌고 재전송하지 않습니다. 대기 QUEUED는 보존되지만 별도 수동 소비자 없이는 발송되지 않습니다. 다른 프로세스의 outbox 동시 사용·백업 롤백·기기 간 복사 방지는 보장하지 않습니다. 단일 소유 소비자만 사용하고 외부 sidecar/운영 복구 검증 전 무인 실행은 금지합니다.
+429는 Retry-After 2~3600초 범위로 최대 총 2회 시도합니다. timeout/예외/불완전 응답은 UNKNOWN으로 종료하며 무한 재시도하지 않습니다. 전송 직전 SENDING을 commit하므로 프로세스 종료 후 SENDING은 UNKNOWN으로 바뀌고 재전송하지 않습니다. 대기 QUEUED는 보존되지만 별도 수동 소비자 없이는 발송되지 않습니다. P10은 MessageQueue가 DB를 열기 전부터 close까지 OS 소유권 잠금으로 협력 소비자의 동시 사용을 차단합니다. 백업 롤백·기기 간 복사 방지는 보장하지 않습니다. 단일 소유 소비자만 사용하고 외부 sidecar/운영 복구 검증 전 무인 실행은 금지합니다.
 
 Slack은 원장을 대체하지 않습니다. 전송 실패는 주문 제출을 호출하지 않습니다. 기존 사용자 정의 notification 객체가 예외를 내면 기존 거래 fail-closed 동작은 유지되며, 이미 확정된 주문을 다시 제출하지 않습니다. SQLite 손상/권한/초기화 오류는 차단하고 원장이나 outbox를 임의 초기화하지 않습니다.
 
@@ -52,3 +52,5 @@ P8에서 수수료가 있으면 N/A였던 누적 실현/평가손익·승률을 
 보고서는 24줄 제한으로 회계 날짜, PAPER, 현금/평가자산, 누적 순손익/평가손익/수익률, 일간 확정 통계, 승률/수수료, 종목·전략·사유 요약을 표시합니다. 전략 ID 미기록은 N/A이며 사유로 전략을 추정하지 않습니다. 원문/비밀값은 보내지 않습니다. 보고 event ID만 회계 날짜+calendar로 구분하고 자동 실행/스케줄은 변경하지 않습니다. 실제 발송은 OFF, enqueue는 전달 성공이 아닙니다. 실제 Slack·MacBook·계정 권한/무료 조건은 미검증입니다.
 
 P9-B 통합 검증: [PAPER_END_TO_END_VALIDATION.md](PAPER_END_TO_END_VALIDATION.md)에 실제 PAPER→원장→P9-A 정산→포맷→SQLite→Mock 전달과 MacBook 운영 전 체크리스트를 정리했습니다. SlackApiError와 outbox 기록 장애가 겹치면 UNKNOWN/SENDING으로 차단하고 재전송하지 않습니다. 운영은 반드시 단일 소비자이며 SQLite 선점 자체를 프로세스 독점 소유 증명으로 해석하지 않습니다. 실제 발송/설정/스케줄은 계속 OFF입니다.
+
+P10 사전 준비: [MacBook 점검](P10_MAC_PREFLIGHT.md), [cold backup/복구](P10_BACKUP_RECOVERY.md). 소유권 확인 전 SENDING을 바꾸지 않으며, 전송 중 close는 요청 종료를 기다립니다. `python -m ops.local_preflight`는 MessageQueue를 열지 않고 기존 잠금/원장/metadata만 검사합니다. enqueue는 Slack 전달 성공이 아니며 실제 발송은 OFF입니다.
