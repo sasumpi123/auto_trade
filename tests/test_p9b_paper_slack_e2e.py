@@ -72,7 +72,7 @@ class PaperSlackTests(unittest.TestCase):
     def test_signal_to_paper_ledger_accounting_outbox_and_mock_slack(self):
         bot=self.bot();self.tick(bot,10000,'BUY');self.tick(bot,10200,'SELL')
         self.assertEqual([o['side'] for o in self.orders(bot)],['bid','ask'])
-        self.assertEqual(json.loads(self.path.read_text()),bot.engine.state)
+        self.assertEqual(json.loads(self.path.read_text(encoding='utf-8')),bot.engine.state)
         self.assertEqual(self.metrics(bot)['실현 손익'],8000)
         self.assertEqual(self.metrics(bot)['승률'],100)
         bot.log_status();self.assertTrue(self.publish_report(bot));bot.stop()
@@ -160,7 +160,7 @@ class PaperSlackTests(unittest.TestCase):
         self.assertEqual(self.orders(bot)[0]['status'],'intent')
         order=copy.deepcopy(self.orders(bot));bot.stop()
         with self.assertRaises(TradingHalted):self.bot()
-        saved=json.loads(self.path.read_text())
+        saved=json.loads(self.path.read_text(encoding='utf-8'))
         self.assertEqual(list(saved['orders'].values()),order)
         self.assertFalse(any('] FILL |' in t for t in self.texts()))
         self.assertTrue(any('RECOVERY_REQUIRED' in t for t in self.texts()))
@@ -219,7 +219,7 @@ class PaperSlackTests(unittest.TestCase):
             bot.engine.halt('private-local-reason-canary')
         self.assertNotIn('private-local-reason-canary',' '.join(logs.output))
         # Private durable reason is retained; recovery behavior/schema are unchanged.
-        self.assertEqual(json.loads(self.path.read_text())['halt_reason'],'private-local-reason-canary')
+        self.assertEqual(json.loads(self.path.read_text(encoding='utf-8'))['halt_reason'],'private-local-reason-canary')
         with patch.object(bot.engine.store,'save',side_effect=OSError('private-storage-canary')):
             with self.assertLogs(level='ERROR') as logs:bot.engine.halt('private-local-reason-canary')
         self.assertNotIn('private-storage-canary',' '.join(logs.output))
