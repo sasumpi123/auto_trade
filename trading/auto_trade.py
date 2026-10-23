@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 import threading
 import time
+import uuid
 
 from config import (
     REAL_TRADING, START_CASH, MIN_TRADING_AMOUNT, CASH_USAGE_RATIO,
@@ -38,6 +39,7 @@ class AutoTrade:
         self.analyzers = {t: analyzer_factory(t) for t in self.tickers}
         self.price_cache = defaultdict(lambda: deque(maxlen=1))
         self.notification = notification
+        self._notification_session = uuid.uuid4().hex
         self.performance_analyzer = PerformanceAnalyzer(self.tickers)
         self.max_per_coin = number(start_cash) * number(CASH_USAGE_RATIO)
         self.stop_loss = number(STOP_LOSS)
@@ -87,7 +89,7 @@ class AutoTrade:
         self.engine.halt(exc)
         if self.notification:
             try:
-                self.notification.send_error_alert(format_event('HALTED', event_id='halted',
+                self.notification.send_error_alert(format_event('HALTED', event_id='halted:'+self._notification_session,
                     mode='LIVE' if self.real_trading else 'PAPER',status='실패'))
             except Exception:
                 logging.warning('Local error notification unavailable')

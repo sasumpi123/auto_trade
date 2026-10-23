@@ -53,6 +53,8 @@ class Notifications(unittest.TestCase):
         self.assertTrue(self.event())
         self.assertFalse(self.event())
         self.assertEqual(self.q.db.execute('SELECT repeats FROM duplicates').fetchone()[0],1)
+        self.service.flush_one()
+        self.assertIn('추가 발생: 1회',self.client.chat_postMessage.call_args.kwargs['text'])
 
     def test_daily_and_channel_limit(self):
         self.event('a'); self.event('b'); self.event('c'); self.event('d')

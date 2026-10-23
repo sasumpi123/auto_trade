@@ -4,6 +4,7 @@ Explicit initialization only. In-flight requests are UNKNOWN after restart, neve
 """
 from datetime import datetime, timezone
 import hashlib
+import math
 import sqlite3
 import threading
 import time
@@ -12,6 +13,9 @@ import time
 class MessageQueue:
     def __init__(self, path=None, *, initialize=False, clock=time.time,
                  daily_limit=900, min_interval=2):
+        if (type(daily_limit) is not int or not 1 <= daily_limit <= 900
+            or type(min_interval) not in (int, float) or not math.isfinite(min_interval) or min_interval < 2):
+            raise ValueError('Notification limits cannot exceed the safe defaults')
         self.clock, self.daily_limit, self.min_interval = clock, daily_limit, min_interval
         self.lock = threading.Lock()
         self.path = path

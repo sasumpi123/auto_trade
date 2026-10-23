@@ -127,6 +127,9 @@ class NotificationService:
             if row is None:
                 return 'DEFERRED'
             key, channel, text = row
+            repeats = self.queue.db.execute('SELECT repeats FROM duplicates WHERE id=?', (key,)).fetchone()
+            if repeats:
+                text += '\n동일 이벤트 추가 발생: '+str(repeats[0])+'회 (로컬 집계)'
             if self.client is None:
                 self.client = WebClient(token=self.token, timeout=5, retry_handlers=[])
             result = self.client.chat_postMessage(channel=channel, text=text,
@@ -172,7 +175,8 @@ class NotificationService:
         # Raw exceptions must never leave the process.
         if isinstance(message, FormattedMessage):
             return self.send_message('errors', message, priority=2)
-        return self.send_event('HALTED', event_id='halted', status='실패')
+        bucket = str(int(self.queue.clock()//300)) if self.queue else 'disabled'
+        return self.send_event('HALTED', event_id='halted:'+bucket, status='실패')
 
     def send_report(self, message):
         return self.send_message('reports', message if isinstance(message, FormattedMessage) else format_report({}, event_id=datetime.now(timezone.utc).date().isoformat()))
