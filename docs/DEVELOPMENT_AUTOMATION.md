@@ -81,3 +81,7 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 [휴대폰 세션 복구 절차](P8_CLOUD_RESUME.md): `python -m automation.cloud_resume`가 P7 증거 수집을 재사용해 master/최근 PR/선택 PR exact head·base·CI·리뷰·병합을 재조회합니다. 오래된 검토는 무효이며 SQLite/영수증 소실 시 한도는 UNKNOWN_NOT_RESET입니다. 새 원장·초기화·재작업 실행은 제공하지 않습니다. 병합 PR의 PR-run 연결이 사라진 경우 과거 CI 메타데이터 관찰만 별도로 표시하며 P2/P4 gate를 통과시키지 않습니다.
 
 [Slack 지표 계약](SLACK_NOTIFICATIONS.md)의 확정/부분/물타기/재시작·수수료·손익·평가·누적/일간 구분을 검증합니다. `python -m utils.slack_preflight`는 토큰/SDK/config 실행 없이 기본 OFF 및 선택 outbox를 읽기 전용 점검합니다. enqueue는 전달 성공이 아닙니다. 실제 Slack/모델/자동 개발·게시·병합/거래/배포/스케줄은 계속 비활성입니다.
+
+## P9-A PAPER 성과 정산
+
+[수수료 포함 읽기 전용 회계 계약](P9_PERFORMANCE_ACCOUNTING.md)을 추가했습니다. 기록 순서/settled_at와 원장 수치를 검증해 이동평균 순원가·부분 매도 배분·누적/일간 확정 순손익을 계산합니다. UTC/KST 일간 평가손익/총수익률은 스냅샷 부재로 N/A입니다. 원문 전략을 추정하지 않으며 기존 거래/복구 원장과 자동화 설정은 그대로입니다. 실제 Slack/모델/자동 게시·병합/실거래/운영 배포는 계속 비활성입니다.

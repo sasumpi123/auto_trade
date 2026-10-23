@@ -51,7 +51,7 @@ def format_event(kind, *, event_id, mode='PAPER', subject='BOT', status='미확�
     if not isinstance(stamp, datetime) or stamp.tzinfo is None:
         raise ValueError('Timezone required')
     identity = hashlib.sha256(str(event_id).encode()).hexdigest()[:24]
-    lines = [f'{stamp.isoformat()} [{mode}] {kind} | {safe(subject)} | {status}', f'이벤트 ID: {identity}', '전달 구분: 로컬 생성/enqueue는 Slack 전달 성공 아님']
+    lines = [f'{stamp.isoformat()} [{mode}] {kind} | {safe(subject)} | {status}', f'이벤트 ID: {identity}', '전달 구분: 로컬 생성/enqueue는 로컬 수락; Slack 전달 성공 아님']
     for key, value in (values or {}).items():
         lines.append(f'{safe(key)}: {safe(value)}')
     return FormattedMessage('\n'.join(lines))
@@ -73,16 +73,24 @@ def format_fill(order, *, mode='PAPER'):
 
 def format_report(data, *, event_id, mode='PAPER'):
     units = {'시작 자산':'KRW', '종료 평가자산':'KRW', '현금':'KRW', '평가 손익':'KRW',
-             '실현 손익':'KRW', '누적 수익률':'%', '거래 횟수':'회', '승률':'%', '수수료 합계':'KRW',
-             '오류':'건', '중단':'건'}
-    values = {k: metric(data.get(k), u) for k,u in units.items()}
-    values['보유 포지션'] = data.get('보유 포지션', 'N/A (미집계)')
-    values['전략별 결과'] = data.get('전략별 결과', 'N/A (미집계)')
-    for key in ('집계 범위','검증 상태','전달 상태','승률 기준','손익 제한','평가 제한'):
-        if key in data: values[key] = data[key]
-    values['일간 손익'] = 'N/A (일간 경계 미집계)'
-    values['전달 구분'] = 'enqueue는 로컬 수락; Slack 전달 성공 아님'
-    return format_event('REPORT', event_id=event_id, mode=mode, values=values)
+             '실현 손익':'KRW', '누적 수익률':'%', '거래 횟수':'회', '승률':'%', '수수료 합계':'KRW'}
+    values = {'집계 날짜':data.get('집계 날짜','N/A (날짜 미검증)')}
+    values.update({k:metric(data.get(k),u) for k,u in units.items()})
+    values['매수/매도 횟수']=metric(data.get('매수 횟수'),'회')+' / '+metric(data.get('매도 횟수'),'회')
+    values['일간 손익']='N/A (일간 총손익 평가 스냅샷 없음)'
+    values['일간 순실현 손익']=metric(data.get('일간 순실현 손익'),'KRW')
+    values['일간 평가손익/총수익률']='N/A (기초/과거 평가자산 스냅샷 없음)'
+    day=data.get('일간 집계',{})
+    values['일간 거래']=('매수 '+metric(day.get('buy_count'),'회')+' / 매도 '+metric(day.get('sell_count'),'회')
+        +'; 매수대금 '+metric(day.get('buy_funds'),'KRW')+'; 매도대금 '+metric(day.get('sell_funds'),'KRW')
+        +'; 수수료 '+metric(day.get('fees'),'KRW'))
+    for key in ('보유 포지션','전략별 결과','사유별 결과'):
+        value=data.get(key,'N/A (미집계)')
+        values[key]=value if len(str(value))<=160 else 'N/A (Slack 요약 한도 초과; 구조화 보고서에서 확인)'
+    values['검증 상태']=data.get('검증 상태','N/A')+'; '+data.get('정산 사유',data.get('평가 제한','이동평균 순원가 검증'))
+    values['집계 범위']=data.get('집계 범위','N/A (미검증)')
+    values['미집계']='일간 총수익률·평가손익·오류/중단: N/A; 전략 ID 없는 성과 귀속: N/A'
+    return format_event('REPORT',event_id=event_id,mode=mode,values=values)
 
 
 class NotificationService:
