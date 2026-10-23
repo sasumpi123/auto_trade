@@ -160,3 +160,5 @@ P8에서는 다음을 해결해야 합니다. 이번에 정책을 완화하거�
 3. 개인 Plus 포함량 전용 실행/구매 크레딧 미소비의 공식 강제 증거 및 최신 계정 검증
 4. 별도 실제 GitHub reviewer ID의 표준 승인, 사용자 보호 설정과 필요한 read 권한. 같은 계정의 대화 검토는 대체 불가
 5. 실제 실행 adapter를 검토한다면 P1/P3 원장·예약·CAS·lease·receipt와 서버 base/head 경합을 별도 검증. P7 packet/receipt/수동 완료 상태를 권한으로 전용하지 않음
+
+P8 새 세션 주의: 이 문서의 `--init-journal`은 최초 생성 절차이며 세션 변경·파일 소실 후 한도 초기화 방법이 아닙니다. 기존 영수증을 찾을 수 없으면 UNKNOWN_NOT_RESET으로 보류하고 [P8 복구 절차](P8_CLOUD_RESUME.md)를 따릅니다. 로컬 DB+checkpoint 복사본만으로 Cloud 영속/롤백 부재를 증명하지 않습니다.

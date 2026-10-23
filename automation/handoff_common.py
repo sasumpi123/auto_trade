@@ -316,6 +316,7 @@ def workflow_state(report):
 def halted(error=None):
     known={'HTTP_401_AUTH_UNVERIFIED','HTTP_403_PERMISSION_OR_RATE_LIMIT','HTTP_404_ABSENT_OR_HIDDEN','HTTP_429_RATE_LIMIT',
            'github_state_changed_during_handoff','stale_reviewed_head','stale_review_snapshot','closed_pr_rework_forbidden','issue_approval_unverified_or_revoked',
+           'recent_prs_changed_during_resume','recent_prs_unverified','no_recent_pr',
            'duplicate_rework','rework_already_issued_for_head','rework_limit','local_journal_unverified','unsafe_or_overlong_text'}
     reason=error.args[0] if isinstance(error,VerificationPending) and error.args and error.args[0] in known else 'HANDOFF_UNVERIFIED'
     return {'kind':'p7-review-handoff','workflow_state':'HALTED','next_action':WORKFLOW_STATES['HALTED'],

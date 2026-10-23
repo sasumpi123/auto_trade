@@ -14,6 +14,7 @@ from config import (
 )
 from data_analyzer.analyzer import DataAnalyzer
 from services.performance_service import PerformanceAnalyzer
+from services.notification_metrics import report_metrics
 from services.notification_service import format_fill, format_event, format_report
 from .execution import ExecutionEngine, TradingHalted, number
 
@@ -38,6 +39,7 @@ class AutoTrade:
         self.analyzer_factory = analyzer_factory
         self.analyzers = {t: analyzer_factory(t) for t in self.tickers}
         self.price_cache = defaultdict(lambda: deque(maxlen=1))
+        self._notification_marks = {}
         self.notification = notification
         self._notification_session = uuid.uuid4().hex
         self.performance_analyzer = PerformanceAnalyzer(self.tickers)
@@ -232,6 +234,7 @@ class AutoTrade:
                     raise TradingHalted('Stop requested')
                 price = number(data['trade_price'], positive=True)
                 self.price_cache[ticker].append(float(price))
+                self._notification_marks[ticker] = (price, time.monotonic())
                 pos = self.engine.position(ticker)
                 if number(pos['quantity']) > 0:
                     avg = number(pos['avg_price'], positive=True)
@@ -267,29 +270,15 @@ class AutoTrade:
                 values={'현금':str(self.engine.cash)+' KRW','전략':'기존 RSI/MACD/BB'},subject=','.join(self.tickers)))
 
     def notification_report(self):
-        # Only durable settled amounts; missing marks remain N/A.
         from datetime import datetime, timezone
-        orders = [o for o in self.engine.state['orders'].values() if o['status']=='settled']
-        sells = [o for o in orders if o['side']=='ask' and 'profit_amount' in o]
-        profits = [number(o['profit_amount']) for o in sells]
-        equity = self.engine.cash
-        for ticker, pos in self.engine.state['positions'].items():
-            quantity = number(pos['quantity'])
-            if quantity and not self.price_cache[ticker]:
-                equity = None
-                break
-            if quantity:
-                equity += quantity * number(self.price_cache[ticker][-1])
-        start = number(self.start_cash)
-        data = {'시작 자산':start, '종료 평가자산':equity, '현금':self.engine.cash,
-                '실현 손익':sum(profits, Decimal(0)) if sells else None,
-                '거래 횟수':len(orders),
-                '수수료 합계':sum((number(o['paid_fee']) for o in orders),Decimal(0)),
-                '승률':Decimal(sum(p>0 for p in profits))*100/len(profits) if profits else None,
-                '누적 수익률':(equity/start-1)*100 if equity is not None and start else None,
-                '보유 포지션': '; '.join(f'{t}: {p["quantity"]} 코인, 평균가 {p["avg_price"]} KRW/코인'
-                    for t,p in self.engine.state['positions'].items()) or '보유 없음'}
-        # Cost-basis accounting/reporting period has not been independently validated.
+        with self._mutex:
+            try:
+                verified = (self.engine.ready and not self.engine.halted
+                            and self.engine.store.load() == self.engine.state)
+            except Exception:
+                verified = False
+            data = report_metrics(self.engine.state, self.start_cash, self._notification_marks,
+                                  now=time.monotonic(), verified=verified)
         return format_report(data,event_id='report:'+datetime.now(timezone.utc).date().isoformat(),
                              mode='LIVE' if self.real_trading else 'PAPER')
 

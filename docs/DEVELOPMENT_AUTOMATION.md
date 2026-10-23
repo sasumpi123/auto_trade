@@ -75,3 +75,9 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 ## 영구 불변 원칙과 Slack
 
 매 작업 지침은 AGENTS.md, 상세 계약은 [PROJECT_INVARIANTS.md](PROJECT_INVARIANTS.md)를 따릅니다. Safety gate는 비활성·0원 정책을 정적으로 추가 검사하며 실제 과금/권한의 증명이 아닙니다. [SLACK_NOTIFICATIONS.md](SLACK_NOTIFICATIONS.md)의 기존 서비스/outbox는 기본 OFF입니다. 개발 이벤트는 Fake 포맷만 제공하며 observer/Work 이벤트를 Slack에 연결하지 않습니다. 현재 개발 PR 작성 권한을 운영 알림·무인 실행 승인으로 해석하지 않습니다.
+
+## P8 Cloud 세션 복구 / Slack 수치 점검
+
+[휴대폰 세션 복구 절차](P8_CLOUD_RESUME.md): `python -m automation.cloud_resume`가 P7 증거 수집을 재사용해 master/최근 PR/선택 PR exact head·base·CI·리뷰·병합을 재조회합니다. 오래된 검토는 무효이며 SQLite/영수증 소실 시 한도는 UNKNOWN_NOT_RESET입니다. 새 원장·초기화·재작업 실행은 제공하지 않습니다. 병합 PR의 PR-run 연결이 사라진 경우 과거 CI 메타데이터 관찰만 별도로 표시하며 P2/P4 gate를 통과시키지 않습니다.
+
+[Slack 지표 계약](SLACK_NOTIFICATIONS.md)의 확정/부분/물타기/재시작·수수료·손익·평가·누적/일간 구분을 검증합니다. `python -m utils.slack_preflight`는 토큰/SDK/config 실행 없이 기본 OFF 및 선택 outbox를 읽기 전용 점검합니다. enqueue는 전달 성공이 아닙니다. 실제 Slack/모델/자동 개발·게시·병합/거래/배포/스케줄은 계속 비활성입니다.

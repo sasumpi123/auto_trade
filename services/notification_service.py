@@ -7,10 +7,15 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from config import SLACK_BOT_TOKEN, SLACK_CHANNELS, SLACK_NOTIFICATIONS_ENABLED
 from utils.message_queue import MessageQueue
+from services.notification_metrics import confirmed
 
 _SECRET = re.compile(r'(?i)(xox[a-z]-\S+|xapp-\S+|gh[pousr]_\S+|github_pat_\S+|AKIA[A-Z0-9]{16}|[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|sk-\S+|bearer\s+\S+|(?:token|secret|password|api[_ -]?key|acc_key|sec_key)\s*[=:]|-----BEGIN|https?://|<[@!#])')
 class FormattedMessage(str):
     """Locally formatted allowlisted record, never raw exception/log data."""
+
+
+class ConfirmedFillMessage(FormattedMessage):
+    """Constructed by format_fill after the settlement-field checks."""
 
 
 KINDS = {'START', 'STOP', 'HALTED', 'RECOVERY_REQUIRED', 'STATUS', 'FILL', 'ORDER_UNKNOWN',
@@ -32,9 +37,9 @@ def metric(value, unit):
         return 'N/A (미집계)'
     try:
         n = Decimal(str(value))
-        if not n.is_finite():
+        if not n.is_finite() or abs(n.adjusted()) > 100:
             raise InvalidOperation
-        return f'{n} {unit}'
+        return f'{n:f} {unit}'
     except (InvalidOperation, ValueError):
         return 'N/A (미집계)'
 
@@ -46,24 +51,24 @@ def format_event(kind, *, event_id, mode='PAPER', subject='BOT', status='미확�
     if not isinstance(stamp, datetime) or stamp.tzinfo is None:
         raise ValueError('Timezone required')
     identity = hashlib.sha256(str(event_id).encode()).hexdigest()[:24]
-    lines = [f'{stamp.isoformat()} [{mode}] {kind} | {safe(subject)} | {status}', f'이벤트 ID: {identity}']
+    lines = [f'{stamp.isoformat()} [{mode}] {kind} | {safe(subject)} | {status}', f'이벤트 ID: {identity}', '전달 구분: 로컬 생성/enqueue는 Slack 전달 성공 아님']
     for key, value in (values or {}).items():
         lines.append(f'{safe(key)}: {safe(value)}')
     return FormattedMessage('\n'.join(lines))
 
 
 def format_fill(order, *, mode='PAPER'):
-    if order.get('status') != 'settled' or Decimal(str(order.get('executed_volume', 0))) <= 0:
+    if not confirmed(order):
         return format_event('ORDER_UNKNOWN', event_id=order.get('identifier', 'unknown'), mode=mode)
     values = {'방향': '매수' if order['side']=='bid' else '매도',
               '수량': metric(order.get('executed_volume'), '코인'),
               '평균 체결가': metric(order.get('average_fill_price'), 'KRW/코인'),
               '거래금액': metric(order.get('funds'), 'KRW'), '수수료': metric(order.get('paid_fee'), 'KRW'),
-              '실현 손익': metric(order.get('profit_amount'), 'KRW'),
-              '손익률': metric(order.get('profit_rate'), '%'),
+              '실현 손익': 'N/A (원가배분 미검증)',
+              '손익률': 'N/A (원가배분 미검증)',
               '전략/사유': next((tag for tag in ('물타기','손절','이익 실현','매수','매도') if tag in str(order.get('reason',''))), 'N/A (원문 비공개)'), '물타기': str(order.get('averaging', 'N/A'))}
-    return format_event('FILL', event_id=order['identifier'], mode=mode,
-                        subject=order['ticker'], status='성공', values=values)
+    return ConfirmedFillMessage(format_event('FILL', event_id=order['identifier'], mode=mode,
+                        subject=order['ticker'], status='성공', values=values))
 
 
 def format_report(data, *, event_id, mode='PAPER'):
@@ -73,6 +78,10 @@ def format_report(data, *, event_id, mode='PAPER'):
     values = {k: metric(data.get(k), u) for k,u in units.items()}
     values['보유 포지션'] = data.get('보유 포지션', 'N/A (미집계)')
     values['전략별 결과'] = data.get('전략별 결과', 'N/A (미집계)')
+    for key in ('집계 범위','검증 상태','전달 상태','승률 기준','손익 제한','평가 제한'):
+        if key in data: values[key] = data[key]
+    values['일간 손익'] = 'N/A (일간 경계 미집계)'
+    values['전달 구분'] = 'enqueue는 로컬 수락; Slack 전달 성공 아님'
     return format_event('REPORT', event_id=event_id, mode=mode, values=values)
 
 
@@ -94,6 +103,8 @@ class NotificationService:
             self.last_delivery = 'DURABLE_OUTBOX_REQUIRED'
             return False
         if channel_type not in self.channels:
+            return False
+        if '] FILL |' in str(message) and not isinstance(message, ConfirmedFillMessage):
             return False
         if isinstance(message, FormattedMessage) and any('] '+kind+' |' in message for kind in DEV_KINDS):
             return False  # Development events stay formatter/Fake-only.
@@ -159,6 +170,8 @@ class NotificationService:
         return state
 
     def send_event(self, kind, *, event_id, mode='PAPER', subject='BOT', status='미확인', values=None):
+        if kind == 'FILL':
+            raise ValueError('Use the confirmed-order formatter for fills')
         if kind in DEV_KINDS:
             raise ValueError('Development events are formatter/Fake only')
         channel = 'trades' if kind=='FILL' else 'reports' if kind=='REPORT' else 'errors' if kind in {'HALTED','RECOVERY_REQUIRED','ORDER_UNKNOWN','API_ERROR','DATA_ERROR','SAFETY_LIMIT','CONSECUTIVE_LOSSES'} else 'status'
