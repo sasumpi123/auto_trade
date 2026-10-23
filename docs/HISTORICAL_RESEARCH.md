@@ -57,3 +57,7 @@ CI는 네트워크를 사용하지 않는 가짜 공개 응답과 합성 데이�
 공식 문서: [분 캔들](https://docs.upbit.com/kr/reference/list-candles-minutes), [과거 캔들 수집 안내](https://docs.upbit.com/kr/docs/how-to-download-candle-data). 후속 연구: #7, 비용 모델 #5, 운영 bfill #4.
 
 프로토콜 해시는 UTF-8 텍스트 개행을 LF로 정규화한 뒤 계산합니다. Windows Git checkout의 CRLF 변환은 실험 내용 변경으로 취급하지 않으며, 공백·필드·값 변경은 여전히 해시 불일치로 차단합니다.
+
+## P11 후속 탐색 연구
+
+[P11_STRATEGY_RISK_RESEARCH.md](P11_STRATEGY_RISK_RESEARCH.md)는 기존 공개 train/validation만 재사용하는 위험관리 오버레이 비교입니다. P11에서는 전체 gzip/holdout 품질 재검사를 수행하지 않고 고정 개발 접두 행과 구간 해시만 검사합니다. 새로운 연구에는 `backtesting.risk_research`를 사용하며, 위 기존 historical evaluate 경로(전체 파일 로드)는 이번 미사용 holdout 보존 요구에 사용하지 않습니다. 공개 validation을 재사용한 결과는 독립 검증이 아닙니다. 운영 전략은 변경하지 않습니다.

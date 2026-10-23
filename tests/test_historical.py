@@ -10,6 +10,7 @@ import pandas as pd
 import requests
 
 from backtesting.collection import PublicCandles, quality_report, utc
+from backtesting.development_data import load_development
 from backtesting.data import demo_candles, dataset_hash, load_csv
 from backtesting.engine import BacktestConfig, BacktestEngine, CostModel
 from backtesting.historical import BuyHold, evaluate, load_protocol, split_frames, run
@@ -137,10 +138,8 @@ class HistoricalResearchTests(unittest.TestCase):
         self.assertEqual(len(report['datasets']), 8)
         for key, meta in manifest['datasets'].items():
             path = directory / 'data' / meta['snapshot']
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), meta['snapshot_sha256'])
-            frame = load_csv(path)
-            self.assertEqual(dataset_hash(frame), meta['quality']['dataset_sha256'])
-            development = frame.loc[frame.index < utc(protocol['validation_end'])]
+            development = load_development(path, protocol, int(key.rsplit('-',1)[1]), meta)
+            self.assertLess(development.index[-1], utc(protocol['validation_end']))
             quality = quality_report(development, int(key.rsplit('-', 1)[1]), protocol['start'], protocol['validation_end'])
             self.assertTrue(quality['passed'])
             self.assertEqual(quality['zero_volume_bars'], 0)
@@ -150,9 +149,9 @@ class HistoricalResearchTests(unittest.TestCase):
 
     def test_archived_btc_hour_primary_validation_metrics_reproduce_without_network(self):
         directory = Path(__file__).resolve().parents[1] / 'research/2026-10-21'
-        frame = load_csv(directory / 'data/KRW-BTC-60.csv.gz')
         protocol, _ = load_protocol()
-        development = frame.loc[frame.index < utc(protocol['validation_end'])]
+        manifest = json.loads((directory/'data/manifest.json').read_text(encoding='utf-8'))
+        development = load_development(directory/'data/KRW-BTC-60.csv.gz', protocol, 60, manifest['datasets']['KRW-BTC-60'])
         engine = BacktestEngine(BacktestConfig(CostModel(5, 5, 2), bar_seconds=3600))
         with patch('socket.socket.connect', side_effect=AssertionError('No network in CI')):
             result = engine.run(development, MACDStrategy(), evaluation_start=protocol['train_end'])

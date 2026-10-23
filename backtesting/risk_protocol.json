@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "study": "P11-A exploratory reuse of previously disclosed train/validation",
+  "base_protocol": "backtesting/protocol.json",
+  "splits": ["train", "validation"],
+  "overlays": ["signal_only", "take_profit_5", "stop_5", "take_profit_stop_5", "take_profit_average_once_5"],
+  "take_profit": "0.05",
+  "stop_loss": "0.05",
+  "averaging_fraction_of_position_notional": "0.5",
+  "max_averages_per_position": 1,
+  "risk_observation": "completed_close_before_signal_volume_cooldown; execute_next_open",
+  "threshold_cost_basis": "fee_exclusive_weighted_execution_price_like_operating_bot",
+  "averaging_budget": "min(cash, held_quantity * observed_close * 0.5); capped_all_in_at_next_open",
+  "selection": "none; all fixed hypotheses and costs reported; no independent-validation claim",
+  "portfolio": "single_asset_only; shared_cash_multi_asset_not_implemented",
+  "holdout": "no rows parsed, no indicators, no performance; gzip buffered byte isolation not guaranteed"
+}
