@@ -1,6 +1,7 @@
 """Bounded unauthenticated Upbit GETs only. No account/order/client credentials."""
 from decimal import Decimal, InvalidOperation
 import json
+from email.utils import parsedate_to_datetime
 import math
 import re
 import time
@@ -35,6 +36,8 @@ PUBLIC_ERROR_CODES = frozenset({
     'PUBLIC_RESPONSE_TOO_LARGE',
     'PUBLIC_STALE_CANDLE',
     'PUBLIC_STALE_TICKER',
+    'PUBLIC_RESPONSE_CLOCK_UNVERIFIED',
+    'PUBLIC_RANKING_EXPIRED',
     'PUBLIC_STOP_REQUESTED',
 })
 
@@ -88,10 +91,19 @@ class PublicMarketClient:
                     self.remaining();self.sleep(min(delay,self.remaining()))
             timeout = self.remaining()
             self.last_request = self.monotonic();self.calls += 1
+            response_started=self.monotonic();wall_started=self.clock()
             with self.session.get('https://api.upbit.com/v1/'+endpoint, params=params,
                     auth=PublicOnlyAuth(), timeout=timeout, allow_redirects=False, stream=True) as response:
                 if response.status_code == 429:raise PublicDataError('PUBLIC_RATE_LIMIT')
                 if response.status_code != 200:raise PublicDataError('PUBLIC_HTTP_ERROR')
+                # HTTP response generation is distinct from a market's last update.
+                # Never infer a fresh snapshot from one liquid market's timestamp.
+                try:
+                    server=parsedate_to_datetime(response.headers.get('Date',''))
+                    if server.tzinfo is None or abs(self.clock()-server.timestamp())>5:
+                        raise ValueError()
+                except Exception:
+                    raise PublicDataError('PUBLIC_RESPONSE_CLOCK_UNVERIFIED') from None
                 content=bytearray()
                 for chunk in response.iter_content(chunk_size=16384):
                     self.remaining();content.extend(chunk)
@@ -103,6 +115,9 @@ class PublicMarketClient:
                         obj[k]=v
                     return obj
                 result=json.loads(content,object_pairs_hook=unique,parse_constant=lambda _: (_ for _ in ()).throw(PublicDataError('PUBLIC_NONFINITE_JSON')))
+            elapsed=self.monotonic()-response_started
+            if elapsed<0 or elapsed>5 or abs((self.clock()-wall_started)-elapsed)>5 or abs(self.clock()-server.timestamp())>5:
+                raise PublicDataError('PUBLIC_RESPONSE_CLOCK_UNVERIFIED')
             if not isinstance(result,list) or not 1<=len(result)<=2000:
                 raise PublicDataError('PUBLIC_INVALID_RESPONSE')
             return result
@@ -123,7 +138,8 @@ class PublicMarketClient:
             codes.append(code)
         markets=[c for c in codes if MARKET.fullmatch(c)]
         if len(markets)<limit:raise PublicDataError('PUBLIC_INSUFFICIENT_MARKETS')
-        ranks={}
+        ranks={}; stamps={}
+        scan_started=self.monotonic(); wall_started=self.clock()
         for start in range(0,len(markets),100):
             batch=markets[start:start+100]
             rows=self.get('ticker',{'markets':','.join(batch)})
@@ -134,13 +150,26 @@ class PublicMarketClient:
                 if not isinstance(code,str) or code not in batch or code in seen:
                     raise PublicDataError('PUBLIC_DUPLICATE_OR_UNKNOWN_MARKET')
                 timestamp=row.get('timestamp')
-                if type(timestamp) is not int or not self.clock()*1000-300_000<=timestamp<=self.clock()*1000+5000:
+                if type(timestamp) is not int or timestamp<=0 or timestamp>self.clock()*1000+5000:
                     raise PublicDataError('PUBLIC_STALE_TICKER')
+                trade_stamp=row.get('trade_timestamp')
+                if type(trade_stamp) is not int or trade_stamp<=0 or trade_stamp>self.clock()*1000+5000:
+                    raise PublicDataError('PUBLIC_STALE_TICKER')
+                stamps[code]=(timestamp,trade_stamp)
                 positive(row.get('trade_price'))
                 ranks[code]=positive(row.get('acc_trade_price_24h'),zero=True)
                 seen.add(code)
             if seen!=set(batch):raise PublicDataError('PUBLIC_MISSING_MARKET')
-        return sorted(ranks,key=lambda c:(-ranks[c],c))[:limit]
+        # Rank the COMPLETE universe before applying freshness; do not filter old
+        # rows and silently substitute lower-volume markets for a stale winner.
+        selected=sorted(ranks,key=lambda c:(-ranks[c],c))[:limit]
+        elapsed=self.monotonic()-scan_started
+        if elapsed<0 or elapsed>30 or abs((self.clock()-wall_started)-elapsed)>5:
+            raise PublicDataError('PUBLIC_RANKING_EXPIRED')
+        if any(not self.clock()*1000-300_000<=stamp<=self.clock()*1000+5000
+               for c in selected for stamp in stamps[c]):
+            raise PublicDataError('PUBLIC_STALE_TICKER')
+        return selected
 
     def candles(self, market):
         if not isinstance(market,str) or not MARKET.fullmatch(market):

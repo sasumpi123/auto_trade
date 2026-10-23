@@ -1,5 +1,6 @@
 """Public 24h ranking contract and strict bounded GET transport, all offline."""
 import copy
+from email.utils import formatdate
 import json
 import time
 import unittest
@@ -16,7 +17,7 @@ class PublicMarketTests(unittest.TestCase):
         self.client=PublicMarketClient(clock=lambda:self.now,sleep=lambda _:None)
         self.addCleanup(self.client.close)
         self.registry=[{'market':c} for c in ('KRW-BTC','KRW-ETH','KRW-XRP','BTC-ETH')]
-        self.rows=[{'market':c,'trade_price':1,'acc_trade_price_24h':n,'timestamp':self.now*1000}
+        self.rows=[{'market':c,'trade_price':1,'acc_trade_price_24h':n,'timestamp':self.now*1000,'trade_timestamp':self.now*1000}
                    for c,n in [('KRW-BTC',10),('KRW-ETH',30),('KRW-XRP',20)]]
         self.client.get=Mock(side_effect=lambda endpoint,params:self.registry if endpoint=='market/all' else self.rows)
 
@@ -39,7 +40,7 @@ class PublicMarketTests(unittest.TestCase):
     def test_invalid_turnover_price_time_and_nonfinite_fail(self):
         for key,value in [('acc_trade_price_24h',None),('acc_trade_price_24h',-1),('acc_trade_price_24h','NaN'),
                           ('acc_trade_price_24h','1e999'),('trade_price',True),('trade_price',0),
-                          ('timestamp',self.now*1000-300001),('timestamp',self.now*1000+5001)]:
+                          ('timestamp',0),('timestamp',self.now*1000+5001)]:
             rows=copy.deepcopy(self.rows);rows[0][key]=value
             self.client.get=Mock(side_effect=[self.registry,rows])
             with self.subTest(key=key,value=value),self.assertRaises(PublicDataError):self.client.top_tickers(2)
@@ -54,7 +55,7 @@ class PublicMarketTests(unittest.TestCase):
         codes=['KRW-C'+str(i) for i in range(205)]
         def data(endpoint,params):
             if endpoint=='market/all':return [{'market':c} for c in codes]
-            return [{'market':c,'trade_price':1,'acc_trade_price_24h':int(c[5:]),'timestamp':self.now*1000}
+            return [{'market':c,'trade_price':1,'acc_trade_price_24h':int(c[5:]),'timestamp':self.now*1000,'trade_timestamp':self.now*1000}
                     for c in params['markets'].split(',')]
         self.client.get=Mock(side_effect=data)
         self.assertEqual(self.client.top_tickers(1),['KRW-C204'])
@@ -64,7 +65,8 @@ class PublicMarketTests(unittest.TestCase):
         for status,body in [(429,b'private-canary'),(403,b'private-canary'),(302,b'private-canary'),
                             (200,b'{private-canary'),(200,b'{}'),(200,b'['+b' '*2_000_000+b']')]:
             response=Mock();response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
-            response.status_code=status;response.iter_content.return_value=[body]
+            response.status_code=status;response.headers={'Date':formatdate(time.time(),usegmt=True)}
+            response.iter_content.return_value=[body]
             session=Mock();session.get.return_value=response
             c=PublicMarketClient(session=session)
             with self.subTest(status=status),self.assertRaises(PublicDataError) as caught:c.get('market/all',{})
