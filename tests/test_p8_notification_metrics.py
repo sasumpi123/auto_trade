@@ -211,3 +211,9 @@ class BotReportTests(unittest.TestCase):
         self.assertFalse(service.send_trade_alert(format_event('FILL',event_id='fake',status='성공')))
         self.assertEqual(q.db.execute('SELECT count(*) FROM messages').fetchone()[0],0)
         client.chat_postMessage.assert_not_called()
+
+    def test_legacy_status_profit_argument_is_not_evidence(self):
+        from services.notification_service import NotificationService
+        text=NotificationService().format_status_message('KRW-BTC',100,1000,1,999,{})
+        self.assertIn('수익률: N/A',text)
+        self.assertNotIn('999',text)

@@ -197,4 +197,4 @@ class NotificationService:
     def format_status_message(self, ticker, current_price, balance, coin_balance, total_profit, strategy_status):
         return format_event('STATUS', event_id='status:'+str(ticker), subject=ticker,
                             values={'현재가':metric(current_price,'KRW'), '현금':metric(balance,'KRW'),
-                                    '보유량':metric(coin_balance,'코인'), '수익률':metric(total_profit,'%')})
+                                    '보유량':metric(coin_balance,'코인'), '수익률':'N/A (레거시 성과근거 미검증)'})
