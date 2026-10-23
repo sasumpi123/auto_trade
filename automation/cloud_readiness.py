@@ -66,7 +66,8 @@ class GhReadOnly:
             raise VerificationPending('endpoint_not_allowed')
         suffix = path[len(prefix):]
         # Use P2's closed route language before delegating to gh.
-        if suffix not in ('/actions/permissions/workflow', '/installation'):
+        if suffix not in ('/actions/permissions/workflow', '/installation',
+                           '/pulls?state=all&sort=updated&direction=desc&per_page=5'):
             validator = GitHubREST(REPOSITORY, 'not-a-credential', send=lambda p,h: (200, {'content-type':'application/json'}, b'{}'))
             validator.get(suffix)
         return self._call(['--method', 'GET', path])

@@ -123,8 +123,8 @@ class Notifications(unittest.TestCase):
             self.assertNotEqual(safe(text),text)
 
     def test_fill_decimal_modes_sides(self):
-        order={'status':'settled','identifier':'safe','ticker':'KRW-BTC','side':'bid',
-            'executed_volume':'0.123456789','average_fill_price':'12345.6789','funds':'1524.15',
+        order={'status':'settled','exchange_state':'done','identifier':'safe','ticker':'KRW-BTC','side':'bid',
+            'executed_volume':'0.123456789','average_fill_price':'12345.6789','funds':str(Decimal('0.123456789')*Decimal('12345.6789')),
             'paid_fee':'0.761','reason':'손절','averaging':True}
         for mode in ('PAPER','LIVE'):
             out=format_fill(order,mode=mode)
@@ -166,7 +166,7 @@ class Notifications(unittest.TestCase):
             self.assertIn('+00:00',out); self.assertIn('PAPER',out);self.assertIn('미확인',out)
 
     def test_fill_same_id_new_timestamp_deduplicates(self):
-        order={'status':'settled','identifier':'order1','ticker':'KRW-BTC','side':'bid',
+        order={'status':'settled','exchange_state':'done','identifier':'order1','ticker':'KRW-BTC','side':'bid',
                'executed_volume':'1','average_fill_price':'2','funds':'2','paid_fee':'0'}
         self.assertTrue(self.service.send_trade_alert(format_fill(order)))
         self.assertFalse(self.service.send_trade_alert(format_fill(order)))
@@ -190,7 +190,7 @@ class Notifications(unittest.TestCase):
         self.client.chat_postMessage.assert_not_called()
 
     def test_raw_trade_reason_withheld(self):
-        order={'status':'settled','identifier':'order1','ticker':'KRW-BTC','side':'bid',
+        order={'status':'settled','exchange_state':'done','identifier':'order1','ticker':'KRW-BTC','side':'bid',
                'executed_volume':'1','average_fill_price':'2','funds':'2','paid_fee':'0',
                'reason':'private-person-account'}
         self.assertNotIn('private-person-account',format_fill(order))
