@@ -279,7 +279,7 @@ class AutoTrade:
                 verified = False
             data = report_metrics(self.engine.state, self.start_cash, self._notification_marks,
                                   now=time.monotonic(), verified=verified)
-        return format_report(data,event_id='report:'+datetime.now(timezone.utc).date().isoformat(),
+        return format_report(data,event_id='report:'+data.get('집계 날짜','UNVERIFIED'),
                              mode='LIVE' if self.real_trading else 'PAPER')
 
     def _record_trade(self, ticker):

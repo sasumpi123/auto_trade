@@ -142,6 +142,8 @@ class Notifications(unittest.TestCase):
             self.assertIn(key,out)
         self.assertIn('N/A',out)
         self.assertNotIn('0 %',out)
+        self.assertIn('필수 증거 없음',out)
+        self.assertNotIn('이동평균 순원가 검증',out)
 
     def test_fake_development_format_only(self):
         for kind in ('PR_CREATED','CI_RESULT','WAIT_REVIEW','CHANGES_REQUESTED','TEST_FAILED','DEVELOPMENT_HALTED','MERGED'):

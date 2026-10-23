@@ -1,6 +1,8 @@
 import copy
 from decimal import Decimal as D
 import unittest
+from itertools import count
+_SEQUENCE=count(1700000000)
 from services.notification_metrics import report_metrics, confirmed
 from services.notification_service import format_fill, format_report
 
@@ -9,7 +11,7 @@ def order(id,side,q,f,fee='0',profit=None,avg=None,**extra):
     value={'identifier':id,'status':'settled','exchange_state':'done','ticker':'KRW-BTC',
         'side':side,'executed_volume':q,'funds':f,'paid_fee':fee,
         'average_fill_price':avg if avg is not None else str(D(f)/D(q)) if D(q) else None,
-        'averaging':False}
+        'averaging':False,'settled_at':next(_SEQUENCE)}
     if profit is not None:value['profit_amount']=profit
     value.update(extra);return value
 
@@ -67,8 +69,9 @@ class MetricsTests(unittest.TestCase):
         rows=[order('b','bid','1','100',fee='1'),order('s','ask','0.5','60',fee='0.5',profit='9.5')]
         report=self.metrics(self.state(rows,'958.5','0.5','100'),marks={'KRW-BTC':(D(110),99)})
         self.assertEqual(report['수수료 합계'],D('1.5'))
-        self.assertNotIn('실현 손익',report);self.assertNotIn('승률',report)
-        self.assertNotIn('평가 손익',report)
+        self.assertEqual(report['실현 손익'],D('9'))
+        self.assertEqual(report['승률'],D('100'))
+        self.assertEqual(report['평가 손익'],D('4.5'))
         self.assertEqual(report['종료 평가자산'],D('1013.5'))
         self.assertEqual(report['누적 수익률'],D('1.35'))
         self.assertIn('N/A',format_fill(rows[1]))
