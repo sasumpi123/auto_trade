@@ -87,9 +87,9 @@ def format_report(data, *, event_id, mode='PAPER'):
     for key in ('보유 포지션','전략별 결과','사유별 결과'):
         value=data.get(key,'N/A (미집계)')
         values[key]=value if len(str(value))<=160 else 'N/A (Slack 요약 한도 초과; 구조화 보고서에서 확인)'
-    values['검증 상태']=data.get('검증 상태','N/A')+'; '+data.get('정산 사유',data.get('평가 제한','이동평균 순원가 검증'))
+    values['검증 상태']=data.get('검증 상태','N/A')+'; '+data.get('정산 사유',data.get('평가 제한','이동평균 순원가 검증' if data.get('검증 상태')=='원장 일치' else '필수 증거 없음'))
     values['집계 범위']=data.get('집계 범위','N/A (미검증)')
-    values['미집계']='일간 총수익률·평가손익·오류/중단: N/A; 전략 ID 없는 성과 귀속: N/A'
+    values['미집계']='일간 총수익률·일간 평가손익·오류/중단: N/A; 전략 ID 없는 성과 귀속: N/A'
     return format_event('REPORT',event_id=event_id,mode=mode,values=values)
 
 
