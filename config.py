@@ -23,41 +23,10 @@ SLACK_CHANNELS = {
     'errors': 'trading-errors'      # 에러 알림
 }
 
-def get_top_tickers(limit=10):
-    """거래대금 상위 limit개 종목 조회"""
-    try:
-        # 원화 마켓의 모든 티커 조회
-        krw_tickers = pyupbit.get_tickers(fiat="KRW")
-        
-        # 24시간 거래대금 조회
-        all_volumes = []
-        for ticker in krw_tickers:
-            try:
-                # 24시간 캔들 조회
-                df = pyupbit.get_ohlcv(ticker, interval="day", count=1)
-                if df is not None and not df.empty:
-                    volume = df['value'].iloc[-1]  # 거래대금
-                    all_volumes.append((ticker, volume))
-                else:
-                    raise ValueError(f'{ticker}: missing discovery candle')
-            except Exception as e:
-                logging.warning(f"{ticker} 거래대금 조회 실패: {str(e)}")
-                raise
-        
-        # 거래대금 기준 정렬
-        all_volumes.sort(key=lambda x: x[1], reverse=True)
-        
-        # 상위 limit개 티커 선택
-        top_tickers = [item[0] for item in all_volumes[:limit]]
-        
-        logging.info(f"거래대금 상위 {limit}개 종목 선정 완료: {', '.join(top_tickers)}")
-        if not top_tickers:
-            raise ValueError('No valid ticker data')
-        return top_tickers
-        
-    except Exception as e:
-        logging.error(f"거래대금 상위 종목 조회 실패: {str(e)}")
-        raise
+def get_top_tickers(limit=10, *, client=None):
+    """Explicit public rolling-24h turnover discovery; no per-market day candles."""
+    from services.public_market import get_top_tickers as discover
+    return discover(limit, client=client)
 
 # 거래 대상 코인 (거래대금 상위 10개)
 # Network discovery is explicit at startup, never during module import.

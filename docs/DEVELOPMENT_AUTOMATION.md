@@ -93,3 +93,5 @@ PR #12 observer는 승인 Issue 계약이 없는 일반 PR에서 발생하는 �
 ## P10-A MacBook 오프라인 준비
 
 [MacBook 체크리스트](P10_MAC_PREFLIGHT.md)와 [백업·복구](P10_BACKUP_RECOVERY.md)를 추가했습니다. 기존 PAPER 상태 잠금의 OS 방식을 재사용해 outbox 연결 전부터 close까지 단일 소유권을 유지하고 SENDING 복구와 전송 중 종료를 보호합니다. `python -m ops.local_preflight`는 외부 API/설정 import/상태 변경 없이 진단하며 실행 허가를 반환하지 않습니다. `python -m ops.paper_rehearsal`은 기존 P9-B 테스트와 최소 추가 회귀 테스트를 임시 데이터로 실행해 비밀 없는 요약을 출력합니다. MacBook·실제 Slack·네트워크 운영은 미검증, 자동 실행/게시/병합/Slack/launchd는 계속 비활성입니다. 공동 롤백·영수증 소실은 HALTED/UNKNOWN_NOT_RESET 유지입니다.
+
+P10-C 공개 데이터 PAPER 관찰 도구의 offline 기본값, 기존 원장만 재사용하는 명시적 시간 제한 실행, 순위 조회 변경 및 SSH 종료/복구 절차는 [P10C_PAPER_OPERATIONS.md](P10C_PAPER_OPERATIONS.md)를 따릅니다. 실제 주문/Slack/launchd/자동화는 활성화하지 않습니다.

@@ -616,8 +616,7 @@ class SafetyTests(unittest.TestCase):
 
     def test_ticker_discovery_failure_stops_startup(self):
         import config
-        with patch.object(config.pyupbit, 'get_tickers', return_value=[TICKER]), \
-             patch.object(config.pyupbit, 'get_ohlcv', return_value=None):
+        with patch('services.public_market.PublicMarketClient.top_tickers', side_effect=ValueError('public discovery failed')):
             with self.assertRaises(ValueError):
                 config.get_top_tickers()
 
