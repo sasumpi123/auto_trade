@@ -1,8 +1,8 @@
 """P8 read-only Cloud session summary. Never creates/resets a journal or starts work."""
 import json
 from .handoff_common import (CachedREST, HandoffReader, Parser, REPOSITORY, REPOSITORY_ID,
-    SHA, differences, fingerprint, load_policy, previous_snapshot, require, render, halted)
-from .handoff_journal import HandoffJournal
+    SHA, differences, fingerprint, load_policy, previous_snapshot, require, render, halted, read_json, validate_snapshot)
+from .handoff_journal import HandoffJournal, compare_recovery_summary
 
 RECENT='/pulls?state=all&sort=updated&direction=desc&per_page=5'
 
@@ -68,7 +68,7 @@ def historical_ci(reader, report):
     return second
 
 
-def resume(reader, *, pr=None, previous=None, journal_path=None):
+def resume(reader, *, pr=None, previous=None, journal_path=None, recovery_evidence=None):
     before=recent(reader.transport)
     if pr is None:
         require(before,'no_recent_pr')
@@ -86,14 +86,29 @@ def resume(reader, *, pr=None, previous=None, journal_path=None):
     # A valid local copy is evidence of its contents, NOT durable Cloud continuity.
     history={'status':'BLOCKED','reason':'LOCAL_RECEIPTS_MISSING_OR_UNVERIFIED','issued_count':None,
              'remaining_allowance':'UNKNOWN_NOT_RESET','initialization_permitted':False,
-             'automatic_rework_enabled':False}
+             'automatic_rework_enabled':False,'rework_state':'HALTED',
+             'rollback_resistance':'UNPROVEN','evidence_comparison':'NOT_PROVIDED'}
     if journal_path:
         try:
             journal=HandoffJournal(journal_path,reader.policy)
-            with journal._transaction() as (_,state):
-                count=sum(row['pr']==pr for row in state['requests'])
-            history.update(status='LOCAL_COPY_VALID_CONTINUITY_UNPROVEN',reason='CLOUD_DURABILITY_NOT_PROVEN',issued_count=count)
+            summary=journal.recovery_summary()
+            count=sum(row['pr']==pr for row in summary['receipts'])
+            history.update(status='LOCAL_COPY_VALID_CONTINUITY_UNPROVEN',reason='CLOUD_DURABILITY_NOT_PROVEN',issued_count=count,recovery_evidence=summary)
+            heads=[r['head'] for r in summary['receipts'] if r['pr']==pr]
+            history['receipt_head_relation']=('NO_RECEIPTS' if not heads else
+                'CURRENT_HEAD_RECORDED' if heads[-1]==report['head'] else 'OTHER_HEAD_OR_STALE_REQUERY_REQUIRED')
         except Exception:pass  # No original paths, exception text, raw DB data.
+    if recovery_evidence:
+        try:
+            saved=read_json(recovery_evidence)
+            require(type(saved) is dict and saved.get('kind')=='p7-review-handoff'
+                    and saved.get('snapshot_id')==fingerprint(validate_snapshot(saved.get('snapshot'),pr)),
+                    'recovery_evidence_unverified')  # bind the single read, not an authority
+            require(history.get('recovery_evidence') is not None,'local_journal_unverified')
+            history['evidence_comparison']=compare_recovery_summary(saved['rework_history']['recovery_evidence'],history['recovery_evidence'])
+        except Exception:
+            history.update(status='BLOCKED',reason='RECOVERY_EVIDENCE_MISMATCH_OR_UNVERIFIED',
+                           evidence_comparison='BLOCKED_UNVERIFIED')
     report['rework_history']=history
     report['commands']=[f'python -m automation.review_handoff --pr {pr} --format prompt',
                         f'python -m automation.cloud_resume --pr {pr} --format markdown']
@@ -118,10 +133,11 @@ def main():
     parser.add_argument('--pr',type=int)
     parser.add_argument('--previous')
     parser.add_argument('--journal')
+    parser.add_argument('--recovery-evidence',help='Earlier metadata-only cloud_resume JSON; not a trusted witness')
     parser.add_argument('--format',choices=('json','markdown','prompt'),default='markdown')
     args=parser.parse_args()
     try:
-        report=resume(HandoffReader(load_policy()),pr=args.pr,previous=args.previous,journal_path=args.journal)
+        report=resume(HandoffReader(load_policy()),pr=args.pr,previous=args.previous,journal_path=args.journal,recovery_evidence=args.recovery_evidence)
     except Exception as error:
         report=halted(error)
     if args.format=='json' or report['workflow_state']=='HALTED':
@@ -133,10 +149,10 @@ def main():
             print(f'최근 PR #{item["pr"]}: {item["state"]}; head {item["head"]}; base {item["base"]}')
         if 'historical_ci' in report:
             print('병합/닫힘 PR의 과거 CI 관찰 (P2 gate 대체 아님): '+json.dumps(report['historical_ci'],ensure_ascii=False))
-        print('재작업 한도: UNKNOWN_NOT_RESET; 새 초기화 금지. 유효한 로컬 복사본도 Cloud 연속성 증명 아님.')
+        print('재작업 상태: HALTED. 재작업 한도: UNKNOWN_NOT_RESET; 새 초기화 금지. 유효한 로컬 복사본도 Cloud 연속성 증명 아님.')
         print(report['next_action'])
         print('\n복사할 명령:\n```text\n'+'\n'.join(report['commands'])+'\n```')
-    return 2 if report['workflow_state']=='HALTED' else 0
+    return 2 if (report['workflow_state']=='HALTED' or args.journal or args.recovery_evidence) else 0
 
 
 if __name__=='__main__':

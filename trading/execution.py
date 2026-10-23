@@ -183,12 +183,12 @@ class ExecutionEngine:
         self.halted = True
         self.ready = False
         self.state['halt_reason'] = str(reason)
-        logging.error('Trading halted: %s', reason)
+        logging.error('Trading halted; raw reason withheld. Inspect the private journal before restart.')
         try:
             if self.store._lock is not None and self._journal_writable:
                 self.store.save(self.state)
         except Exception:
-            logging.exception('Could not persist halt; last durable journal must be reconciled')
+            logging.error('Could not persist halt; last durable journal must be reconciled; raw error withheld.')
 
     def close(self):
         with self._mutex:

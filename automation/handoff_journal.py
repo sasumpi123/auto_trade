@@ -104,6 +104,13 @@ class HandoffJournal:
         finally:
             if db is not None:db.rollback();db.close()
 
+    def recovery_summary(self):
+        """Metadata only, no feedback/body/path/auth data and no execution grant."""
+        with self._transaction() as (_,state):
+            return {'version':1,'epoch':state['epoch'],'revision':state['revision'],
+                    'policy':state['policy'],'state_digest':fingerprint(state),
+                    'receipts':[{k:r[k] for k in ('pr','head','receipt')} for r in state['requests']]}
+
     def issue(self,pr,head,feedback,snapshot):
         require(type(pr) is int and pr>0 and SHA.fullmatch(head) and DIGEST.fullmatch(feedback) and DIGEST.fullmatch(snapshot),'local_journal_unverified')
         with self._transaction() as (db,state):
@@ -120,3 +127,29 @@ class HandoffJournal:
             # Other issuers block on SQLite until both checkpoint and DB commit finish.
             self._seal(state)
             return {'duplicate':False,'receipt':receipt,'issued_count':len(previous)+1}
+
+
+def compare_recovery_summary(previous, current):
+    """User-retained evidence can reveal rollback, but is NOT a trusted witness."""
+    from uuid import UUID
+    for item in (previous,current):
+        require(type(item) is dict and set(item)=={'version','epoch','revision','policy','state_digest','receipts'}
+                and type(item['version']) is int and item['version']==1
+                and type(item['revision']) is int and item['revision']>=0
+                and type(item['receipts']) is list and item['revision']==len(item['receipts'])<=10000,
+                'recovery_evidence_unverified')
+        require(str(UUID(item['epoch']))==item['epoch'] and all(type(item[k]) is str and DIGEST.fullmatch(item[k]) for k in ('policy','state_digest')),
+                'recovery_evidence_unverified')
+        seen=set()
+        for row in item['receipts']:
+            require(type(row) is dict and set(row)=={'pr','head','receipt'} and type(row['pr']) is int and row['pr']>0
+                    and type(row['head']) is str and SHA.fullmatch(row['head'])
+                    and type(row['receipt']) is str and DIGEST.fullmatch(row['receipt'])
+                    and row['receipt'] not in seen,'recovery_evidence_unverified')
+            seen.add(row['receipt'])
+    require(previous['epoch']==current['epoch'] and previous['policy']==current['policy']
+            and previous['revision']<=current['revision']
+            and previous['receipts']==current['receipts'][:previous['revision']], 'recovery_rollback_or_epoch_mismatch')
+    if previous['revision']==current['revision']:
+        require(previous['state_digest']==current['state_digest'],'recovery_rollback_or_epoch_mismatch')
+    return 'LOCAL_PREFIX_MATCH_NOT_TRUSTED_WITNESS'
