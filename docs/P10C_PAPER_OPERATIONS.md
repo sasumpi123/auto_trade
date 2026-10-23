@@ -78,3 +78,5 @@ SSH가 끊겼으면 새 SSH에서 먼저 PID/comm 및 해당 원장의 읽기 �
 오프라인 Fake GET/캔들/스트림, 실제 PAPER 엔진·JSON 원장·OS 잠금으로 일괄 순위, 누락/중복/429/잘못된 시각/수치, 정상 거래·종료·재시작, 기존 보유 구독, 중복 소유자·손상/미확정/UNKNOWN/HALTED/저장 오류, 기본 CLI 무네트워크/미초기화, Ctrl+C 협력 종료·시간 초과 강제 종료를 검증한다. 기존 전략 함수와 adapter의 지표·신호 동일성도 검사한다. 기존 전체 테스트/세 플랫폼 Python3.12/Safety gate 결과는 PR exact head/run에 기록한다. 연구 holdout/기존 정책·복구 한도는 변경하지 않는다.
 
 Mac 실기기에서 새 버전의 API 응답/거래대금 순위, 인증 없는 공개 호출, 10종목 초기 요청 rate limit, Ctrl+C/시간 제한/SSH 단절/절전·재부팅 후 원장 대사 및 잠금 해제를 추가 확인해야 한다. 사용자가 보고한 이전 버전 성공을 새 CLI 검증 성공으로 옮기지 않는다. 실제 주문·인증 계좌·Slack·launchd·유료 서비스는 계속 미승인/OFF다.
+
+P10-D 변경: 순위 밖 오래된 ticker 때문에 전체를 차단하던 검사를 수정했고, 종목 선택을 기존 원장 잠금 아래 엔진 시작 전으로 옮겼다. HTTP 응답/상위 N freshness와 분봉 공백의 보수적 차단, 기존 HALTED 원장의 읽기 전용 대사 및 별도 복구 승인 경계는 [P10D_FRESHNESS_RECOVERY](P10D_FRESHNESS_RECOVERY.md)를 따른다. 이전 HALTED 원장을 이 변경으로 자동 해제하지 않는다.

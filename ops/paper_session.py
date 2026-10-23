@@ -31,10 +31,10 @@ class ExistingPaperStore(StateStore):
 
     Never creates a database, state file or lock, even for a missing original path.
     """
-    def __init__(self,path,initial_cash):
+    def __init__(self,path,initial_cash,*,prepare=None):
         # Check original alias before StateStore.resolve can hide a symlink.
         _private(path,{'.json'})
-        super().__init__(path);self.initial_cash=initial_cash
+        super().__init__(path);self.initial_cash=initial_cash;self.prepare=prepare;self.preparation_snapshot=None
 
     def acquire(self):
         if self._lock is not None:raise ValueError('PAPER_ALREADY_OPEN')
@@ -50,7 +50,10 @@ class ExistingPaperStore(StateStore):
                 raise ValueError('PAPER_LOCK_UNVERIFIED')
             if os.name=='posix' and info.st_uid!=os.getuid():raise ValueError('PAPER_LOCK_UNVERIFIED')
             lock_handle(handle,initialize=False)
-            validate_state(_json(p.read_text(encoding='utf-8')),p,self.initial_cash)
+            saved=validate_state(_json(p.read_text(encoding='utf-8')),p,self.initial_cash)
+            if self.prepare is not None:
+                self.preparation_snapshot=state_summary(saved)
+                self.prepare(saved)  # Lock held; engine has not loaded/saved/opened yet.
         except Exception:
             handle.close();raise
         self._lock=handle
@@ -130,16 +133,20 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         factory=analyzer_factory or public_analyzer_factory(client)
         bot=AutoTrade(tickers=['KRW-BTC'],state_path=p,real_trading=False,broker=None,
                       notification=None,analyzer_factory=factory)
-        bot.engine.store=ExistingPaperStore(p,START_CASH)
+        selected=[]
+        def prepare(saved):
+            candidates=list(tickers) if tickers is not None else client.top_tickers(top)
+            if (not candidates or len(candidates)>100
+                    or any(not isinstance(t,str) or not MARKET.fullmatch(t) for t in candidates)
+                    or len(set(candidates))!=len(candidates)):
+                raise ValueError('PAPER_INVALID_MARKETS')
+            candidates+=sorted(t for t,pos in saved['positions'].items()
+                               if Decimal(pos['quantity'])>0 and t not in candidates)
+            if len(candidates)>100:raise ValueError('PAPER_TOO_MANY_HELD_MARKETS')
+            selected.extend(candidates)
+        bot.engine.store=ExistingPaperStore(p,START_CASH,prepare=prepare)
         bot.initialize()
         emit({'status':'STARTING',**state_summary(bot.engine.state)})
-        selected=list(tickers) if tickers is not None else client.top_tickers(top)
-        if (not selected or len(selected)>100 or len(set(selected))!=len(selected)
-                or any(not isinstance(t,str) or not MARKET.fullmatch(t) for t in selected)):
-            raise ValueError('PAPER_INVALID_MARKETS')
-        selected+=sorted(t for t,pos in bot.engine.state['positions'].items()
-                         if Decimal(pos['quantity'])>0 and t not in selected)
-        if len(selected)>100:raise ValueError('PAPER_TOO_MANY_HELD_MARKETS')
         bot.tickers=selected;bot.analyzers={t:factory(t) for t in selected}
         bot.performance_analyzer.tickers=selected
         for t,saved in bot.engine.state['signals'].items():
@@ -202,7 +209,8 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             try:stream.close()
             except Exception:status='HALTED';reason='STREAM_CLOSE_UNCONFIRMED'
         result={'status':status,'reason':reason,'post_validation':'UNVERIFIED',
-                'network_enabled':True,'execution_authorized':False}
+                'network_enabled':True,'execution_authorized':False,
+                'engine_started':bool(bot is not None and bot._initialized)}
         if bot is not None and bot.engine.ready:
             try:
                 saved=_json(p.read_text(encoding='utf-8'))
@@ -216,6 +224,10 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             result.update(state_summary(bot.engine.state,counts,last))
             bot.stop()
         elif bot is not None:
+            snapshot=getattr(bot.engine.store,'preparation_snapshot',None)
+            if snapshot is not None:
+                result.update(snapshot)
+                result['ledger_snapshot']='VERIFIED_BEFORE_DISCOVERY_ONLY'
             bot.stop()
         try:client.close()
         except Exception:result['status']='HALTED'
