@@ -16,6 +16,7 @@ from ops.paper_manual_recovery import initial_cash, exclusive_write
 from ops.paper_recovery_diagnostic import SafeParser
 from ops.paper_session import ExistingPaperStore, validate_state, offline_report, public_analyzer_factory
 from services.public_market import PublicDataError, PUBLIC_ERROR_CODES
+from services.realtime_activity import ACTIVITY_ERRORS
 from trading.execution import ExecutionEngine
 from trading.state_store import StateStore
 from utils.process_lock import lock_handle
@@ -207,7 +208,7 @@ def finish(value,token,result):
         leaf=result.get('last_snapshot') or result
         known={'PAPER_STALE_TICK','PAPER_CLOCK_DISCONTINUITY','PAPER_STREAM_TIMEOUT','PAPER_MARKET_STALE',
                'PAPER_INVALID_TICK','SESSION_FAILED','STREAM_CLOSE_UNCONFIRMED','WORKER_FAILED',
-               'PAPER_POST_VALIDATION_FAILURE','PUBLIC_CLIENT_CLOSE_UNCONFIRMED'} | PUBLIC_ERROR_CODES
+               'PAPER_POST_VALIDATION_FAILURE','PUBLIC_CLIENT_CLOSE_UNCONFIRMED'} | PUBLIC_ERROR_CODES | ACTIVITY_ERRORS
         reason=leaf.get('reason') if leaf.get('status')=='HALTED' and leaf.get('reason') in known else 'UNCONFIRMED_SESSION_NO_RESTART'
         return {'status':'HALTED','reason':reason,'session_finalization':'HALTED_NO_RESTART',
                 'supervisor_reason':result.get('supervisor_reason'),'forced_termination':result.get('forced_termination',False),
@@ -231,8 +232,10 @@ def inspect_experiment(value):
     return result
 
 
-def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None):
+def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None,*,activity_check=None):
     eligible=options.get('eligible_top');limit=options.get('candidate_limit')
+    replace=options.get('select_realtime_active') is True
+    require(not replace or (eligible is not None and activity_check is not None),'SELECTION_LIMIT_INVALID')
     wanted=eligible if eligible is not None else (len(tickers) if tickers else top)
     require(type(wanted) is int and 1<=wanted<=MAX_CANDIDATES,'SELECTION_LIMIT_INVALID')
     if eligible is not None:require(type(limit) is int and wanted<=limit<=MAX_CANDIDATES,'CANDIDATE_LIMIT_INVALID')
@@ -265,9 +268,10 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None)
                 continue
             remember(t,frames[t])
             analyzers[t]=factory(t);analyzers[t].update_data();report['selected'].append(t)
-            if eligible is not None and len(report['selected'])==wanted:break
+            if eligible is not None and len(report['selected'])==wanted and not replace:break
         if eligible is None and gaps:raise PublicDataError('PUBLIC_CANDLE_GAP')
-        require(len(report['selected'])==wanted,'INSUFFICIENT_CONTIGUOUS_CANDIDATES')
+        require(len(report['selected'])>=wanted if replace else len(report['selected'])==wanted,'INSUFFICIENT_CONTIGUOUS_CANDIDATES')
+        report['candle_eligible_candidates']=report['selected'].copy()
         held=sorted(t for t,v in saved['positions'].items() if Decimal(v['quantity'])>0)
         require(len(set(held)|set(report['selected']))<=MAX_CANDIDATES,'HELD_MARKET_LIMIT')
         for t in held:
@@ -282,6 +286,10 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None)
             remember(t,frames[t])
             analyzers[t]=factory(t);analyzers[t].update_data()
             report['selected'].append(t);report['held_added'].append(t)
+        if activity_check is not None:
+            report['mode']=('CONTIGUOUS_CANDLES_AND_REALTIME_ACTIVITY_ELIGIBLE' if replace else report['mode']+'_REQUIRE_REALTIME')
+            report['selected']=activity_check(report['selected'].copy(),held,wanted,replace,report)
+            analyzers={t:analyzers[t] for t in report['selected']}
         current_wall=client.clock();elapsed=client.monotonic()-started_mono
         if elapsed<0 or abs((current_wall-started_wall)-elapsed)>5:
             raise PublicDataError('PUBLIC_RESPONSE_CLOCK_UNVERIFIED')
@@ -290,7 +298,8 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None)
     except Exception:
         emit({'status':'PREPARATION_FAILED','account_scope':SCOPE,'selection':report,'engine_started':False})
         raise
-    report['final_subscription']=report['selected'].copy()
+    report['final_strategy_markets']=report['selected'].copy()
+    report['final_subscription']=report.get('wire_subscription',report['selected']).copy()
     emit({'status':'DATA_PREPARED','account_scope':SCOPE,'selection':report,'engine_started':False})
     return report['selected'],analyzers
 
@@ -305,10 +314,12 @@ def main(argv=None):
     select=parser.add_mutually_exclusive_group()
     select.add_argument('--top',type=int);select.add_argument('--tickers',nargs='+');select.add_argument('--eligible-top',type=int)
     parser.add_argument('--candidate-limit',type=int)
+    parser.add_argument('--observe-realtime-seconds',type=int)
+    parser.add_argument('--select-realtime-active',action='store_true')
     args=parser.parse_args(argv)
     def emit(r):print(json.dumps({'account_scope':SCOPE,**r},ensure_ascii=False,sort_keys=True),flush=True)
     if not args.connect_public:
-        if any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit)):
+        if args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
             parser.error('network options require explicit connection')
         r=create(args.directory) if args.create else inspect_experiment(args.directory)
         emit(r);return 0 if r['status']=='CREATED_NEW_INDEPENDENT_EXPERIMENT' else 2
@@ -317,13 +328,17 @@ def main(argv=None):
     if args.eligible_top is not None:
         if args.candidate_limit is None or not 1<=args.eligible_top<=args.candidate_limit<=MAX_CANDIDATES:parser.error('invalid candidates')
     elif args.candidate_limit is not None:parser.error('candidate limit only for explicit eligibility mode')
+    if args.observe_realtime_seconds is not None and not 1<=args.observe_realtime_seconds<=60:parser.error('bounded observation required')
+    if args.select_realtime_active and (args.eligible_top is None or args.observe_realtime_seconds is None):parser.error('explicit activity eligibility required')
+    if args.observe_realtime_seconds is not None and args.seconds<args.observe_realtime_seconds+5:parser.error('observation and startup must fit duration')
     from services.public_market import MARKET
     if args.tickers is not None and (not 1<=len(args.tickers)<=MAX_CANDIDATES or len(set(args.tickers))!=len(args.tickers)
                                     or any(not MARKET.fullmatch(t) for t in args.tickers)):parser.error('invalid markets')
     try:
         from ops.paper_watch import supervise,_worker
         p=directory(args.directory);token=begin(p)
-        options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit}
+        options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit,
+                 'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active}
         result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
                          worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3')
         terminal=finish(p,token,result);emit(terminal)

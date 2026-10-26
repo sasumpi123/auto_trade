@@ -72,7 +72,7 @@ class TickTiming:
         for t,at in self.progress.items():
             if mono-at>=60:self.fail('MARKET_IDLE',t,idle_ms=numeric((mono-at)*1000))
 
-    def observe(self,data,wall,mono):
+    def observe(self,data,wall,mono,*,check_liveness=True):
         self.received=min(MAX_COUNTER,self.received+1)
         if (not isinstance(data,dict) or data.get('type')!='ticker'
                 or not isinstance(data.get('code'),str) or data['code'] not in self.markets):
@@ -94,7 +94,7 @@ class TickTiming:
         else:self.progress[t]=mono;self.last_progress=mono
         self.previous[t]=stamp
         # Equal timestamps keep the legacy acceptance rule, but cannot extend liveness.
-        self.idle(wall,mono)
+        if check_liveness:self.idle(wall,mono)
         self.increment(m,'timing_accepted');self.accepted=min(MAX_COUNTER,self.accepted+1)
         return t
 

@@ -7,7 +7,7 @@ import time
 
 from ops.paper_recovery_diagnostic import SafeParser
 from services.public_market import MARKET, positive, PublicDataError, PUBLIC_ERROR_CODES
-from services.tick_timing import TickTiming, TickTimingError
+from services.tick_timing import TickTiming, TickTimingError, numeric
 
 MAX_MESSAGES=100_000
 MAX_OUTPUT_BYTES=131_072
@@ -19,6 +19,7 @@ class DiagnosticLimit(ValueError):pass
 def monitor(tickers,seconds,*,stream_factory,stopped,wall=time.time,monotonic=time.monotonic):
     start=monotonic();start_wall=wall();deadline=start+seconds;wall_deadline=start_wall+seconds
     stream=None;guard=None;cleanup_error=None;validated=0;status='HALTED';reason='PUBLIC_DIAGNOSTIC_FAILED'
+    receipts={t:{'labeled_realtime':0,'snapshot':0,'unknown_type':0,'first_receive_ms':None,'last_receive':None} for t in tickers}
     def stop():return stopped() or monotonic()>=deadline or wall()>=wall_deadline
     try:
         stream=stream_factory(tickers);stream.connect()
@@ -29,6 +30,12 @@ def monitor(tickers,seconds,*,stream_factory,stopped,wall=time.time,monotonic=ti
                 if stop():break
                 guard.idle(wall(),monotonic());continue
             if stop():break
+            if isinstance(data,dict) and isinstance(data.get('code'),str) and data['code'] in receipts:
+                receipt=receipts[data['code']];now=monotonic()
+                if receipt['first_receive_ms'] is None:receipt['first_receive_ms']=numeric((now-start)*1000)
+                receipt['last_receive']=now
+                kind=data.get('stream_type');key='labeled_realtime' if kind=='REALTIME' else 'snapshot' if kind=='SNAPSHOT' else 'unknown_type'
+                receipt[key]+=1
             guard.observe(data,wall(),monotonic())
             positive(data.get('trade_price'))  # No price is logged or passed to a strategy.
             validated+=1
@@ -45,7 +52,10 @@ def monitor(tickers,seconds,*,stream_factory,stopped,wall=time.time,monotonic=ti
             except Exception:
                 cleanup_error='PUBLIC_STREAM_CLOSE_UNCONFIRMED'
                 if status!='HALTED':status='HALTED';reason=cleanup_error
-    return {'status':status,'reason':reason,'cleanup_error':cleanup_error,'mode':'PUBLIC_WEBSOCKET_DIAGNOSTIC_NO_TRADING',
+    for receipt in receipts.values():
+        last=receipt.pop('last_receive')
+        receipt['no_receive_ms']=numeric((monotonic()-(last if last is not None else start))*1000)
+    return {'stream_activity':receipts,'stream_classification':'SERVER_LABEL_ONLY_NOT_TRADE_PROOF','status':status,'reason':reason,'cleanup_error':cleanup_error,'mode':'PUBLIC_WEBSOCKET_DIAGNOSTIC_NO_TRADING',
             'tick_timing':guard.report() if guard else None,'diagnostic_has_valid_ticks':validated>0,'valid_public_ticks':validated,
             'ledger_reads':0,'ledger_writes':0,'accounts_created':0,'paper_orders':0,'real_orders':0,
             'strategy_calls':0,'rest_requests':0,'reconnections':0,'automatic_restart':False,
