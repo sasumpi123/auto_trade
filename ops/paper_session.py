@@ -10,7 +10,7 @@ from trading.state_store import StateStore
 from services.notification_metrics import report_metrics
 from services.public_market import MARKET, positive, PublicDataError, PUBLIC_ERROR_CODES
 from utils.process_lock import lock_handle
-from services.tick_timing import TickTiming
+from services.tick_timing import TickTiming,DISCARD_SESSION_SECONDS
 from services.realtime_activity import Observation,ActivityError,ACTIVITY_ERRORS
 
 
@@ -157,6 +157,12 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     from trading.auto_trade import AutoTrade
     if REAL_TRADING is not False or SLACK_NOTIFICATIONS_ENABLED is not False:
         raise ValueError('PAPER_POLICY_BLOCKED')
+    discard_enabled=bool(experiment and experiment.get('discard_small_timestamp_regressions') is True)
+    if experiment and type(experiment.get('discard_small_timestamp_regressions',False)) is not bool:
+        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+    if discard_enabled and (experiment.get('observe_realtime_seconds') is None
+                            or type(seconds) is not int or not 1<=seconds<=DISCARD_SESSION_SECONDS):
+        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
     p=_private(state,{'.json'})
@@ -207,6 +213,10 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             if 'paper_experiment' in saved:
                 from ops.paper_experiment import validate_start, prepare_markets
                 validate_start(saved,p,experiment.get('session_id') if experiment else None)
+                # No per-hour recharge via another session on the same account.
+                # Preparation failures have never entered the runtime/discard path.
+                if discard_enabled and saved['paper_experiment']['last_session_id'] is not None:
+                    raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
                 chosen,analyzers=prepare_markets(saved,client,top,tickers,experiment,emit,analyzer_factory,
                     activity_check=check_activity if experiment.get('observe_realtime_seconds') is not None else None)
                 selected.extend(chosen);prepared.update(analyzers)
@@ -240,7 +250,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         else:
             if activity is not None:
                 activity.validate_start(selected)
-                timing=activity.runtime_guard(selected,(wall_begun,begun))
+                timing=activity.runtime_guard(selected,(wall_begun,begun),discard_small_regressions=discard_enabled)
             else:
                 stream=stream_factory(selected);stream.connect()
                 timing=TickTiming(selected,wall(),monotonic(),clock_origin=(wall_begun,begun))
@@ -260,7 +270,9 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                     if data['code'] not in selected or data['stream_type']=='SNAPSHOT':
                         ignored_activity_messages=min(2_147_483_647,ignored_activity_messages+1)
                         timing.idle(wall(),monotonic());continue
-                t=timing.observe(data,wall(),monotonic());price=positive(data.get('trade_price'))
+                t=timing.observe(data,wall(),monotonic())
+                if t is None:continue  # No strategy, fill, mark, count, or timer refresh.
+                price=positive(data.get('trade_price'))
                 counts[t]+=1;last[t]=str(price);marks[t]=(price,monotonic())
                 bot.process_market_data(t,data)
                 now=monotonic()
@@ -272,12 +284,14 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 if now-last_report>=5:
                     emit({'status':'RUNNING',**state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic())})
                     last_report=now
+            if timing.awaiting_followup is not None:
+                timing.fail('TIMESTAMP_REGRESSION',timing.awaiting_followup,followup_newer_received=False)
             status='STOPPED';reason='TIME_LIMIT_OR_USER_STOP'
     except Exception as exc:
         allowed={'PAPER_STREAM_TIMEOUT','PAPER_STALE_TICK','PAPER_MARKET_STALE','PAPER_CLOCK_DISCONTINUITY',
                  'PAPER_INVALID_TICK','PAPER_INVALID_MARKETS','PAPER_TOO_MANY_HELD_MARKETS',
                  'INSUFFICIENT_CONTIGUOUS_CANDIDATES','HELD_CANDLE_GAP_RISK_MANAGEMENT_UNAVAILABLE',
-                 'HELD_MARKET_LIMIT','SELECTION_LIMIT_INVALID','CANDIDATE_LIMIT_INVALID','CANDIDATES_INVALID'} | ACTIVITY_ERRORS
+                 'PAPER_REGRESSION_EXPERIMENT_BLOCKED','HELD_MARKET_LIMIT','SELECTION_LIMIT_INVALID','CANDIDATE_LIMIT_INVALID','CANDIDATES_INVALID'} | ACTIVITY_ERRORS
         if str(exc) in allowed or (isinstance(exc,ActivityError) and str(exc) in ACTIVITY_ERRORS) or (isinstance(exc,PublicDataError) and str(exc) in PUBLIC_ERROR_CODES):
             reason=str(exc)
         cancel_only=(experiment is None or (isinstance(exc,PublicDataError)

@@ -89,9 +89,9 @@ class Observation:
                 or any(self.stats[t]['realtime']==0 or not 0<=now-self.guard.progress[t]<15 for t in selected)):
             raise ActivityError('ACTIVITY_START_EVIDENCE_EXPIRED')
 
-    def runtime_guard(self,selected,clock_origin):
+    def runtime_guard(self,selected,clock_origin,*,discard_small_regressions=False):
         self.validate_start(selected)
-        g=TickTiming(selected,self.wall(),self.monotonic(),clock_origin=clock_origin)
+        g=TickTiming(selected,self.wall(),self.monotonic(),clock_origin=clock_origin,discard_small_regressions=discard_small_regressions)
         g.previous={t:self.guard.previous[t] for t in selected}
         g.progress={t:self.guard.progress[t] for t in selected};g.last_progress=max(g.progress.values())
         return g
