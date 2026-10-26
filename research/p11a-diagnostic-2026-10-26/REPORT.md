@@ -7,6 +7,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-BTC; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|3.301358|0.261096|-2.776129|3.299709|0.260966|-2.774743|
@@ -25,6 +26,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|4984|4984|4984|4984|4984|4984|
@@ -55,6 +57,7 @@ Decision and confirmed fill counts
 |sells|76|76|76|76|76|76|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|540|4444|
@@ -72,6 +75,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|269|4715|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|4444|
@@ -91,6 +95,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-BTC; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|0.181760|-0.757554|-1.695931|0.181669|-0.757176|-1.695083|
@@ -109,6 +114,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1727|1727|1727|1727|1727|1727|
@@ -139,6 +145,7 @@ Decision and confirmed fill counts
 |sells|23|23|23|23|23|23|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|159|1568|
@@ -156,6 +163,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|120|1607|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|1568|
@@ -175,6 +183,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-BTC; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|3.317292|2.514776|1.713061|3.315635|2.513520|1.712206|
@@ -193,6 +202,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1096|1096|1096|1096|1096|1096|
@@ -223,6 +233,7 @@ Decision and confirmed fill counts
 |sells|20|20|20|20|20|20|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|108|988|
@@ -240,6 +251,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|65|1031|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|988|
@@ -259,6 +271,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-BTC; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|1.525983|1.284698|1.043653|1.525221|1.284056|1.043132|
@@ -277,6 +290,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|431|431|431|431|431|431|
@@ -307,6 +321,7 @@ Decision and confirmed fill counts
 |sells|6|6|6|6|6|6|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|43|388|
@@ -324,6 +339,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|29|402|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|388|
@@ -343,6 +359,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-ETH; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|6.634216|3.430782|0.230548|6.630902|3.429068|0.230433|
@@ -361,6 +378,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|4984|4984|4984|4984|4984|4984|
@@ -391,6 +409,7 @@ Decision and confirmed fill counts
 |sells|80|80|80|80|80|80|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|445|4539|
@@ -408,6 +427,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|281|4703|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|4539|
@@ -427,6 +447,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-ETH; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|-0.641217|-1.460060|-2.278086|-0.640897|-1.459331|-2.276948|
@@ -445,6 +466,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1727|1727|1727|1727|1727|1727|
@@ -475,6 +497,7 @@ Decision and confirmed fill counts
 |sells|20|20|20|20|20|20|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|128|1599|
@@ -492,6 +515,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|101|1626|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|1599|
@@ -511,6 +535,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-ETH; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|2.778838|1.976860|1.175683|2.777450|1.975873|1.175096|
@@ -529,6 +554,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1096|1096|1096|1096|1096|1096|
@@ -559,6 +585,7 @@ Decision and confirmed fill counts
 |sells|20|20|20|20|20|20|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|89|1007|
@@ -576,6 +603,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|61|1035|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|1007|
@@ -595,6 +623,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-ETH; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|1.951105|1.629475|1.308166|1.950131|1.628661|1.307512|
@@ -613,6 +642,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|431|431|431|431|431|431|
@@ -643,6 +673,7 @@ Decision and confirmed fill counts
 |sells|8|8|8|8|8|8|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|45|386|
@@ -660,6 +691,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|22|409|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|386|
@@ -679,6 +711,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-XRP; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|4.548137|1.400214|-1.809114|4.545852|1.399535|-1.808125|
@@ -697,6 +730,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|4984|4984|4984|4984|4984|4984|
@@ -727,6 +761,7 @@ Decision and confirmed fill counts
 |sells|77|77|77|77|77|77|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|479|4505|
@@ -744,6 +779,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|244|4740|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|4505|
@@ -763,6 +799,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-XRP; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|-4.440793|-5.417251|-6.309151|-4.438554|-5.414464|-6.305899|
@@ -781,6 +818,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1727|1727|1727|1727|1727|1727|
@@ -811,6 +849,7 @@ Decision and confirmed fill counts
 |sells|21|21|21|21|21|21|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|168|1559|
@@ -828,6 +867,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|124|1603|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|1559|
@@ -847,6 +887,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-XRP; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|-1.410425|-2.107546|-3.718786|-1.410232|-2.106975|-3.717079|
@@ -865,6 +906,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1096|1096|1096|1096|1096|1096|
@@ -895,6 +937,7 @@ Decision and confirmed fill counts
 |sells|16|16|17|16|16|17|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|139|957|
@@ -912,6 +955,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|62|1034|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|957|
@@ -931,6 +975,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-XRP; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|3.311329|3.048419|2.785771|3.309675|3.046896|2.784380|
@@ -949,6 +994,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|431|431|431|431|431|431|
@@ -979,6 +1025,7 @@ Decision and confirmed fill counts
 |sells|6|6|6|6|6|6|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|56|375|
@@ -996,6 +1043,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|23|408|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|375|
@@ -1015,6 +1063,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-SOL; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|5.818747|3.132402|0.113151|5.815840|3.130680|0.112946|
@@ -1033,6 +1082,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|4984|4984|4984|4984|4984|4984|
@@ -1063,6 +1113,7 @@ Decision and confirmed fill counts
 |sells|75|75|75|75|75|75|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|377|4607|
@@ -1080,6 +1131,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|279|4705|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|4607|
@@ -1099,6 +1151,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-SOL; minutes: 15; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|-1.552879|-2.269876|-2.986137|-1.552296|-2.268925|-2.984819|
@@ -1117,6 +1170,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1727|1727|1727|1727|1727|1727|
@@ -1147,6 +1201,7 @@ Decision and confirmed fill counts
 |sells|17|17|17|17|17|17|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|116|1611|
@@ -1164,6 +1219,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|106|1621|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|1611|
@@ -1183,6 +1239,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-SOL; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|1.944360|1.443622|0.943402|1.943062|1.442583|0.942623|
@@ -1201,6 +1258,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|1096|1096|1096|1096|1096|1096|
@@ -1231,6 +1289,7 @@ Decision and confirmed fill counts
 |sells|12|12|12|12|12|12|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|72|1024|
@@ -1248,6 +1307,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|55|1041|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|1024|
@@ -1267,6 +1327,7 @@ Exploratory; holdout untouched. 15/60-minute results do not validate minute1 liv
 Market: KRW-SOL; minutes: 60; spread: 2bps
 
 Performance (fee-addback is NOT a no-cost counterfactual)
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |gross_fee_addback_return_pct|2.174294|1.972321|1.770549|2.173208|1.971335|1.769665|
@@ -1285,6 +1346,7 @@ Performance (fee-addback is NOT a no-cost counterfactual)
 |na_reason|N/A|N/A|N/A|N/A|N/A|N/A|
 
 Decision and confirmed fill counts
+
 |Metric|fee5/slip0|fee5/slip5|fee5/slip10|fee10/slip0|fee10/slip5|fee10/slip10|
 |---|---:|---:|---:|---:|---:|---:|
 |evaluations|431|431|431|431|431|431|
@@ -1315,6 +1377,7 @@ Decision and confirmed fill counts
 |sells|5|5|5|5|5|5|
 
 Atomic predicates (overlap; do not sum as HOLD count)
+
 |Predicate|Met|Not met|
 |---|---:|---:|
 |rsi_lt_30|43|388|
@@ -1332,6 +1395,7 @@ Atomic predicates (overlap; do not sum as HOLD count)
 |above_upper|35|396|
 
 First failed condition per rule (full counts retained in JSON)
+
 |Rule|Most frequent first failure|Count|
 |---|---|---:|
 |rsi_buy|rsi_lt_30|388|

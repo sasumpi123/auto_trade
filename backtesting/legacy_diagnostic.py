@@ -244,7 +244,7 @@ def markdown(report):
     if not results:return '\n'.join(lines)+'\n'
     labels=[f"fee{r['costs']['fee_bps']}/slip{r['costs']['slippage_bps']}" for r in results]
     def table(title,rows):
-        lines.extend(['',title,'|Metric|'+'|'.join(labels)+'|','|---|'+'|'.join(['---:']*len(results))+'|'])
+        lines.extend(['',title,'','|Metric|'+'|'.join(labels)+'|','|---|'+'|'.join(['---:']*len(results))+'|'])
         for name,values in rows:
             def display(v):
                 if v is None:return 'N/A'
@@ -261,9 +261,9 @@ def markdown(report):
         +[(name,[r['fills'][name] for r in results]) for name in ('buys','sells')])
     # Predicates are observation-only and identical across the fixed cost grid.
     if any(r['conditions']!=results[0]['conditions'] for r in results):raise ValueError('Incomparable predicate diagnostics')
-    lines.extend(['','Atomic predicates (overlap; do not sum as HOLD count)','|Predicate|Met|Not met|','|---|---:|---:|'])
+    lines.extend(['','Atomic predicates (overlap; do not sum as HOLD count)','','|Predicate|Met|Not met|','|---|---:|---:|'])
     for name,v in results[0]['conditions'].items():lines.append(f"|{name}|{v['met']}|{v['not_met']}|")
-    lines.extend(['','First failed condition per rule (full counts retained in JSON)','|Rule|Most frequent first failure|Count|','|---|---|---:|'])
+    lines.extend(['','First failed condition per rule (full counts retained in JSON)','','|Rule|Most frequent first failure|Count|','|---|---|---:|'])
     for name,v in results[0]['dominant_failures_by_rule'].items():lines.append(f"|{name}|{v[0] if v else 'N/A'}|{v[1] if v else 'N/A'}|")
     return '\n'.join(lines)+'\n'
 
