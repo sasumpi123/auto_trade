@@ -381,3 +381,11 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(r['reason'],'PUBLIC_STALE_CANDLE');self.assertFalse(r['engine_started'])
         self.assertEqual(self.client.candles.call_count,1);self.assertEqual(self.state.read_bytes(),before)
         self.assertEqual(exp.finish(self.experiment,token,r)['status'],'PREPARATION_FAILED')
+
+    def test_copied_case_variant_directory_is_not_the_same_account_on_case_sensitive_fs(self):
+        alternate=self.parent/'RUN-ONE'
+        if alternate.exists():self.skipTest('Case-insensitive filesystem: this spelling is the original directory')
+        shutil.copytree(self.experiment,alternate)  # Fake copy; no operational import feature.
+        with self.assertRaisesRegex(exp.ExperimentError,'EXPERIMENT_IDENTITY_UNVERIFIED'):exp.begin(alternate)
+        self.assertEqual((alternate/exp.STATE).read_bytes(),self.state.read_bytes())
+        self.assertFalse(exp.first_use_path(alternate).exists())

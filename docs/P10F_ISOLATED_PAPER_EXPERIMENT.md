@@ -12,7 +12,7 @@
 
 - 대상은 기존 프로젝트/다른 Git checkout 밖의 **새 leaf 디렉터리**다. 부모는 미리 존재하는 사용자 소유 private 디렉터리여야 한다. 기존 빈 디렉터리도 재사용하지 않는다.
 - POSIX owner/mode0700, 파일0600, 심볼릭 링크·hardlink/alias·인증 디렉터리를 검사한다. Mac은 `/bin/ls -lde` 메타데이터만 읽어 추가 ACL이 있으면 보수적으로 차단한다. ACL/권한을 자동 변경하지 않는다. Windows private ACL/cold-lock 운영은 미인증으로 BLOCKED다.
-- 생성 시 부모에 `.paper-experiment-<경로해시>.json` 예약 파일을 O_EXCL로 먼저 보존한다. 경로의 대소문자/Unicode 표기 차이도 보수적으로 같은 예약으로 취급한다. 생성 중 실패/leaf 소실에도 같은 경로를 다시 만들지 않는다. 새 계좌 디렉터리에는 `experiment-state.json`, 기존 방식의 `.lock`, `initial-state.json`, `experiment.json`이 생긴다. 처음에는 engine.open/가짜 매수 없이 원래 PAPER JSON version1의 빈 상태를 만든다.
+- 생성 시 부모에 `.paper-experiment-<경로해시>.json` 예약 파일을 O_EXCL로 먼저 보존한다. 예약 키는 경로의 대소문자/Unicode 표기 차이도 보수적으로 같게 취급하지만 원장 ID는 정확한 canonical 경로에 결합하여 다른 경로 복제를 허용하지 않는다. 생성 중 실패/leaf 소실에도 같은 경로를 다시 만들지 않는다. 새 계좌 디렉터리에는 `experiment-state.json`, 기존 방식의 `.lock`, `initial-state.json`, `experiment.json`이 생긴다. 처음에는 engine.open/가짜 매수 없이 원래 PAPER JSON version1의 빈 상태를 만든다.
 - 공개 실행 시 부모의 `.paper-experiment-used-<경로해시>.json`과 leaf의 `session.json`에 시작 증거를 남긴다. 별도 DB/Controller/Slack outbox를 도입하지 않고 기존 StateStore의 atomic/fsync 저장과 원장 소유권을 재사용한다. 원장 메타데이터에는 실험 ID/초기자금/경로 해시/마지막 세션 ID만 추가한다. 첫 엔진 저장은 데이터 준비 후다.
 - 원장/manifest/초기 스냅샷/부모 예약은 서로 연결되어야 한다. 다른 경로로 복제하거나 초기 파일을 덮어써서 시작하지 않는다. 부모 예약·첫 사용 증거와 원장이 함께 소실/롤백되면 로컬 파일만으로 탐지하지 못한다. 이를 독립 witness라고 주장하지 않는다.
 

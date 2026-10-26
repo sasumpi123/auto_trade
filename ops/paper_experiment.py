@@ -69,7 +69,7 @@ def first_use_path(p):return p.parent/('.paper-experiment-used-'+location_hash(p
 
 def identity(identifier,p,last=None):
     return {'schema_version':1,'scope':SCOPE,'experiment_id':identifier,
-            'directory_sha256':location_hash(p),'initial_cash':'1000000','last_session_id':last}
+            'directory_sha256':sha(str(p).encode()),'initial_cash':'1000000','last_session_id':last}
 
 
 def create(value):
