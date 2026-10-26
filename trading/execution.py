@@ -101,6 +101,11 @@ class ExecutionEngine:
                         # Audit completion is not permission to restart. Reject BEFORE
                         # assigning/writing state, including the legacy main.py path.
                         raise TradingHalted('Manual PAPER recovery requires separate restart approval')
+                    if 'paper_experiment' in saved:
+                        from ops.paper_experiment import validate_start
+                        token=getattr(self,'_experiment_session',None)
+                        validate_start(saved,self.store.path,token)
+                        saved['paper_experiment']['last_session_id']=token
                     self.state = saved
                 self._journal_writable = True
                 pending = [o for o in self.state['orders'].values() if o['status'] != 'settled']

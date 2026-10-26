@@ -18,6 +18,9 @@ def validate_state(saved, path, initial_cash):
     markets=set(saved['positions']) | set(saved['signals']) | {o['ticker'] for o in saved['orders'].values()}
     if any(not MARKET.fullmatch(t) for t in markets):
         raise ValueError('PAPER_INVALID_MARKET_IN_LEDGER')
+    if 'paper_experiment' in saved:
+        from ops.paper_experiment import validate_identity
+        validate_identity(saved,path)
     if 'manual_recovery' in saved:
         raise ValueError('PAPER_MANUAL_RECOVERY_RESTART_NOT_APPROVED')
     if saved.get('halt_reason') or any(o['status']!='settled' for o in saved['orders'].values()):
@@ -66,7 +69,7 @@ class ExistingPaperStore(StateStore):
     def load(self):return _json(self.path.read_text(encoding='utf-8'))
 
 
-def state_summary(saved, counts=None, last=None):
+def state_summary(saved, counts=None, last=None, *, marks=None, now=None):
     counts={} if counts is None else counts
     last={} if last is None else last
     positions={}
@@ -74,7 +77,7 @@ def state_summary(saved, counts=None, last=None):
         positions[ticker]={'quantity':pos['quantity'],'average_price':pos['avg_price'],
                           'averaging_used':pos['averaging_down_used']}
     markets=set(counts)|set(positions)
-    return {'mode':'PAPER','cash':saved['cash'],'positions':positions,
+    result={'mode':'PAPER','cash':saved['cash'],'positions':positions,
         'orders':len(saved['orders']),
         'pending_orders':sum(o['status']!='settled' for o in saved['orders'].values()),
         'halted':bool(saved.get('halt_reason')),
@@ -83,10 +86,26 @@ def state_summary(saved, counts=None, last=None):
         'markets':{t:{'session_ticks':counts.get(t,0),'last_price':last.get(t),
                       'state':'RECEIVED' if counts.get(t) else 'WAIT_TICK'} for t in sorted(markets)},
         'real_orders':0,'slack_messages':0,'launchd_changed':False}
+    if 'paper_experiment' in saved:
+        metrics=report_metrics(saved,1_000_000,marks or {},now=time.monotonic() if now is None else now,verified=True)
+        def number(key):
+            v=metrics.get(key)
+            return str(v) if isinstance(v,Decimal) else v if type(v) is int else 'N/A'
+        result.update(account_scope='NEW_INDEPENDENT_PAPER_EXPERIMENT_NOT_RECOVERY',initial_cash='1000000',
+                      cumulative_buys=number('매수 횟수'),cumulative_sells=number('매도 횟수'),
+                      net_return_percent=number('누적 수익률'),equity=number('종료 평가자산'),
+                      valuation_reason=metrics.get('평가 제한',metrics.get('정산 사유','CONFIRMED_LEDGER_AND_FRESH_MARKS_ONLY')),
+                      net_realized_pnl=number('실현 손익'),unrealized_pnl=number('평가 손익'),fees=number('수수료 합계'))
+        for t in result['markets']:
+            rows=[r for r in metrics.get('accounting_rows',[]) if r['ticker']==t]
+            result['markets'][t].update(
+                cumulative_buys=sum(r['side']=='buy' for r in rows) if type(metrics.get('거래 횟수')) is int else 'N/A',
+                cumulative_sells=sum(r['side']=='sell' for r in rows) if type(metrics.get('거래 횟수')) is int else 'N/A')
+    return result
 
 
-def offline_report(state):
-    report=inspect(state=state)
+def offline_report(state, *, outbox=None):
+    report=inspect(state=state,outbox=outbox)
     result={'status':'PENDING','network_enabled':False,'preflight':report,
             'execution_authorized':False,'summary':None}
     if report['checks'].get('paper_ledger')=='READY_LOCAL_RECONCILIATION_ONLY':
@@ -122,7 +141,7 @@ def public_analyzer_factory(client):
 
 
 def run_session(state, *, seconds, stopped, emit, client, stream_factory,
-                tickers=None, top=10, analyzer_factory=None, monotonic=time.monotonic, wall=time.time):
+                tickers=None, top=10, analyzer_factory=None, monotonic=time.monotonic, wall=time.time, experiment=None):
     """Called only by the supervised explicit-network branch (or offline injected tests)."""
     from config import REAL_TRADING, SLACK_NOTIFICATIONS_ENABLED, START_CASH, DATA_UPDATE_INTERVAL
     from trading.auto_trade import AutoTrade
@@ -131,15 +150,23 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
     p=_private(state,{'.json'})
-    bot=None;stream=None;counts={};last={};previous={};status='HALTED';reason='SESSION_FAILED'
+    bot=None;stream=None;counts={};last={};previous={};marks={};status='HALTED';reason='SESSION_FAILED'
     try:
         # Take the original state lock and validate recovery before ANY network discovery.
         # Build the bot with a seed ticker so its constructor never discovers implicitly.
         factory=analyzer_factory or public_analyzer_factory(client)
+        prepared={}
         bot=AutoTrade(tickers=['KRW-BTC'],state_path=p,real_trading=False,broker=None,
                       notification=None,analyzer_factory=factory)
         selected=[]
         def prepare(saved):
+            if 'paper_experiment' in saved:
+                from ops.paper_experiment import validate_start, prepare_markets
+                validate_start(saved,p,experiment.get('session_id') if experiment else None)
+                chosen,analyzers=prepare_markets(saved,client,top,tickers,experiment,emit,analyzer_factory)
+                selected.extend(chosen);prepared.update(analyzers)
+                return
+            if experiment is not None:raise ValueError('PAPER_EXPERIMENT_IDENTITY_REQUIRED')
             candidates=list(tickers) if tickers is not None else client.top_tickers(top)
             if (not candidates or len(candidates)>100
                     or any(not isinstance(t,str) or not MARKET.fullmatch(t) for t in candidates)
@@ -150,9 +177,10 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             if len(candidates)>100:raise ValueError('PAPER_TOO_MANY_HELD_MARKETS')
             selected.extend(candidates)
         bot.engine.store=ExistingPaperStore(p,START_CASH,prepare=prepare)
+        bot.engine._experiment_session=experiment.get('session_id') if experiment else None
         bot.initialize()
         emit({'status':'STARTING',**state_summary(bot.engine.state)})
-        bot.tickers=selected;bot.analyzers={t:factory(t) for t in selected}
+        bot.tickers=selected;bot.analyzers=prepared or {t:factory(t) for t in selected}
         bot.performance_analyzer.tickers=selected
         for t,saved in bot.engine.state['signals'].items():
             if t in bot.analyzers:
@@ -161,7 +189,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         def stop_requested():return stopped() or monotonic()>=deadline or wall()>=wall_deadline
         for analyzer in bot.analyzers.values():
             if stop_requested():break
-            analyzer.update_data()
+            if not prepared:analyzer.update_data()
         if stop_requested():
             status='STOPPED';reason='TIME_LIMIT_OR_USER_STOP'
         else:
@@ -187,7 +215,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 stamp=data.get('timestamp')
                 if type(stamp) is not int or not wall()*1000-60_000<=stamp<=wall()*1000+5000 or stamp<previous.get(t,0):
                     raise ValueError('PAPER_STALE_TICK')
-                previous[t]=stamp;counts[t]+=1;last[t]=str(price)
+                previous[t]=stamp;counts[t]+=1;last[t]=str(price);marks[t]=(price,monotonic())
                 bot.process_market_data(t,data)
                 now=monotonic()
                 if now-last_update>=DATA_UPDATE_INTERVAL:
@@ -196,15 +224,19 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                         analyzer.update_data()
                     last_update=monotonic()
                 if now-last_report>=5:
-                    emit({'status':'RUNNING',**state_summary(bot.engine.state,counts,last)})
+                    emit({'status':'RUNNING',**state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic())})
                     last_report=now
             status='STOPPED';reason='TIME_LIMIT_OR_USER_STOP'
     except Exception as exc:
         allowed={'PAPER_STREAM_TIMEOUT','PAPER_STALE_TICK','PAPER_MARKET_STALE','PAPER_CLOCK_DISCONTINUITY',
-                 'PAPER_INVALID_TICK','PAPER_INVALID_MARKETS','PAPER_TOO_MANY_HELD_MARKETS'}
+                 'PAPER_INVALID_TICK','PAPER_INVALID_MARKETS','PAPER_TOO_MANY_HELD_MARKETS',
+                 'INSUFFICIENT_CONTIGUOUS_CANDIDATES','HELD_CANDLE_GAP_RISK_MANAGEMENT_UNAVAILABLE',
+                 'HELD_MARKET_LIMIT','SELECTION_LIMIT_INVALID','CANDIDATE_LIMIT_INVALID','CANDIDATES_INVALID'}
         if str(exc) in allowed or (isinstance(exc,PublicDataError) and str(exc) in PUBLIC_ERROR_CODES):
             reason=str(exc)
-        if (stopped() or monotonic()>=deadline) and bot is not None and bot.engine.ready:
+        cancel_only=(experiment is None or (isinstance(exc,PublicDataError)
+                     and str(exc) in ('PUBLIC_STOP_REQUESTED','PUBLIC_DEADLINE')))
+        if cancel_only and (stopped() or monotonic()>=deadline) and bot is not None and bot.engine.ready:
             status='STOPPED';reason='TIME_LIMIT_OR_USER_STOP'
         # Fixed private reason; no exception, URL/body/token in terminal output.
         if status!='STOPPED' and bot is not None and bot.engine.ready:
@@ -216,6 +248,10 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         result={'status':status,'reason':reason,'post_validation':'UNVERIFIED',
                 'network_enabled':True,'execution_authorized':False,
                 'engine_started':bool(bot is not None and bot._initialized)}
+        if experiment is not None:
+            calls=getattr(client,'calls',None)
+            result['public_rest_requests']=calls if type(calls) is int else 'FAKE_NOT_RECORDED'
+            result['public_rest_budget']=64
         if bot is not None and bot.engine.ready:
             try:
                 saved=_json(p.read_text(encoding='utf-8'))
@@ -226,7 +262,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 bot.engine.halt('PAPER_POST_VALIDATION_FAILURE');result['status']='HALTED'
         if bot is not None and bot._initialized:
             if bot.engine.halted:result['status']='HALTED'
-            result.update(state_summary(bot.engine.state,counts,last))
+            result.update(state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic()))
             bot.stop()
         elif bot is not None:
             snapshot=getattr(bot.engine.store,'preparation_snapshot',None)
