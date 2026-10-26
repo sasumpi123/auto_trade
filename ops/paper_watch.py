@@ -13,7 +13,7 @@ from ops.local_preflight import ROOT
 from ops.paper_session import offline_report
 
 
-def _worker(state,seconds,top,tickers,stop,pipe):
+def _worker(state,seconds,top,tickers,stop,pipe,*,experiment=None):
     # Isolate legacy imports/loggers and never load .env. No raw exception output.
     os.environ['PYTHON_DOTENV_DISABLED']='1'
     logging.disable(logging.CRITICAL)
@@ -25,9 +25,11 @@ def _worker(state,seconds,top,tickers,stop,pipe):
         from services.public_market import PublicMarketClient
         from services.market_stream import MarketStream
         from ops.paper_session import run_session
-        client=PublicMarketClient(deadline=time.monotonic()+seconds,stopped=stop.is_set)
+        client=PublicMarketClient(deadline=time.monotonic()+seconds,stopped=stop.is_set,
+                                  max_calls=64 if experiment is not None else None)
         run_session(state,seconds=seconds,top=top,tickers=tickers,stopped=stop.is_set,
-                    emit=pipe.send,client=client,stream_factory=lambda codes:MarketStream(codes,timeout=1))
+                    emit=pipe.send,client=client,stream_factory=lambda codes:MarketStream(codes,timeout=1),
+                    experiment=experiment)
     except BaseException:
         try:pipe.send({'status':'HALTED','reason':'WORKER_FAILED','post_validation':'UNVERIFIED'})
         except Exception:pass
@@ -45,7 +47,7 @@ def receive_message(receiver, timeout=0):
         return 'closed',None
 
 
-def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15):
+def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=None):
     """Hard process deadline incl. discovery, candle reads and shutdown. No auto-restart."""
     ctx=multiprocessing.get_context('spawn')
     receiver,sender=ctx.Pipe(duplex=False);stop=ctx.Event()
@@ -86,7 +88,8 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15):
                 'execution_authorized':False,'last_snapshot':last}
         else:result={**last,'automatic_restart':False}
         # After owner release, recheck disk. A clean snapshot never overrides forced-stop uncertainty.
-        result['after_close']=offline_report(state)
+        result['after_close']=(offline_report(state) if outbox is None
+                               else offline_report(state,outbox=outbox))
         if result['after_close'].get('summary') is None:
             result['status']='HALTED'
         emit(result)

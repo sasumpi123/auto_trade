@@ -32,6 +32,7 @@ PUBLIC_ERROR_CODES = frozenset({
     'PUBLIC_MISSING_MARKET',
     'PUBLIC_NONFINITE_JSON',
     'PUBLIC_RATE_LIMIT',
+    'PUBLIC_REQUEST_BUDGET',
     'PUBLIC_REQUEST_FAILED',
     'PUBLIC_RESPONSE_TOO_LARGE',
     'PUBLIC_STALE_CANDLE',
@@ -68,12 +69,13 @@ class PublicOnlyAuth(requests.auth.AuthBase):
 
 class PublicMarketClient:
     def __init__(self, *, session=None, clock=time.time, monotonic=time.monotonic,
-                 sleep=time.sleep, deadline=None, stopped=lambda:False):
+                 sleep=time.sleep, deadline=None, stopped=lambda:False, max_calls=None):
         self.session = session if session is not None else requests.Session()
         self.clock, self.monotonic, self.sleep = clock, monotonic, sleep
         self.deadline, self.stopped = deadline, stopped
         self.last_request = None
         self.calls = 0
+        self.max_calls = max_calls
 
     def remaining(self):
         if self.stopped():raise PublicDataError('PUBLIC_STOP_REQUESTED')
@@ -85,6 +87,8 @@ class PublicMarketClient:
         if endpoint not in ('market/all','ticker','candles/minutes/1'):
             raise PublicDataError('PUBLIC_ENDPOINT_FORBIDDEN')
         try:
+            if self.max_calls is not None and self.calls>=self.max_calls:
+                raise PublicDataError('PUBLIC_REQUEST_BUDGET')
             if self.last_request is not None:
                 delay = max(0, .2-(self.monotonic()-self.last_request))
                 if delay:
