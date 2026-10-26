@@ -236,7 +236,12 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None)
             'excluded':[],'selected':[],'final_subscription':[],'inspected_candidates':0,
             'held_added':[],'request_budget':MAX_REQUESTS,
             'held_required':sorted(t for t,v in saved['positions'].items() if Decimal(v['quantity'])>0)}
-    frames={};gaps=set();analyzers={}
+    frames={};gaps=set();analyzers={};candle_times={}
+    started_wall=client.clock();started_mono=client.monotonic()
+    def remember(t,frame):
+        # PublicMarketClient returns KST-naive original bars. No timestamp repair.
+        require(len(frame)==200 and frame.index.tz is None,'CANDIDATES_INVALID')
+        candle_times[t]=frame.index[-1].tz_localize('Asia/Seoul').timestamp()
     class CachedClient:
         def candles(self,t):
             if t in frames:return frames.pop(t)
@@ -251,6 +256,7 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None)
                 gaps.add(t);report['excluded'].append({'market':t,'reason':'PUBLIC_CANDLE_GAP',
                         'meaning':'NO_TRADE_INTERVAL_POSSIBLE_NOT_PROOF_OF_API_FAILURE'})
                 continue
+            remember(t,frames[t])
             analyzers[t]=factory(t);analyzers[t].update_data();report['selected'].append(t)
             if eligible is not None and len(report['selected'])==wanted:break
         if eligible is None and gaps:raise PublicDataError('PUBLIC_CANDLE_GAP')
@@ -266,8 +272,14 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None)
                     report['excluded'].append({'market':t,'reason':'PUBLIC_CANDLE_GAP','role':'HELD_CANNOT_BE_DROPPED'})
                     raise ExperimentError('HELD_CANDLE_GAP_RISK_MANAGEMENT_UNAVAILABLE') from None
                 raise
+            remember(t,frames[t])
             analyzers[t]=factory(t);analyzers[t].update_data()
             report['selected'].append(t);report['held_added'].append(t)
+        current_wall=client.clock();elapsed=client.monotonic()-started_mono
+        if elapsed<0 or abs((current_wall-started_wall)-elapsed)>5:
+            raise PublicDataError('PUBLIC_RESPONSE_CLOCK_UNVERIFIED')
+        if any(not current_wall-180<=candle_times[t]<=current_wall+5 for t in report['selected']):
+            raise PublicDataError('PUBLIC_STALE_CANDLE')
     except Exception:
         emit({'status':'PREPARATION_FAILED','account_scope':SCOPE,'selection':report,'engine_started':False})
         raise

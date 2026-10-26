@@ -74,6 +74,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(exp.create(self.experiment)['status'],'CREATED_NEW_INDEPENDENT_EXPERIMENT')
         self.state=self.experiment/exp.STATE
         self.gaps=set();self.candle_errors={}
+        self.client.clock=lambda:self.wall;self.client.monotonic=lambda:self.now
         def candles(t):
             if t in self.candle_errors:raise PublicDataError(self.candle_errors[t])
             rows=public_fixtures.PublicMarketTests.candles(SimpleNamespace(now=self.wall))
@@ -366,3 +367,17 @@ class ExperimentTests(unittest.TestCase):
         alternate=self.parent/'RUN-ONE'
         self.assertEqual(exp.create(alternate)['status'],'BLOCKED')
         self.assertFalse(alternate.exists())
+
+    def test_cached_candles_are_rechecked_at_end_of_preparation_without_refetch(self):
+        before=self.state.read_bytes();original=self.factory
+        def factory(t):
+            a=original(t)
+            def update():self.wall+=181;self.now+=181
+            a.update_data=update;return a
+        token=exp.begin(self.experiment)
+        r=run_session(self.state,seconds=1000,stopped=self.stop.is_set,emit=self.reports.append,
+            client=self.client,stream_factory=self.stream_factory,analyzer_factory=factory,top=1,
+            experiment={'session_id':token})
+        self.assertEqual(r['reason'],'PUBLIC_STALE_CANDLE');self.assertFalse(r['engine_started'])
+        self.assertEqual(self.client.candles.call_count,1);self.assertEqual(self.state.read_bytes(),before)
+        self.assertEqual(exp.finish(self.experiment,token,r)['status'],'PREPARATION_FAILED')
