@@ -10,6 +10,7 @@ from trading.state_store import StateStore
 from services.notification_metrics import report_metrics
 from services.public_market import MARKET, positive, PublicDataError, PUBLIC_ERROR_CODES
 from utils.process_lock import lock_handle
+from services.tick_timing import TickTiming
 
 
 def validate_state(saved, path, initial_cash):
@@ -121,6 +122,9 @@ def offline_report(state, *, outbox=None):
                 saved=validate_state(_json(p.read_text(encoding='utf-8')),p,initial)
                 result['summary']=state_summary(saved)
         except Exception:result['status']='BLOCKED'
+    if report.get('halted') is True:
+        from ops.paper_recovery_diagnostic import diagnose
+        result['halted_reconciliation']=diagnose(state)
     return result
 
 
@@ -150,7 +154,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
     p=_private(state,{'.json'})
-    bot=None;stream=None;counts={};last={};previous={};marks={};status='HALTED';reason='SESSION_FAILED'
+    bot=None;stream=None;timing=None;cleanup_error=None;counts={};last={};marks={};status='HALTED';reason='SESSION_FAILED'
     try:
         # Take the original state lock and validate recovery before ANY network discovery.
         # Build the bot with a seed ticker so its constructor never discovers implicitly.
@@ -194,28 +198,17 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             status='STOPPED';reason='TIME_LIMIT_OR_USER_STOP'
         else:
             stream=stream_factory(selected);stream.connect()
-            last_update=last_report=last_received=monotonic()
-            market_received={t:last_received for t in selected}
+            last_update=last_report=monotonic()
+            timing=TickTiming(selected,wall(),monotonic(),clock_origin=(wall_begun,begun))
             while not stop_requested():
                 try:data=stream.get()
                 except TimeoutError:
                     if stop_requested():break
-                    if monotonic()-last_received>=15 or any(monotonic()-at>=60 for at in market_received.values()):
-                        raise ValueError('PAPER_STREAM_TIMEOUT') from None
+                    timing.idle(wall(),monotonic())
                     continue
                 if stop_requested():break
-                if not isinstance(data,dict) or data.get('type')!='ticker' or data.get('code') not in counts:
-                    raise ValueError('PAPER_INVALID_TICK')
-                if abs((wall()-wall_begun)-(monotonic()-begun))>5:
-                    raise ValueError('PAPER_CLOCK_DISCONTINUITY')
-                t=data['code'];price=positive(data.get('trade_price'))
-                last_received=monotonic();market_received[t]=last_received
-                if any(last_received-at>=60 for at in market_received.values()):
-                    raise ValueError('PAPER_MARKET_STALE')
-                stamp=data.get('timestamp')
-                if type(stamp) is not int or not wall()*1000-60_000<=stamp<=wall()*1000+5000 or stamp<previous.get(t,0):
-                    raise ValueError('PAPER_STALE_TICK')
-                previous[t]=stamp;counts[t]+=1;last[t]=str(price);marks[t]=(price,monotonic())
+                t=timing.observe(data,wall(),monotonic());price=positive(data.get('trade_price'))
+                counts[t]+=1;last[t]=str(price);marks[t]=(price,monotonic())
                 bot.process_market_data(t,data)
                 now=monotonic()
                 if now-last_update>=DATA_UPDATE_INTERVAL:
@@ -244,10 +237,14 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     finally:
         if stream is not None:
             try:stream.close()
-            except Exception:status='HALTED';reason='STREAM_CLOSE_UNCONFIRMED'
+            except Exception:
+                cleanup_error='STREAM_CLOSE_UNCONFIRMED'
+                if status!='HALTED':status='HALTED';reason=cleanup_error
         result={'status':status,'reason':reason,'post_validation':'UNVERIFIED',
                 'network_enabled':True,'execution_authorized':False,
                 'engine_started':bool(bot is not None and bot._initialized)}
+        if cleanup_error is not None:result['cleanup_error']=cleanup_error
+        if timing is not None:result['tick_timing']=timing.report()
         if experiment is not None:
             calls=getattr(client,'calls',None)
             result['public_rest_requests']=calls if type(calls) is int else 'FAKE_NOT_RECORDED'
@@ -260,6 +257,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 result['post_validation']='VERIFIED_UNDER_OWNER_LOCK'
             except Exception:
                 bot.engine.halt('PAPER_POST_VALIDATION_FAILURE');result['status']='HALTED'
+                if status!='HALTED':result['reason']='PAPER_POST_VALIDATION_FAILURE'
         if bot is not None and bot._initialized:
             if bot.engine.halted:result['status']='HALTED'
             result.update(state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic()))
@@ -271,6 +269,9 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 result['ledger_snapshot']='VERIFIED_BEFORE_DISCOVERY_ONLY'
             bot.stop()
         try:client.close()
-        except Exception:result['status']='HALTED'
+        except Exception:
+            result['cleanup_error']='PUBLIC_CLIENT_CLOSE_UNCONFIRMED'
+            if result['status']!='HALTED':result['reason']='PUBLIC_CLIENT_CLOSE_UNCONFIRMED'
+            result['status']='HALTED'
         emit(result)
     return result

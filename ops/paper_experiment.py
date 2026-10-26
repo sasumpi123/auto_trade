@@ -15,7 +15,7 @@ from ops.local_preflight import ROOT, _private, _json, cold_lock
 from ops.paper_manual_recovery import initial_cash, exclusive_write
 from ops.paper_recovery_diagnostic import SafeParser
 from ops.paper_session import ExistingPaperStore, validate_state, offline_report, public_analyzer_factory
-from services.public_market import PublicDataError
+from services.public_market import PublicDataError, PUBLIC_ERROR_CODES
 from trading.execution import ExecutionEngine
 from trading.state_store import StateStore
 from utils.process_lock import lock_handle
@@ -204,7 +204,14 @@ def finish(value,token,result):
             if owner._lock is not None:
                 exclusive_write(p/'blocked.json',encoded({'status':'UNCONFIRMED_FINALIZATION_NO_RESET'}))
         except Exception:pass  # Total storage loss cannot be repaired/hidden by this tool.
-        return {'status':'HALTED','reason':'UNCONFIRMED_SESSION_NO_RESTART','account_scope':SCOPE,'automatic_restart':False}
+        leaf=result.get('last_snapshot') or result
+        known={'PAPER_STALE_TICK','PAPER_CLOCK_DISCONTINUITY','PAPER_STREAM_TIMEOUT','PAPER_MARKET_STALE',
+               'PAPER_INVALID_TICK','SESSION_FAILED','STREAM_CLOSE_UNCONFIRMED','WORKER_FAILED',
+               'PAPER_POST_VALIDATION_FAILURE','PUBLIC_CLIENT_CLOSE_UNCONFIRMED'} | PUBLIC_ERROR_CODES
+        reason=leaf.get('reason') if leaf.get('status')=='HALTED' and leaf.get('reason') in known else 'UNCONFIRMED_SESSION_NO_RESTART'
+        return {'status':'HALTED','reason':reason,'session_finalization':'HALTED_NO_RESTART',
+                'supervisor_reason':result.get('supervisor_reason'),'forced_termination':result.get('forced_termination',False),
+                'account_scope':SCOPE,'automatic_restart':False}
     finally:owner.close()
 
 
