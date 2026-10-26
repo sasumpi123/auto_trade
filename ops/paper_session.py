@@ -11,6 +11,7 @@ from services.notification_metrics import report_metrics
 from services.public_market import MARKET, positive, PublicDataError, PUBLIC_ERROR_CODES
 from utils.process_lock import lock_handle
 from services.tick_timing import TickTiming
+from services.realtime_activity import Observation,ActivityError,ACTIVITY_ERRORS
 
 
 def validate_state(saved, path, initial_cash):
@@ -37,10 +38,11 @@ class ExistingPaperStore(StateStore):
 
     Never creates a database, state file or lock, even for a missing original path.
     """
-    def __init__(self,path,initial_cash,*,prepare=None):
+    def __init__(self,path,initial_cash,*,prepare=None,before_first_save=None):
         # Check original alias before StateStore.resolve can hide a symlink.
         _private(path,{'.json'})
         super().__init__(path);self.initial_cash=initial_cash;self.prepare=prepare;self.preparation_snapshot=None
+        self.before_first_save=before_first_save;self._first_save_done=False
 
     def acquire(self):
         if self._lock is not None:raise ValueError('PAPER_ALREADY_OPEN')
@@ -66,6 +68,10 @@ class ExistingPaperStore(StateStore):
 
     def validate_existing(self,path):
         return validate_state(_json(path.read_text(encoding='utf-8')),path,self.initial_cash)
+
+    def save(self,saved):
+        if not self._first_save_done and self.before_first_save is not None:self.before_first_save()
+        super().save(saved);self._first_save_done=True
 
     def load(self):return _json(self.path.read_text(encoding='utf-8'))
 
@@ -154,7 +160,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
     p=_private(state,{'.json'})
-    bot=None;stream=None;timing=None;cleanup_error=None;counts={};last={};marks={};status='HALTED';reason='SESSION_FAILED'
+    bot=None;stream=None;timing=None;activity=None;ignored_activity_messages=0;cleanup_error=None;counts={};last={};marks={};status='HALTED';reason='SESSION_FAILED'
     try:
         # Take the original state lock and validate recovery before ANY network discovery.
         # Build the bot with a seed ticker so its constructor never discovers implicitly.
@@ -163,11 +169,46 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         bot=AutoTrade(tickers=['KRW-BTC'],state_path=p,real_trading=False,broker=None,
                       notification=None,analyzer_factory=factory)
         selected=[]
+        def check_activity(pool,held,wanted,replace,report):
+            nonlocal stream,activity
+            try:
+                activity=Observation(pool,wall=wall,monotonic=monotonic)
+                try:
+                    stream=stream_factory(pool);stream.connect()
+                except Exception:
+                    activity.end=monotonic();activity.connection_end='SUBSCRIPTION_OR_CONNECT_FAILED_CAUSE_UNKNOWN'
+                    raise ActivityError('ACTIVITY_CONNECTION_FAILED') from None
+                activity=Observation(pool,wall=wall,monotonic=monotonic)
+                activity.observe(stream,experiment['observe_realtime_seconds'],stopped=stopped,deadline=deadline)
+                active=[t for t in pool if activity.active(t)]
+                report['realtime_activity']=activity.report();report['wire_subscription']=pool.copy()
+                for t in pool:
+                    if t not in active:report['excluded'].append({'market':t,'stage':'REALTIME_ACTIVITY',
+                        'reason':activity.exclusion(t),'cause':'UNKNOWN_NO_TRADE_OR_API_FAILURE_INFERENCE',
+                        'role':'HELD_CANNOT_BE_DROPPED' if t in held else 'CANDIDATE'})
+                if any(t not in active for t in held):raise ActivityError('HELD_REALTIME_ACTIVITY_UNAVAILABLE')
+                if replace:
+                    chosen=[t for t in report['candle_eligible_candidates'] if t in active][:wanted]
+                    if len(chosen)<wanted:raise ActivityError('INSUFFICIENT_REALTIME_ACTIVE_CANDIDATES')
+                    chosen+=sorted(t for t in held if t not in chosen)
+                    report['ranking_deviation_declared']=True
+                else:
+                    if len(active)!=len(pool):raise ActivityError('REALTIME_ACTIVITY_REQUIRED')
+                    chosen=pool.copy()
+                activity.validate_start(chosen)
+                return chosen
+            finally:
+                if activity is not None:report['realtime_activity']=activity.report()
+        def before_first_save():
+            if activity is not None:
+                activity.validate_start(selected)
+                if stopped() or monotonic()>=deadline:raise ActivityError('ACTIVITY_OBSERVATION_INTERRUPTED')
         def prepare(saved):
             if 'paper_experiment' in saved:
                 from ops.paper_experiment import validate_start, prepare_markets
                 validate_start(saved,p,experiment.get('session_id') if experiment else None)
-                chosen,analyzers=prepare_markets(saved,client,top,tickers,experiment,emit,analyzer_factory)
+                chosen,analyzers=prepare_markets(saved,client,top,tickers,experiment,emit,analyzer_factory,
+                    activity_check=check_activity if experiment.get('observe_realtime_seconds') is not None else None)
                 selected.extend(chosen);prepared.update(analyzers)
                 return
             if experiment is not None:raise ValueError('PAPER_EXPERIMENT_IDENTITY_REQUIRED')
@@ -180,7 +221,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                                if Decimal(pos['quantity'])>0 and t not in candidates)
             if len(candidates)>100:raise ValueError('PAPER_TOO_MANY_HELD_MARKETS')
             selected.extend(candidates)
-        bot.engine.store=ExistingPaperStore(p,START_CASH,prepare=prepare)
+        bot.engine.store=ExistingPaperStore(p,START_CASH,prepare=prepare,before_first_save=before_first_save)
         bot.engine._experiment_session=experiment.get('session_id') if experiment else None
         bot.initialize()
         emit({'status':'STARTING',**state_summary(bot.engine.state)})
@@ -197,9 +238,13 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         if stop_requested():
             status='STOPPED';reason='TIME_LIMIT_OR_USER_STOP'
         else:
-            stream=stream_factory(selected);stream.connect()
+            if activity is not None:
+                activity.validate_start(selected)
+                timing=activity.runtime_guard(selected,(wall_begun,begun))
+            else:
+                stream=stream_factory(selected);stream.connect()
+                timing=TickTiming(selected,wall(),monotonic(),clock_origin=(wall_begun,begun))
             last_update=last_report=monotonic()
-            timing=TickTiming(selected,wall(),monotonic(),clock_origin=(wall_begun,begun))
             while not stop_requested():
                 try:data=stream.get()
                 except TimeoutError:
@@ -207,6 +252,14 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                     timing.idle(wall(),monotonic())
                     continue
                 if stop_requested():break
+                if activity is not None:
+                    if (not isinstance(data,dict) or data.get('type')!='ticker'
+                            or not isinstance(data.get('code'),str) or data['code'] not in activity.stats):
+                        raise ActivityError('ACTIVITY_INVALID_MESSAGE')
+                    if data.get('stream_type') not in ('REALTIME','SNAPSHOT'):raise ActivityError('ACTIVITY_STREAM_TYPE_UNKNOWN')
+                    if data['code'] not in selected or data['stream_type']=='SNAPSHOT':
+                        ignored_activity_messages=min(2_147_483_647,ignored_activity_messages+1)
+                        timing.idle(wall(),monotonic());continue
                 t=timing.observe(data,wall(),monotonic());price=positive(data.get('trade_price'))
                 counts[t]+=1;last[t]=str(price);marks[t]=(price,monotonic())
                 bot.process_market_data(t,data)
@@ -224,8 +277,8 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         allowed={'PAPER_STREAM_TIMEOUT','PAPER_STALE_TICK','PAPER_MARKET_STALE','PAPER_CLOCK_DISCONTINUITY',
                  'PAPER_INVALID_TICK','PAPER_INVALID_MARKETS','PAPER_TOO_MANY_HELD_MARKETS',
                  'INSUFFICIENT_CONTIGUOUS_CANDIDATES','HELD_CANDLE_GAP_RISK_MANAGEMENT_UNAVAILABLE',
-                 'HELD_MARKET_LIMIT','SELECTION_LIMIT_INVALID','CANDIDATE_LIMIT_INVALID','CANDIDATES_INVALID'}
-        if str(exc) in allowed or (isinstance(exc,PublicDataError) and str(exc) in PUBLIC_ERROR_CODES):
+                 'HELD_MARKET_LIMIT','SELECTION_LIMIT_INVALID','CANDIDATE_LIMIT_INVALID','CANDIDATES_INVALID'} | ACTIVITY_ERRORS
+        if str(exc) in allowed or (isinstance(exc,ActivityError) and str(exc) in ACTIVITY_ERRORS) or (isinstance(exc,PublicDataError) and str(exc) in PUBLIC_ERROR_CODES):
             reason=str(exc)
         cancel_only=(experiment is None or (isinstance(exc,PublicDataError)
                      and str(exc) in ('PUBLIC_STOP_REQUESTED','PUBLIC_DEADLINE')))
@@ -243,6 +296,11 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         result={'status':status,'reason':reason,'post_validation':'UNVERIFIED',
                 'network_enabled':True,'execution_authorized':False,
                 'engine_started':bool(bot is not None and bot._initialized)}
+        if activity is not None:
+            result['realtime_activity']=activity.report()
+            result['wire_subscription']=list(activity.stats)
+            result['fixed_strategy_markets']=selected.copy()
+            result['ignored_non_strategy_or_snapshot_messages']=ignored_activity_messages
         if cleanup_error is not None:result['cleanup_error']=cleanup_error
         if timing is not None:result['tick_timing']=timing.report()
         if experiment is not None:

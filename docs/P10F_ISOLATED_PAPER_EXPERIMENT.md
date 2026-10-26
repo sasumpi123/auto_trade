@@ -110,3 +110,5 @@ Fake 테스트에서 기존 HALTED BTC 원장/백업/lock bytes 불변, 새 빈 
 Mac M3의 실제 생성/ACL/권한/공개 API·순위/7개 적합성/64회 예산/HTTP Date·시계/종목별 틱/실제 전략 신호·Ctrl+C·SSH·절전/전원 내구성은 **아직 미검증**이다. 사용자 과거 보고를 새 도구의 성공으로 옮기지 않는다. 실제 Slack/실거래/launchd/모델/유료 인프라는 계속 OFF다.
 
 P10-G 후속: [ticker 시각 진단](P10G_TICK_TIMING_DIAGNOSTICS.md)은 PAPER_STALE_TICK의 세부 분류와 자식/감독자 원인을 구분하고, 원장을 열지 않는 별도 공개 WebSocket 진단을 제공한다. 기존/신규 HALTED 원장은 그대로 보존하며 읽기 전용 회계 대사 결과를 재시작 허가로 사용하지 않는다. timestamp 역행 허용이나 자동 복구 기능은 추가하지 않았다.
+
+P10-H 후속: [실시간 활동성 사전 관찰](P10H_REALTIME_ACTIVITY.md)은 신규 명시 옵션으로 분봉 적합성과 REALTIME 수신을 별도 검사한다. 기본 top/eligible-top 의미와 기존 HALTED 원장은 유지한다. 명시 대체 모드의 실제 wire 구독과 최종 전략 종목, 준비 실패/운영 HALT 및 증거 유효시간을 구분한다.
