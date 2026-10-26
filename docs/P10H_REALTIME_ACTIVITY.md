@@ -66,3 +66,5 @@ experiment_dir="$HOME/Library/Application Support/auto_trade/paper-experiments/U
 Fake 테스트는 7개 중 1개 60초 무수신, 전부 수신, snapshot만 수신, 미분류 프레임, 명시 대체/대체 금지, 후보 부족, 보유 종목 사전/운영 무수신, 연결/close/읽기 오류, 고정 전략 종목, 증거 만료, 중복 소유권, 중단 이벤트를 검증한다. 기존 P10-F/G의 실제 자식 프로세스 SIGINT/SIGHUP/강제 종료 회귀 테스트도 유지한다. Fake 기존 BTC 및 두 번째 HALTED 실험의 원장·lock·백업·session/receipt 불변을 매 테스트 확인한다. 기존 855개에 25개를 추가하여 총 880개다. 정확한 OS별 결과/head/run/attempt는 PR에 기록한다.
 
 실제 Mac의 새 모드/공식 응답 규격/60초 관찰·시작 지연/선정 결과/장시간 활동성/절전·SSH 종료/저장 내구성은 미검증이다. 실거래·Slack·launchd·자동 시작·유료 API/모델/인프라·자동 PR 게시/병합은 계속 OFF이며 전략/holdout/원장 복구 정책도 바꾸지 않았다.
+
+P10-I 후속: [소폭 timestamp 역행의 실험적 폐기](P10I_SMALL_TIMESTAMP_REGRESSION.md)는 새 계좌 최초 실행의 별도 명시 옵션만 다룬다. 기본/사전 관찰은 엄격 HALT이며, 버린 가격과 timestamp는 전략·평가·활동성 타이머를 갱신하지 않는다. 기존 세 HALTED 계좌의 복구/재시작은 허용하지 않는다.

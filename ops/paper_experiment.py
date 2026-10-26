@@ -316,10 +316,11 @@ def main(argv=None):
     parser.add_argument('--candidate-limit',type=int)
     parser.add_argument('--observe-realtime-seconds',type=int)
     parser.add_argument('--select-realtime-active',action='store_true')
+    parser.add_argument('--discard-small-timestamp-regressions',action='store_true')
     args=parser.parse_args(argv)
     def emit(r):print(json.dumps({'account_scope':SCOPE,**r},ensure_ascii=False,sort_keys=True),flush=True)
     if not args.connect_public:
-        if args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
+        if args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
             parser.error('network options require explicit connection')
         r=create(args.directory) if args.create else inspect_experiment(args.directory)
         emit(r);return 0 if r['status']=='CREATED_NEW_INDEPENDENT_EXPERIMENT' else 2
@@ -331,6 +332,7 @@ def main(argv=None):
     if args.observe_realtime_seconds is not None and not 1<=args.observe_realtime_seconds<=60:parser.error('bounded observation required')
     if args.select_realtime_active and (args.eligible_top is None or args.observe_realtime_seconds is None):parser.error('explicit activity eligibility required')
     if args.observe_realtime_seconds is not None and args.seconds<args.observe_realtime_seconds+5:parser.error('observation and startup must fit duration')
+    if args.discard_small_timestamp_regressions and args.observe_realtime_seconds is None:parser.error('explicit realtime observation required for discard experiment')
     from services.public_market import MARKET
     if args.tickers is not None and (not 1<=len(args.tickers)<=MAX_CANDIDATES or len(set(args.tickers))!=len(args.tickers)
                                     or any(not MARKET.fullmatch(t) for t in args.tickers)):parser.error('invalid markets')
@@ -338,7 +340,8 @@ def main(argv=None):
         from ops.paper_watch import supervise,_worker
         p=directory(args.directory);token=begin(p)
         options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit,
-                 'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active}
+                 'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active,
+                 'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions}
         result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
                          worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3')
         terminal=finish(p,token,result);emit(terminal)
