@@ -48,6 +48,7 @@ def diagnose(state, backup=None):
                               'fee_inclusive_cost':str(v['cost'])} for t,v in a['positions'].items()})
             result['halt_class']='SESSION_FAILURE_GENERIC' if saved.get('halt_reason')=='PAPER_SESSION_FAILURE' else 'OTHER_OR_ABSENT'
             if not saved.get('halt_reason'):result['status']='NO_HALT_TO_RECOVER'
+            if 'manual_recovery' in saved:result['status']='PENDING_MANUAL_RECOVERY_VERIFICATION_NO_RESTART'
             if backup is not None:
                 bp=_private(backup,{'.json'})
                 if bp==p:raise ValueError()
