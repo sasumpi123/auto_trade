@@ -108,3 +108,5 @@ cold backup은 모든 writer 종료·잠금 확인 후 leaf 전체(원장/lock/�
 Fake 테스트에서 기존 HALTED BTC 원장/백업/lock bytes 불변, 새 빈 계좌, 실제 PAPER Fake 체결·영속성·수익률, 상위10 중3개 공백·명시 적합성·후보 부족·429/시각/응답 오류, 캔들 재사용·보유 종목·준비 전/후 장애, 중복 소유권·강제 종료·SIGHUP·저장 실패·기록 소실을 검증한다. 테스트 데이터/원장 삭제는 TemporaryDirectory에서만 수행한다. 3 OS 정확한 head/run/attempt 및 skip은 PR에 기록한다.
 
 Mac M3의 실제 생성/ACL/권한/공개 API·순위/7개 적합성/64회 예산/HTTP Date·시계/종목별 틱/실제 전략 신호·Ctrl+C·SSH·절전/전원 내구성은 **아직 미검증**이다. 사용자 과거 보고를 새 도구의 성공으로 옮기지 않는다. 실제 Slack/실거래/launchd/모델/유료 인프라는 계속 OFF다.
+
+P10-G 후속: [ticker 시각 진단](P10G_TICK_TIMING_DIAGNOSTICS.md)은 PAPER_STALE_TICK의 세부 분류와 자식/감독자 원인을 구분하고, 원장을 열지 않는 별도 공개 WebSocket 진단을 제공한다. 기존/신규 HALTED 원장은 그대로 보존하며 읽기 전용 회계 대사 결과를 재시작 허가로 사용하지 않는다. timestamp 역행 허용이나 자동 복구 기능은 추가하지 않았다.

@@ -47,11 +47,32 @@ def receive_message(receiver, timeout=0):
         return 'closed',None
 
 
+def child_result(last,exitcode,termination_requested):
+    terminal=isinstance(last,dict) and last.get('status') in ('HALTED','STOPPED')
+    forced=bool(termination_requested and os.name=='posix' and exitcode==-signal.SIGKILL)
+    halted=terminal and last['status']=='HALTED'
+    if forced:classification='FORCED_TERMINATION_CONFIRMED'
+    elif termination_requested:classification='TERMINATION_REQUESTED_OUTCOME_UNCONFIRMED'
+    elif exitcode!=0:classification='CHILD_EXIT_UNCONFIRMED'
+    elif halted:classification='CHILD_REPORTED_HALTED'
+    elif terminal:classification='CHILD_REPORTED_STOPPED'
+    else:classification='CHILD_RESULT_UNCONFIRMED'
+    result=dict(last) if terminal else {'status':'HALTED','reason':'CHILD_RESULT_UNCONFIRMED'}
+    if termination_requested or exitcode!=0 or not terminal:
+        result['status']='HALTED'
+        if not halted:result['reason']=classification
+    result.update(automatic_restart=False,execution_authorized=False,supervisor_reason=classification,
+                  termination_requested=termination_requested,forced_termination=forced,process_exit_code=exitcode,
+                  child_status=last.get('status') if isinstance(last,dict) else None,
+                  child_reason=last.get('reason') if isinstance(last,dict) else None,last_snapshot=last)
+    return result
+
+
 def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=None):
     """Hard process deadline incl. discovery, candle reads and shutdown. No auto-restart."""
     ctx=multiprocessing.get_context('spawn')
     receiver,sender=ctx.Pipe(duplex=False);stop=ctx.Event()
-    process=ctx.Process(target=worker,args=(str(state),seconds,top,tickers,stop,sender))
+    process=ctx.Process(target=worker,args=(str(state) if state is not None else None,seconds,top,tickers,stop,sender))
     handlers={};interrupted=[False]
     def request_stop(*_):interrupted[0]=True;stop.set()
     signals=(signal.SIGINT,signal.SIGTERM)+( (signal.SIGHUP,) if os.name=='posix' else () )
@@ -82,16 +103,20 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=No
             if kind!='message':break
             last=message;emit(last)
         if process.is_alive():process.kill();process.join(5);forced=True
-        if forced or process.exitcode!=0 or last is None or last.get('status')!='STOPPED':
-            result={'status':'HALTED','reason':'FORCED_STOP_OR_UNCONFIRMED_SESSION',
-                'automatic_restart':False,'recovery_action':'READ_ONLY_RECONCILIATION_REQUIRED',
-                'execution_authorized':False,'last_snapshot':last}
-        else:result={**last,'automatic_restart':False}
-        # After owner release, recheck disk. A clean snapshot never overrides forced-stop uncertainty.
-        result['after_close']=(offline_report(state) if outbox is None
-                               else offline_report(state,outbox=outbox))
-        if result['after_close'].get('summary') is None:
-            result['status']='HALTED'
+        result=child_result(last,process.exitcode,forced)
+        result['recovery_action']=('PUBLIC_TIMING_REVIEW_ONLY_NO_LEDGER' if state is None
+                                   else 'READ_ONLY_RECONCILIATION_REQUIRED')
+        # None is the explicit no-ledger public-diagnostic route, never a default path.
+        if state is None:
+            result['after_close']={'ledger_access':'NOT_APPLICABLE_NO_LEDGER_DIAGNOSTIC'}
+        else:
+            result['after_close']=(offline_report(state) if outbox is None
+                                   else offline_report(state,outbox=outbox))
+            if result['after_close'].get('summary') is None:
+                if result['status']=='STOPPED':
+                    result['reason']='POST_CLOSE_STATE_UNVERIFIED'
+                    result['supervisor_reason']='POST_CLOSE_VERIFICATION_FAILED'
+                result['status']='HALTED'
         emit(result)
         return result
     finally:
