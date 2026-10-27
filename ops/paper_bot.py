@@ -182,6 +182,7 @@ def main(argv=None):
     parser.add_argument('--directory',type=Path,required=True)
     parser.add_argument('--limit',type=int,default=20)
     options=parser.parse_args(args)
+    if options.command=='run':parser.error('run must be the first subcommand; explicit connection required')
     try:
         if options.command=='init':r=initialize(options.directory)
         elif options.command=='check':

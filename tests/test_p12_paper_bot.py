@@ -33,7 +33,7 @@ class PortableCliTests(unittest.TestCase):
                 with patch('sys.stdout',new_callable=io.StringIO) as out:self.assertEqual(cli.main(args),2)
                 self.assertEqual(json.loads(out.getvalue())['network_calls'],0)
     def test_invalid_missing_args_no_reset_or_credentials_switch(self):
-        for args in ([],['init'],['report','--reset'],['status','--api-key','unused']):
+        for args in ([],['init'],['report','--reset'],['status','--api-key','unused'],['--directory','unused','run']):
             with patch('sys.stderr',new_callable=io.StringIO),self.assertRaises(SystemExit):cli.main(args)
     @unittest.skipUnless(os.name=='nt','Windows private account remains blocked')
     def test_windows_init_never_creates_files(self):
