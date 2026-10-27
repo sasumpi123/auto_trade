@@ -62,3 +62,5 @@ cd "$HOME/projects/auto_trade"
 모든 인자는 필수다. market은 BTC/ETH/XRP/SOL의 KRW 코드, unit은15/60, split은train/validation만 가능하다. format은json/markdown이다. 파일 저장은 사용자가 stdout redirect를 명시한다. 출력 경로에 운영 원장/백업을 지정하지 않는다. 전체 공개 데이터 결과의 재현 runner는 연구 디렉터리의 `reproduce.py`를 사용한다. API/시장 연결/계좌 생성/운영 PAPER로의 fallback은 없다. 외부 서비스·모델·유료 인프라·Slack·launchd·자동 시작/재시작/병합은 OFF, REAL_TRADING=False 유지다.
 
 신규 테스트는 미래 suffix 불변, 실제 신호/필터/거절, 다음 시가 체결, 중복 평가, 수수료·잔액·부분 매도·P9 정산,0건N/A, 명시CLI와 sealed split/manifest 차단을 검증한다. 전체 OS CI exact head/run/attempt/수/skip은 PR에 기록한다. Mac 실기기나 실제 원장 검증은 수행하지 않았다.
+
+후속 [P11-B 동일 조건 복수 전략 비교](P11B_STRATEGY_COMPARISON.md)는 이 경로에 명시적 연구용 신호 전략 인자를 추가한다. 기본 Legacy 경로와 기존96개 수치/trace를 대조하며, 같은 PAPER 회계와 위험관리 아래6전략을 비교한다. 운영 전략이나 독립 검증 정책은 바꾸지 않는다.
