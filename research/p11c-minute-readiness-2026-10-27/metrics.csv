@@ -1,0 +1,7 @@
+strategy,status,raw_buy,raw_sell,paper_buys,paper_sells,net_return_pct
+legacy_composite,INSUFFICIENT_REAL_DATA,,,,,
+rsi,INSUFFICIENT_REAL_DATA,,,,,
+macd,INSUFFICIENT_REAL_DATA,,,,,
+bollinger,INSUFFICIENT_REAL_DATA,,,,,
+consensus_2of3,INSUFFICIENT_REAL_DATA,,,,,
+consensus_3of3,INSUFFICIENT_REAL_DATA,,,,,

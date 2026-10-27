@@ -126,11 +126,11 @@ def markdown(report):
     return '\n'.join(lines)+'\n'
 
 
-def write_report(report,output):
+def write_report(report,output,*,render=markdown):
     # JSON keeps one comparison per line so generated public-data diffs remain reviewable.
     metadata={k:v for k,v in report.items() if k!='comparisons'}
     (output/'results.json').write_text(json.dumps(metadata,ensure_ascii=False,allow_nan=False)[:-1]+',\n"comparisons":[\n'+',\n'.join(json.dumps(r,ensure_ascii=False,allow_nan=False) for r in report['comparisons'])+'\n]}\n',encoding='utf-8')
-    (output/'REPORT.md').write_text(markdown(report),encoding='utf-8')
+    (output/'REPORT.md').write_text(render(report),encoding='utf-8')
     rows=[]
     for r in report['comparisons']:
         rows.append({'strategy':r['strategy'],'market':r['market'],'minutes':r['bar_seconds']//60,'split':r['split'],

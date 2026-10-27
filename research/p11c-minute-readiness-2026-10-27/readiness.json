@@ -1,0 +1,83 @@
+{
+  "status": "INSUFFICIENT_REAL_DATA",
+  "actual_minute_data_acquired": false,
+  "acquired_period": null,
+  "requested_period": {
+    "start": "2026-10-26T00:00:00+00:00",
+    "end_exclusive": "2026-10-26T06:00:00+00:00"
+  },
+  "requested_markets": [
+    "KRW-BTC"
+  ],
+  "request_attempts": 1,
+  "verified_http_response": false,
+  "failure": "PUBLIC_REQUEST_FAILED",
+  "failure_detail": "UNKNOWN; no proxy bypass or retry",
+  "collection_started_at_utc": "2026-10-27T01:32:07.088604689+00:00",
+  "endpoint": "https://api.upbit.com/v1/candles/minutes/1",
+  "inventory_scope": "Cloud checkout registered research snapshots; not MacBook or exhaustive private filesystem inventory",
+  "registered_minute1_snapshots_found": 0,
+  "existing_registered_units_minutes": [
+    15,
+    60
+  ],
+  "holdout_evaluated": false,
+  "independent_validation": false,
+  "synthetic_regression_only": true,
+  "strategy_results": [
+    {
+      "strategy": "legacy_composite",
+      "status": "INSUFFICIENT_REAL_DATA",
+      "raw_buy": null,
+      "raw_sell": null,
+      "paper_buys": null,
+      "paper_sells": null,
+      "net_return_pct": null
+    },
+    {
+      "strategy": "rsi",
+      "status": "INSUFFICIENT_REAL_DATA",
+      "raw_buy": null,
+      "raw_sell": null,
+      "paper_buys": null,
+      "paper_sells": null,
+      "net_return_pct": null
+    },
+    {
+      "strategy": "macd",
+      "status": "INSUFFICIENT_REAL_DATA",
+      "raw_buy": null,
+      "raw_sell": null,
+      "paper_buys": null,
+      "paper_sells": null,
+      "net_return_pct": null
+    },
+    {
+      "strategy": "bollinger",
+      "status": "INSUFFICIENT_REAL_DATA",
+      "raw_buy": null,
+      "raw_sell": null,
+      "paper_buys": null,
+      "paper_sells": null,
+      "net_return_pct": null
+    },
+    {
+      "strategy": "consensus_2of3",
+      "status": "INSUFFICIENT_REAL_DATA",
+      "raw_buy": null,
+      "raw_sell": null,
+      "paper_buys": null,
+      "paper_sells": null,
+      "net_return_pct": null
+    },
+    {
+      "strategy": "consensus_3of3",
+      "status": "INSUFFICIENT_REAL_DATA",
+      "raw_buy": null,
+      "raw_sell": null,
+      "paper_buys": null,
+      "paper_sells": null,
+      "net_return_pct": null
+    }
+  ]
+}
