@@ -100,18 +100,33 @@ class CostPaperEngine(ExecutionEngine):
 
 
 class ProbeAnalyzer(DataAnalyzer):
-    def __init__(self,ticker,counts,clock):
+    def __init__(self,ticker,counts,clock,strategy=None):
         super().__init__(ticker);self.counts=counts;self.clock=clock;self.action=None
+        self.strategy=strategy or LegacyCompositeStrategy()
     def analyze(self,index=-1):
         self.counts['analyzer_calls']+=1
+        if type(self.strategy) is not LegacyCompositeStrategy:
+            columns=['close','volume','rsi','macd','macd_signal','bb_upper','bb_lower','bb_middle']
+            if len(self.df)<20 or not np.isfinite(self.df[columns].iloc[-2:].to_numpy(dtype=float)).all():
+                raise ValueError('INVALID_RESEARCH_ANALYZER_INPUT')
         low=self.df.volume.iloc[-1]<self.df.volume.mean()*.5
         cooldown=bool(self.last_signal and self.last_signal_time and self.clock()-self.last_signal_time<self.signal_cooldown)
         if low:self.counts['volume_blocked']+=1
         elif cooldown:
             self.counts['cooldown_blocked']+=1
-            if LegacyCompositeStrategy().decide(snapshot(self.df)).action!='HOLD':self.counts['cooldown_blocked_actionable']+=1
-        with patch('data_analyzer.analyzer.time',SimpleNamespace(time=self.clock)):
-            result=DataAnalyzer.analyze.__wrapped__(self,index)
+            if self.strategy.decide(snapshot(self.df)).action!='HOLD':self.counts['cooldown_blocked_actionable']+=1
+        if type(self.strategy) is LegacyCompositeStrategy:
+            with patch('data_analyzer.analyzer.time',SimpleNamespace(time=self.clock)):
+                result=DataAnalyzer.analyze.__wrapped__(self,index)
+        else:
+            # Research-only signal substitution; same prepared data/volume/cooldown.
+            if low or cooldown:
+                result={'action':'HOLD','reason':None,'target_price':None}
+            else:
+                decision=self.strategy.decide(snapshot(self.df))
+                result={'action':decision.action,'reason':decision.reason,'target_price':decision.target_price}
+                if decision.action in ('BUY','SELL'):
+                    self.last_signal=decision.action;self.last_signal_time=self.clock()
         self.action=result['action'];self.counts['effective_'+self.action]+=1
         return result
 
@@ -133,12 +148,13 @@ class ProbeBot(AutoTrade):
         return result
 
 
-def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1):
+def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1,strategy=None):
     """One asset, close_i features -> open_(i+1) execution, no terminal liquidation.
 
     Actual risk rules observe next open before analyzer, exactly AutoTrade priority.
     repeats are diagnostic attempts, suppressed before bot execution, never repeated orders.
     """
+    strategy=strategy or LegacyCompositeStrategy()
     cash=decimal(initial_cash)
     if cash<=0 or type(repeat_evaluations) is not int or not 1<=repeat_evaluations<=10:raise ValueError('Invalid simulation limits')
     counts=Counter({k:0 for k in ('evaluations','analyzer_calls','raw_BUY','raw_SELL','raw_HOLD','effective_BUY','effective_SELL','effective_HOLD',
@@ -148,7 +164,7 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
     conditions={};first_failed={};curve=[cash];now=[0.0];seen=set();first_open=None
     with TemporaryDirectory(prefix='legacy-offline-') as temp:
         bot=ProbeBot(start_cash=cash,tickers=[market],state_path=Path(temp)/'paper.json',real_trading=False,
-            notification=None,analyzer_factory=lambda t:ProbeAnalyzer(t,counts,lambda:now[0]))
+            notification=None,analyzer_factory=lambda t:ProbeAnalyzer(t,counts,lambda:now[0],strategy))
         bot.diagnostic_counts=counts;bot.engine=CostPaperEngine(Path(temp)/'paper.json',cash,costs,lambda:now[0])
         bot.initialize();bot.max_per_coin=cash*Decimal('.4')
         try:
@@ -159,7 +175,7 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
                 except ValueError:
                     if number(bot.engine.position(market)['quantity'])>0:raise ValueError('NONFINITE_FEATURES_WHILE_HOLDING') from None
                     counts['nonfinite_skipped']+=1;continue
-                flags=predicates(s);raw=LegacyCompositeStrategy().decide(s)
+                flags=predicates(s);raw=strategy.decide(s)
                 for name,value in flags.items():
                     row=conditions.setdefault(name,{'met':0,'not_met':0});row['met' if value else 'not_met']+=1
                 for rule,keys in RULES.items():
@@ -211,7 +227,7 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
         finally:bot.stop()
 
 
-def run(data,market,unit,split):
+def load_context(data,market,unit,split):
     protocol,ph=load_protocol();data=Path(data)
     if market not in protocol['markets'] or unit not in protocol['units_minutes'] or split not in ('train','validation'):
         raise ValueError('Unsupported dataset or sealed split')
@@ -225,6 +241,11 @@ def run(data,market,unit,split):
     start=protocol['start'] if split=='train' else protocol['train_end']
     context=frame.loc[frame.index<pd.Timestamp(end)]
     context,windows=prepare(context,unit*60)
+    return protocol,ph,start,end,context,windows
+
+
+def run(data,market,unit,split):
+    protocol,ph,start,end,context,windows=load_context(data,market,unit,split)
     results=[simulate(context,windows,market=market,bar_seconds=unit*60,costs=CostModel(fee,slip,protocol['full_spread_bps']),evaluation_start=start)
              for fee in protocol['fee_bps_per_side'] for slip in protocol['slippage_bps_per_side']]
     for result in results:result['source']='VERIFIED_ARCHIVED_REAL_DEVELOPMENT_PREFIX'
