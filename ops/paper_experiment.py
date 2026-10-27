@@ -1,4 +1,6 @@
 """Independent PAPER experiment. Offline default; explicit creation != execution."""
+from contextlib import nullcontext
+from datetime import datetime,timezone
 from decimal import Decimal
 from functools import partial
 import hashlib
@@ -182,7 +184,7 @@ def validate_start(saved,state,token):
     validate_first_use(saved,p)
 
 
-def finish(value,token,result):
+def finish(value,token,result,*,record_summary=False):
     p=directory(value);owner=ExistingPaperStore(p/STATE,1_000_000)
     try:
         owner.acquire();saved=owner.load();validate_first_use(saved,p);m=marker(p)
@@ -197,7 +199,25 @@ def finish(value,token,result):
                 and saved['paper_experiment']['last_session_id']==m['previous_session']):
             m['phase']='PREPARATION_FAILED'  # Failure, never a successful stop.
         else:raise ExperimentError('UNCONFIRMED_SESSION_NO_RESTART')
-        m['end_sha256']=sha(owner.path.read_bytes());save_marker(owner,m)
+        m['end_sha256']=sha(owner.path.read_bytes())
+        if record_summary and m['phase']=='STOPPED_VERIFIED':
+            from ops.paper_session import state_summary
+            markets=leaf.get('markets',{})
+            require(isinstance(markets,dict) and len(markets)<=MAX_CANDIDATES,'SESSION_SUMMARY_UNVERIFIED')
+            from services.public_market import MARKET
+            counts={};last={}
+            for ticker,row in markets.items():
+                require(isinstance(ticker,str) and MARKET.fullmatch(ticker) and isinstance(row,dict),'SESSION_SUMMARY_UNVERIFIED')
+                n=row.get('session_ticks')
+                require(type(n) is int and 0<=n<=2_147_483_647,'SESSION_SUMMARY_UNVERIFIED')
+                counts[ticker]=n
+                if row.get('last_price') is not None:
+                    from services.public_market import positive
+                    last[ticker]=str(positive(row['last_price']))
+            # Recompute accounting from the owned ledger; historic prices are NOT fresh valuation marks.
+            m['session_summary']=state_summary(saved,counts,last)
+            m['summary_recorded_at_utc']=datetime.now(timezone.utc).isoformat()
+        save_marker(owner,m)
         return {'status':m['phase'],'automatic_restart':False,'account_scope':SCOPE}
     except Exception:
         # A failure after marker rename must remain blocked even if bytes look clean.
@@ -304,7 +324,7 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None,
     return report['selected'],analyzers
 
 
-def main(argv=None):
+def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
     parser=SafeParser(description=__doc__)
     parser.add_argument('--directory',type=Path)
     modes=parser.add_mutually_exclusive_group()
@@ -318,7 +338,8 @@ def main(argv=None):
     parser.add_argument('--select-realtime-active',action='store_true')
     parser.add_argument('--discard-small-timestamp-regressions',action='store_true')
     args=parser.parse_args(argv)
-    def emit(r):print(json.dumps({'account_scope':SCOPE,**r},ensure_ascii=False,sort_keys=True),flush=True)
+    if emit is None:
+        def emit(r):print(json.dumps({'account_scope':SCOPE,**r},ensure_ascii=False,sort_keys=True),flush=True)
     if not args.connect_public:
         if args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
             parser.error('network options require explicit connection')
@@ -338,14 +359,18 @@ def main(argv=None):
                                     or any(not MARKET.fullmatch(t) for t in args.tickers)):parser.error('invalid markets')
     try:
         from ops.paper_watch import supervise,_worker
-        p=directory(args.directory);token=begin(p)
-        options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit,
-                 'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active,
-                 'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions}
-        result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
-                         worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3')
-        terminal=finish(p,token,result);emit(terminal)
-        return 0 if result['status']=='STOPPED' and terminal['status']=='STOPPED_VERIFIED' else 2
+        p=directory(args.directory)
+        with (control_factory(p) if control_factory is not None else nullcontext()) as control:
+            token=begin(p)
+            options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit,
+                     'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active,
+                     'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions}
+            extra={'control':control} if control is not None else {}
+            result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
+                             worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3',**extra)
+            terminal=finish(p,token,result,record_summary=True) if record_summary else finish(p,token,result)
+            emit(terminal)
+            return 0 if result['status']=='STOPPED' and terminal['status']=='STOPPED_VERIFIED' else 2
     except Exception:
         emit({'status':'HALTED','reason':'EXPERIMENT_UNVERIFIED_NO_RESTART','automatic_restart':False});return 2
 

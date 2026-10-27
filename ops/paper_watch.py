@@ -68,8 +68,11 @@ def child_result(last,exitcode,termination_requested):
     return result
 
 
-def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=None):
+def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=None,control=None):
     """Hard process deadline incl. discovery, candle reads and shutdown. No auto-restart."""
+    def publish(message):
+        if control is not None:control.publish(message)
+        emit(message)
     ctx=multiprocessing.get_context('spawn')
     receiver,sender=ctx.Pipe(duplex=False);stop=ctx.Event()
     process=ctx.Process(target=worker,args=(str(state) if state is not None else None,seconds,top,tickers,stop,sender))
@@ -83,6 +86,7 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=No
     try:
         process.start();sender.close()
         while process.is_alive():
+            if control is not None and control.poll():request_stop()
             now=time.monotonic()
             if now>=deadline or time.time()>=wall_deadline or interrupted[0]:
                 stop.set()
@@ -90,7 +94,7 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=No
             if stop_deadline is not None and now>=stop_deadline:
                 process.kill();forced=True;break
             kind,message=receive_message(receiver,.1) if channel_open else ('closed',None)
-            if kind=='message':last=message;emit(last)
+            if kind=='message':last=message;publish(last)
             elif kind=='closed':
                 # Lost status transport cannot authorize success. Request cooperative shutdown
                 # before resorting to the same deadline/kill path; never auto-restart.
@@ -101,7 +105,7 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=No
         while channel_open:
             kind,message=receive_message(receiver)
             if kind!='message':break
-            last=message;emit(last)
+            last=message;publish(last)
         if process.is_alive():process.kill();process.join(5);forced=True
         result=child_result(last,process.exitcode,forced)
         result['recovery_action']=('PUBLIC_TIMING_REVIEW_ONLY_NO_LEDGER' if state is None
@@ -117,7 +121,7 @@ def supervise(state,seconds,top,tickers,*,emit,worker=_worker,grace=15,outbox=No
                     result['reason']='POST_CLOSE_STATE_UNVERIFIED'
                     result['supervisor_reason']='POST_CLOSE_VERIFICATION_FAILED'
                 result['status']='HALTED'
-        emit(result)
+        publish(result)
         return result
     finally:
         if process.pid is not None and process.is_alive():process.kill();process.join(5)
