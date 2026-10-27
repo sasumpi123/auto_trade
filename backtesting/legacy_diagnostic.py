@@ -74,9 +74,10 @@ class CostPaperEngine(ExecutionEngine):
     Existing _execute persists intent and invokes existing _apply_fill accounting.
     Fees are all-in within the original requested BUY budget; no real PAPER default changes.
     """
-    def __init__(self,path,cash,costs,clock):
+    def __init__(self,path,cash,costs,clock,*,capture_details=False):
         super().__init__(path,cash,real_trading=False);self.costs=costs;self.clock=clock
         self.slippage=Decimal(0);self.spread=Decimal(0);self.trace=[];self.opening=None
+        self.capture_details=capture_details;self.detail_fills=[];self.signal_at=None
     def _execute(self,side,ticker,price,value,**kwargs):
         self.opening=number(price,positive=True)
         execution=self.costs.price(self.opening,'BUY' if side=='bid' else 'SELL')
@@ -96,6 +97,9 @@ class CostPaperEngine(ExecutionEngine):
             self.spread+=q*self.opening*self.costs.spread_bps/20000
             self.trace.append({'side':order['side'],'executed_at':self.clock(),
                 'price':order['average_fill_price'],'quantity':str(q),'fee':order['paid_fee']})
+            if self.capture_details:
+                from .trade_attribution import fill_detail
+                self.detail_fills.append(fill_detail(order,self.opening,self.costs,self.signal_at))
         return filled
 
 
@@ -148,7 +152,7 @@ class ProbeBot(AutoTrade):
         return result
 
 
-def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1,strategy=None):
+def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1,strategy=None,details=False):
     """One asset, close_i features -> open_(i+1) execution, no terminal liquidation.
 
     Actual risk rules observe next open before analyzer, exactly AutoTrade priority.
@@ -161,11 +165,11 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
         'volume_blocked','cooldown_blocked','cooldown_blocked_actionable','nonfinite_skipped','duplicate_evaluations_suppressed','repeat_signal_candidates',
         'buy_attempts','sell_attempts','buy_rejected','sell_rejected','reject_position_limit','reject_cash_below_minimum',
         'reject_minimum_order','buy_while_held','sell_without_position','risk_bypassed_analyzer')})
-    conditions={};first_failed={};curve=[cash];now=[0.0];seen=set();first_open=None
+    conditions={};first_failed={};curve=[cash];now=[0.0];seen=set();first_open=None;exposure=[]
     with TemporaryDirectory(prefix='legacy-offline-') as temp:
         bot=ProbeBot(start_cash=cash,tickers=[market],state_path=Path(temp)/'paper.json',real_trading=False,
             notification=None,analyzer_factory=lambda t:ProbeAnalyzer(t,counts,lambda:now[0],strategy))
-        bot.diagnostic_counts=counts;bot.engine=CostPaperEngine(Path(temp)/'paper.json',cash,costs,lambda:now[0])
+        bot.diagnostic_counts=counts;bot.engine=CostPaperEngine(Path(temp)/'paper.json',cash,costs,lambda:now[0],capture_details=details)
         bot.initialize();bot.max_per_coin=cash*Decimal('.4')
         try:
             for i,df in windows.items():
@@ -189,12 +193,16 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
                     bot.analyzers[market].df=df;bot.analyzers[market].action=None
                     held=number(bot.engine.position(market)['quantity'])>0
                     if first_open is None:first_open=number(frame.open.iloc[i+1])
+                    if details:bot.engine.signal_at=frame.index[i].timestamp()
                     with patch('trading.auto_trade.time',SimpleNamespace(time=lambda:now[0],monotonic=lambda:now[0])):
                         bot.process_market_data(market,{'trade_price':str(frame.open.iloc[i+1])})
                     action=bot.analyzers[market].action
                     if action is None:counts['risk_bypassed_analyzer']+=1
                     elif action=='BUY' and held:counts['buy_while_held']+=1
                     elif action=='SELL' and not held:counts['sell_without_position']+=1
+                if details:
+                    exposure.append({'timestamp':now[0],'quantity':str(number(bot.engine.position(market)['quantity'])),
+                        'reference_price':str(number(frame.open.iloc[i+1]))})
                 mark=number(frame.close.iloc[i+1]);curve.append(bot.engine.cash+number(bot.engine.position(market)['quantity'])*mark)
             state=deepcopy(bot.engine.state)
             if bot.engine.store.load()!=state or bot.engine.halted:raise ValueError('RESEARCH_LEDGER_MISMATCH')
@@ -215,7 +223,12 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
                 for fraction in (Decimal(1),Decimal('.4')):
                     budget=cash*fraction;qty=budget/(1+costs.fee_rate)/costs.price(first_open,'BUY')
                     metrics['buy_hold_'+('100' if fraction==1 else '40')+'_net_pct']=((cash-budget+qty*number(frame.close.iloc[-1]))/cash-1)*100
-            return serializable({'source':'SYNTHETIC_OR_CALLER_DATA_UNVERIFIED','status':'EVALUATED','market':market,'bar_seconds':bar_seconds,'input_candles':len(frame),
+            extra={}
+            if details:
+                from .trade_attribution import attribute
+                extra['attribution']=attribute(state,bot.engine.detail_fills,cash,as_of=end,
+                    mark=number(frame.close.iloc[-1]),exposure=exposure)
+            return serializable({**extra,'source':'SYNTHETIC_OR_CALLER_DATA_UNVERIFIED','status':'EVALUATED','market':market,'bar_seconds':bar_seconds,'input_candles':len(frame),
                 'warmup_window':WINDOW,'terminal_candles_without_next_open':1,
                 'dominant_failures_by_rule':{rule:max(((k,n) for k,n in items.items() if k!='ALL_MET'),key=lambda pair:pair[1],default=None) for rule,items in first_failed.items()},'evaluation_first_open':frame.index[min(seen)].isoformat() if seen else None,
                 'execution_last_open':frame.index[-1].isoformat(),'counts':dict(counts),'conditions':conditions,
