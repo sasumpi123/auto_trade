@@ -274,6 +274,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 if t is None:continue  # No strategy, fill, mark, count, or timer refresh.
                 price=positive(data.get('trade_price'))
                 counts[t]+=1;last[t]=str(price);marks[t]=(price,monotonic())
+                before_orders=len(bot.engine.state['orders'])
                 bot.process_market_data(t,data)
                 now=monotonic()
                 if now-last_update>=DATA_UPDATE_INTERVAL:
@@ -281,7 +282,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                         if stop_requested():break
                         analyzer.update_data()
                     last_update=monotonic()
-                if now-last_report>=5:
+                if now-last_report>=5 or len(bot.engine.state['orders'])!=before_orders:
                     emit({'status':'RUNNING',**state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic())})
                     last_report=now
             if timing.awaiting_followup is not None:
