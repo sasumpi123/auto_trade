@@ -6,6 +6,7 @@ import traceback
 import time
 from utils.decorators import send_error_alert
 from strategies.signals import LegacyCompositeStrategy, Snapshot
+from services.paper_decisions import observe
 
 class DataAnalyzer:
     def __init__(self, ticker):
@@ -121,6 +122,10 @@ class DataAnalyzer:
             
             # 거래량이 평균 거래량의 50% 미만이면 거래 제한
             if volume < avg_volume * 0.5:
+                if getattr(self,'decision_observer',None) is not None:
+                    observe(self,'gate_conditions',self.ticker,VOLUME_GATE=True,
+                        COOLDOWN=bool(self.last_signal and self.last_signal_time and time.time()-self.last_signal_time<self.signal_cooldown))
+                observe(self,'gate',self.ticker,reason='VOLUME_GATE')
                 return {
                     'action': 'HOLD',
                     'reason': '거래량 부족',
@@ -128,11 +133,14 @@ class DataAnalyzer:
                     'strategy_status': self.get_strategy_status(index)
                 }            
             current_time = time.time()
+            observe(self,'gate_conditions',self.ticker,VOLUME_GATE=False,
+                COOLDOWN=bool(self.last_signal and self.last_signal_time and current_time-self.last_signal_time<self.signal_cooldown))
             
             # 이전 신호와 동일한 신호가 쿨다운 시간 내에 발생하면 HOLD 반환
             if (self.last_signal and 
                 self.last_signal_time and 
                 current_time - self.last_signal_time < self.signal_cooldown):
+                observe(self,'gate',self.ticker,reason='COOLDOWN')
                 return {
                     'action': 'HOLD',
                     'reason': None,
@@ -184,12 +192,14 @@ class DataAnalyzer:
             
             # Pure strategy: the analyzer owns data/cooldown, never order execution.
             # Keep the legacy latest-delta semantics for compatibility with the bot.
+            observe(self,'strategy_attempts',self.ticker)
             decision = LegacyCompositeStrategy().decide(Snapshot(
                 current_price, rsi, self.df['rsi'].diff().iloc[-1],
                 macd, macd_signal, self.df['macd'].diff().iloc[-1],
                 bb_lower, bb_middle, bb_upper,
             ))
             action = decision.action
+            observe(self,'strategy_result',self.ticker,action=action)
             reasons = [decision.reason] if decision.reason else []
             target_price = decision.target_price
             if action != "HOLD":

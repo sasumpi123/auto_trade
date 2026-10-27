@@ -17,6 +17,7 @@ from services.performance_service import PerformanceAnalyzer
 from services.notification_metrics import report_metrics
 from services.notification_service import format_fill, format_event, format_report
 from .execution import ExecutionEngine, TradingHalted, number
+from services.paper_decisions import observe
 
 
 class AutoTrade:
@@ -178,35 +179,52 @@ class AutoTrade:
 
     def buy_coin(self, ticker, current_price, reason=None, target_price=None, amount=None):
         with self._mutex:
+            observe(self,'order',ticker,side='BUY',stage='ATTEMPT')
             try:
                 if self._stop_requested:
                     raise TradingHalted('Stop requested')
                 averaging = amount is not None
                 if not averaging and self.get_significant_holdings_count() >= MAX_COINS_AT_ONCE:
+                    if getattr(self,'decision_observer',None) is not None:
+                        value=min(self.max_per_coin,self.engine.cash)
+                        observe(self,'constraints',ticker,MAX_POSITIONS=True,CASH_BELOW_MINIMUM=self.engine.cash<MIN_TRADING_AMOUNT,
+                            VALUE_BELOW_MINIMUM=value<MIN_TRADING_AMOUNT,REQUEST_EXCEEDS_CASH=False)
+                    observe(self,'order',ticker,side='BUY',stage='BLOCKED',reason='MAX_POSITIONS')
                     return False
                 value = number(amount) if averaging else min(self.max_per_coin, self.engine.cash)
+                observe(self,'constraints',ticker,MAX_POSITIONS=False,CASH_BELOW_MINIMUM=self.engine.cash<MIN_TRADING_AMOUNT,
+                    VALUE_BELOW_MINIMUM=value<MIN_TRADING_AMOUNT,REQUEST_EXCEEDS_CASH=value>self.engine.cash)
                 if value < MIN_TRADING_AMOUNT:
+                    observe(self,'order',ticker,side='BUY',stage='BLOCKED',
+                        reason='CASH_BELOW_MINIMUM' if self.engine.cash<MIN_TRADING_AMOUNT else 'VALUE_BELOW_MINIMUM')
                     return False
+                observe(self,'order',ticker,side='BUY',stage='ENGINE_ATTEMPT')
                 result = self.engine.buy(ticker, current_price, value, averaging=averaging, reason=reason)
+                observe(self,'order',ticker,side='BUY',stage='FILLED' if result else 'BLOCKED',reason='SIGNAL' if result else 'ENGINE_REJECTED')
                 self._sync_views()
                 if result:
                     self._record_trade(ticker)
                 return result
             except Exception as exc:
+                observe(self,'order',ticker,side='BUY',stage='ERROR',reason='ORDER_ERROR')
                 self._halt(exc)
                 raise
 
     def sell_coin(self, ticker, current_price, stop_loss_triggered=False, reason=None):
         with self._mutex:
+            observe(self,'order',ticker,side='SELL',stage='ATTEMPT')
             try:
                 if self._stop_requested:
                     raise TradingHalted('Stop requested')
+                observe(self,'order',ticker,side='SELL',stage='ENGINE_ATTEMPT')
                 result = self.engine.sell(ticker, current_price, reason=reason or ('손절' if stop_loss_triggered else '매도 신호'))
+                observe(self,'order',ticker,side='SELL',stage='FILLED' if result else 'BLOCKED',reason='SIGNAL' if result else 'ENGINE_REJECTED')
                 self._sync_views()
                 if result:
                     self._record_trade(ticker)
                 return result
             except Exception as exc:
+                observe(self,'order',ticker,side='SELL',stage='ERROR',reason='ORDER_ERROR')
                 self._halt(exc)
                 raise
 
@@ -239,15 +257,22 @@ class AutoTrade:
                 if number(pos['quantity']) > 0:
                     avg = number(pos['avg_price'], positive=True)
                     if price >= avg * (1 + self.profit_taking_ratio):
+                        observe(self,'risk',ticker,reason='TAKE_PROFIT')
                         return self.sell_coin(ticker, price, reason='이익 실현 (5%)')
                     if price <= avg * (1 - self.stop_loss):
+                        observe(self,'risk',ticker,reason='STOP_OR_AVERAGE')
                         if self.check_stop_loss(ticker, price):
                             return self.sell_coin(ticker, price, stop_loss_triggered=True)
                         return
                 analyzer = self.analyzers[ticker]
-                analysis = analyzer.analyze()
+                observe(self,'analyzer_calls',ticker)
+                try:analysis = analyzer.analyze()
+                except Exception:
+                    observe(self,'analyzer_error',ticker)
+                    raise
                 if analysis['action'] not in ('BUY', 'SELL', 'HOLD'):
                     raise ValueError('Invalid analysis action')
+                observe(self,'decision',ticker,action=analysis['action'])
                 if analysis['action'] != 'HOLD':
                     self.engine.save_signal(ticker, analyzer.last_signal, analyzer.last_signal_time)
                 held = number(self.engine.position(ticker)['quantity']) > 0
@@ -255,6 +280,8 @@ class AutoTrade:
                     return self.buy_coin(ticker, price, reason=analysis['reason'], target_price=analysis['target_price'])
                 if analysis['action'] == 'SELL' and held:
                     return self.sell_coin(ticker, price, reason=analysis['reason'])
+                if analysis['action']=='BUY':observe(self,'order',ticker,side='BUY',stage='BLOCKED',reason='BUY_ALREADY_HELD')
+                elif analysis['action']=='SELL':observe(self,'order',ticker,side='SELL',stage='BLOCKED',reason='SELL_WITHOUT_POSITION')
                 return False
             except Exception as exc:
                 self._halt(exc)

@@ -11,6 +11,7 @@ from services.notification_metrics import report_metrics
 from services.public_market import MARKET, positive, PublicDataError, PUBLIC_ERROR_CODES
 from utils.process_lock import lock_handle
 from services.tick_timing import TickTiming,DISCARD_SESSION_SECONDS
+from services.paper_decisions import DecisionCounters
 from services.realtime_activity import Observation,ActivityError,ACTIVITY_ERRORS
 
 
@@ -76,7 +77,7 @@ class ExistingPaperStore(StateStore):
     def load(self):return _json(self.path.read_text(encoding='utf-8'))
 
 
-def state_summary(saved, counts=None, last=None, *, marks=None, now=None):
+def state_summary(saved, counts=None, last=None, *, marks=None, now=None,decisions=None,timing=None):
     counts={} if counts is None else counts
     last={} if last is None else last
     positions={}
@@ -108,6 +109,9 @@ def state_summary(saved, counts=None, last=None, *, marks=None, now=None):
             result['markets'][t].update(
                 cumulative_buys=sum(r['side']=='buy' for r in rows) if type(metrics.get('거래 횟수')) is int else 'N/A',
                 cumulative_sells=sum(r['side']=='sell' for r in rows) if type(metrics.get('거래 횟수')) is int else 'N/A')
+    if decisions is not None:
+        result['decision_trace']=decisions.snapshot(timing)
+        result['price_age_seconds']={t:round(now-marks[t][1],3) if marks and t in marks and now is not None and now>=marks[t][1] else None for t in sorted(markets)}
     return result
 
 
@@ -163,17 +167,22 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     if discard_enabled and (experiment.get('observe_realtime_seconds') is None
                             or type(seconds) is not int or not 1<=seconds<=DISCARD_SESSION_SECONDS):
         raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+    decisions=DecisionCounters(wall=wall)
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
     p=_private(state,{'.json'})
     bot=None;stream=None;timing=None;activity=None;ignored_activity_messages=0;cleanup_error=None;counts={};last={};marks={};status='HALTED';reason='SESSION_FAILED'
+    phase='PREPARATION'
     try:
         # Take the original state lock and validate recovery before ANY network discovery.
         # Build the bot with a seed ticker so its constructor never discovers implicitly.
-        factory=analyzer_factory or public_analyzer_factory(client)
+        base_factory=analyzer_factory or public_analyzer_factory(client)
+        def factory(t):
+            analyzer=base_factory(t);analyzer.decision_observer=decisions;return analyzer
         prepared={}
         bot=AutoTrade(tickers=['KRW-BTC'],state_path=p,real_trading=False,broker=None,
                       notification=None,analyzer_factory=factory)
+        bot.decision_observer=decisions
         selected=[]
         def check_activity(pool,held,wanted,replace,report):
             nonlocal stream,activity
@@ -234,8 +243,9 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         bot.engine.store=ExistingPaperStore(p,START_CASH,prepare=prepare,before_first_save=before_first_save)
         bot.engine._experiment_session=experiment.get('session_id') if experiment else None
         bot.initialize()
-        emit({'status':'STARTING',**state_summary(bot.engine.state)})
+        emit({'status':'STARTING',**state_summary(bot.engine.state,decisions=decisions)})
         bot.tickers=selected;bot.analyzers=prepared or {t:factory(t) for t in selected}
+        for analyzer in bot.analyzers.values():analyzer.decision_observer=decisions
         bot.performance_analyzer.tickers=selected
         for t,saved in bot.engine.state['signals'].items():
             if t in bot.analyzers:
@@ -256,11 +266,15 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 timing=TickTiming(selected,wall(),monotonic(),clock_origin=(wall_begun,begun))
             last_update=last_report=monotonic()
             while not stop_requested():
+                phase='STREAM'
                 try:data=stream.get()
                 except TimeoutError:
                     if stop_requested():break
                     timing.idle(wall(),monotonic())
                     continue
+                phase='MARKET_VALIDATION'
+                observed_market=data.get('code') if isinstance(data,dict) and data.get('code') in selected else None
+                decisions.record('stream_messages_received',observed_market)
                 if stop_requested():break
                 if activity is not None:
                     if (not isinstance(data,dict) or data.get('type')!='ticker'
@@ -272,23 +286,29 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                         timing.idle(wall(),monotonic());continue
                 t=timing.observe(data,wall(),monotonic())
                 if t is None:continue  # No strategy, fill, mark, count, or timer refresh.
+                decisions.record('timing_accepted',t)
                 price=positive(data.get('trade_price'))
                 counts[t]+=1;last[t]=str(price);marks[t]=(price,monotonic())
+                phase='STRATEGY_AND_ORDER'
                 before_orders=len(bot.engine.state['orders'])
                 bot.process_market_data(t,data)
                 now=monotonic()
                 if now-last_update>=DATA_UPDATE_INTERVAL:
+                    phase='CANDLE_REFRESH'
                     for analyzer in bot.analyzers.values():
                         if stop_requested():break
                         analyzer.update_data()
                     last_update=monotonic()
                 if now-last_report>=5 or len(bot.engine.state['orders'])!=before_orders:
-                    emit({'status':'RUNNING',**state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic())})
+                    emit({'status':'RUNNING',**state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic(),decisions=decisions,timing=timing)})
                     last_report=now
             if timing.awaiting_followup is not None:
                 timing.fail('TIMESTAMP_REGRESSION',timing.awaiting_followup,followup_newer_received=False)
             status='STOPPED';reason='TIME_LIMIT_OR_USER_STOP'
     except Exception as exc:
+        if phase=='MARKET_VALIDATION' or str(exc) in {'PAPER_STREAM_TIMEOUT','PAPER_STALE_TICK','PAPER_MARKET_STALE','PAPER_CLOCK_DISCONTINUITY','PAPER_INVALID_TICK'}:
+            decisions.record('data_error',reason='MARKET_VALIDATION')
+        elif phase in ('PREPARATION','CANDLE_REFRESH') and isinstance(exc,PublicDataError):decisions.record('data_error',reason='CANDLE_PREPARATION_OR_REFRESH')
         allowed={'PAPER_STREAM_TIMEOUT','PAPER_STALE_TICK','PAPER_MARKET_STALE','PAPER_CLOCK_DISCONTINUITY',
                  'PAPER_INVALID_TICK','PAPER_INVALID_MARKETS','PAPER_TOO_MANY_HELD_MARKETS',
                  'INSUFFICIENT_CONTIGUOUS_CANDIDATES','HELD_CANDLE_GAP_RISK_MANAGEMENT_UNAVAILABLE',
@@ -310,7 +330,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 if status!='HALTED':status='HALTED';reason=cleanup_error
         result={'status':status,'reason':reason,'post_validation':'UNVERIFIED',
                 'network_enabled':True,'execution_authorized':False,
-                'engine_started':bool(bot is not None and bot._initialized)}
+                'engine_started':bool(bot is not None and bot._initialized),'decision_trace':decisions.snapshot(timing)}
         if activity is not None:
             result['realtime_activity']=activity.report()
             result['wire_subscription']=list(activity.stats)
@@ -333,7 +353,13 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 if status!='HALTED':result['reason']='PAPER_POST_VALIDATION_FAILURE'
         if bot is not None and bot._initialized:
             if bot.engine.halted:result['status']='HALTED'
-            result.update(state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic()))
+            result.update(state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic(),decisions=decisions,timing=timing))
+            if result['status']=='HALTED' and experiment and experiment.get('record_decisions') is True:
+                try:
+                    from ops.paper_experiment import checkpoint_decisions
+                    checkpoint_decisions(bot.engine.store,experiment['session_id'],bot.engine.state,result['decision_trace'])
+                    result['decision_checkpoint']='WORKER_OBSERVATION_ONLY_NOT_FINALIZATION'
+                except Exception:result['decision_checkpoint']='UNVERIFIED_NOT_SAVED'
             bot.stop()
         elif bot is not None:
             snapshot=getattr(bot.engine.store,'preparation_snapshot',None)
