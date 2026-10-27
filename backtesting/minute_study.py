@@ -149,6 +149,12 @@ def read_json(path):
 
 
 def load_sample(data,*,allow_synthetic=False):
+    manifest,frames,_=load_partitioned_sample(data,allow_synthetic=allow_synthetic)
+    return manifest,frames
+
+
+def load_partitioned_sample(data,*,allow_synthetic=False,quarantine_gaps=False):
+    """Only verified missing-bar quality may be quarantined; corruption still aborts."""
     p=Path(data).expanduser().absolute()
     require(not any(q.is_symlink() for q in (p,*p.parents)),'SYMLINK_INPUT_FORBIDDEN')
     require(not any(x.lower() in {'.ssh','.aws','.codex','.git','keychains','runtime','paper-experiments','notifications'} for x in p.parts),'OPERATIONAL_OR_SECRET_PATH_FORBIDDEN')
@@ -174,7 +180,7 @@ def load_sample(data,*,allow_synthetic=False):
             and started<=utc(audit['requested_at'])<=utc(audit['fetched_at'])<=finished,'AUDIT_UNVERIFIED')
         audited.add(params['market'])
     require(audited==set(spec['markets']),'AUDIT_MARKET_MISMATCH')
-    frames={}
+    frames={};quarantined={}
     for market in spec['markets']:
         meta=m['datasets'][market];name=market+'-1.csv'
         require(meta['file']==name,'SNAPSHOT_PATH_MISMATCH')
@@ -182,11 +188,16 @@ def load_sample(data,*,allow_synthetic=False):
         require(sha(f.read_bytes())==meta['file_sha256'],'FILE_SHA_MISMATCH')
         frame=load_csv(f)
         require(list(frame.columns)==['open','high','low','close','volume'],'SNAPSHOT_SCHEMA_MISMATCH')
-        quality=quality_report(frame,1,spec['start'],spec['end_exclusive'])
+        quality=quality_report(frame,1,spec['start'],spec['end_exclusive'],strict=not quarantine_gaps)
         require(quality==meta['quality'] and dataset_hash(frame)==meta['dataset_sha256'],'QUALITY_OR_SHA_MISMATCH')
+        if quarantine_gaps and not quality['passed']:
+            quarantined[market]={'status':'QUARANTINED_MISSING_CANDLES','missing':quality['missing'],
+                'rows':len(frame),'expected_rows':quality['expected_rows'],'file_sha256':meta['file_sha256'],
+                'dataset_sha256':meta['dataset_sha256']}
+            continue
         require(len(frame)>=201,'INSUFFICIENT_REAL_DATA')
         frames[market]=frame
-    return m,frames
+    return m,frames,quarantined
 
 
 def minute_markdown(report):
