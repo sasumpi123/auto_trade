@@ -54,3 +54,5 @@ cd "$HOME/projects/auto_trade"
 모든 실행은 disposable 임시 **연구용** PAPER 원장만 사용한다. 기존 HALTED 계좌/락/백업을 입력받는 옵션이 없다. 실제 공개 API/WebSocket·거래소 주문·Slack·launchd·자동 실행/재시작·유료 API/AI/서버·DB는 사용하지 않는다. GitHub에는 공개 연구 집계와 비밀 없는 trace hash만 포함하며 운영 원장/인증정보는 올리지 않는다. 추가 지출0원 및 실제 자동화OFF를 유지한다.
 
 결과는 [P11-B 연구 디렉터리](../research/p11b-comparison-2026-10-27/README.md)를 참고한다. 576개 실제 자료 계산은 Cloud Linux에서 수행하며, 3OS CI는 공통 코드와 synthetic 회귀를 검증한다. 실제 matrix를 모든 OS에서 재계산했다고 주장하지 않는다. 실제 결과와 테스트/3OS CI exact head/run/attempt/skip은 PR에도 기록한다. Mac 실기기 검증이나 무인 운영 활성화는 수행하지 않는다.
+
+후속 [P11-C1분봉 수집·진단](P11C_MINUTE_DATA.md)은 별도 명시적 공개REST 수집과 오프라인 분석을 제공한다. 기존15/60분 자료/holdout/운영계좌를 변경하지 않으며, 실제1분봉 확보 실패와 synthetic 검증을 구분한다.
