@@ -217,6 +217,9 @@ def finish(value,token,result,*,record_summary=False):
             # Recompute accounting from the owned ledger; historic prices are NOT fresh valuation marks.
             m['session_summary']=state_summary(saved,counts,last)
             m['summary_recorded_at_utc']=datetime.now(timezone.utc).isoformat()
+            if leaf.get('decision_trace') is not None:
+                from services.paper_decisions import validate_trace
+                m['decision_trace']=validate_trace(leaf['decision_trace'])
         save_marker(owner,m)
         return {'status':m['phase'],'automatic_restart':False,'account_scope':SCOPE}
     except Exception:
@@ -234,6 +237,19 @@ def finish(value,token,result,*,record_summary=False):
                 'supervisor_reason':result.get('supervisor_reason'),'forced_termination':result.get('forced_termination',False),
                 'account_scope':SCOPE,'automatic_restart':False}
     finally:owner.close()
+
+
+
+def checkpoint_decisions(owner,token,saved,trace):
+    """One end-of-worker observation under the original lock; never clears/finalizes HALT."""
+    require(owner._lock is not None and owner.load()==saved,'DECISION_CHECKPOINT_OWNER_OR_STATE')
+    p=owner.path.parent;m=marker(p)
+    require(m['phase']=='IN_PROGRESS' and m['session_id']==token
+            and saved['paper_experiment']['last_session_id']==token,'DECISION_CHECKPOINT_SESSION')
+    from services.paper_decisions import validate_trace
+    m['decision_checkpoint']={'trace':validate_trace(trace),'state_sha256':sha(owner.path.read_bytes()),
+        'session_id':token,'scope':'WORKER_OBSERVATION_ONLY_NOT_FINALIZATION'}
+    save_marker(owner,m)
 
 
 def inspect_experiment(value):
@@ -364,7 +380,7 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
             token=begin(p)
             options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit,
                      'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active,
-                     'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions}
+                     'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions,'record_decisions':record_summary}
             extra={'control':control} if control is not None else {}
             result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
                              worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3',**extra)

@@ -23,7 +23,7 @@ def view(event):
           'session_ticks','historical_ticks','markets','cumulative_buys','cumulative_sells','fees',
           'net_realized_pnl','unrealized_pnl','net_return_percent','equity','valuation_reason',
           'engine_started','post_validation','session_finalization','supervisor_reason','automatic_restart',
-          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing')
+          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint')
     return {k:event[k] for k in keys if k in event}
 
 
@@ -142,9 +142,20 @@ def read_report(directory,*,limit=20):
         result={'status':'READ_ONLY_ACCOUNT_REPORT','session_state':phase,'ledger_sha256':digest,
             'summary':summary,'trades':trades,'trade_history_total':len(accounting['rows']),
             'trade_history_shown':len(trades),'account_scope':exp.SCOPE,'network_calls':0,'state_writes':0,
-            'execution_authorized':False,'automatic_restart':False}
+            'execution_authorized':False,'automatic_restart':False,'decision_trace':'N/A_NOT_RECORDED'}
         if (p/'session.json').exists():
             m=exp.marker(p)
+            from services.paper_decisions import validate_trace
+            if m.get('phase')=='STOPPED_VERIFIED' and m.get('end_sha256')==digest and phase=='STOPPED_VERIFIED' and 'decision_trace' in m:
+                result['decision_trace']=validate_trace(m['decision_trace'])
+                result['decision_trace_scope']='STOPPED_VERIFIED_LAST_SESSION_ONLY'
+            elif phase=='HALTED_NO_RESTART' and isinstance(m.get('decision_checkpoint'),dict):
+                c=m['decision_checkpoint']
+                if (set(c)=={'trace','state_sha256','session_id','scope'} and c['state_sha256']==digest
+                        and c['session_id']==m.get('session_id')==saved['paper_experiment']['last_session_id']
+                        and c['scope']=='WORKER_OBSERVATION_ONLY_NOT_FINALIZATION'):
+                    result['decision_trace']=validate_trace(c['trace'])
+                    result['decision_trace_scope']='HALTED_WORKER_OBSERVATION_ONLY_NOT_SUCCESS_OR_RESTART_AUTHORITY'
             # History is not a fresh mark nor restart authority, and must match this ledger.
             if m.get('end_sha256')==digest and m.get('phase')=='STOPPED_VERIFIED' and isinstance(m.get('session_summary'),dict):
                 history=m['session_summary'];markets={}
