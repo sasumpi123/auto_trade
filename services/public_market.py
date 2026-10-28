@@ -179,7 +179,10 @@ class PublicMarketClient:
         if not isinstance(market,str) or not MARKET.fullmatch(market):
             raise PublicDataError('PUBLIC_INVALID_MARKET')
         import pandas as pd
-        rows=self.get('candles/minutes/1',{'market':market,'count':200})
+        # Upbit candle timestamps are UTC opens; `to` excludes that instant.
+        try:cutoff=pd.Timestamp(float(positive(self.clock())),unit='s',tz='UTC').floor('min')
+        except Exception:raise PublicDataError('PUBLIC_RESPONSE_CLOCK_UNVERIFIED') from None
+        rows=self.get('candles/minutes/1',{'market':market,'count':200,'to':cutoff.isoformat()})
         if len(rows)!=200:raise PublicDataError('PUBLIC_INCOMPLETE_CANDLES')
         values=[];timestamps=[]
         for row in rows:
@@ -187,8 +190,12 @@ class PublicMarketClient:
                 raise PublicDataError('PUBLIC_INVALID_CANDLE')
             try:t=pd.Timestamp(row['candle_date_time_utc'])
             except Exception:raise PublicDataError('PUBLIC_INVALID_CANDLE_TIME') from None
+            if pd.isna(t) or (t.tzinfo is not None and t.utcoffset().total_seconds()!=0):
+                raise PublicDataError('PUBLIC_INVALID_CANDLE_TIME')
             if t.tzinfo is not None:t=t.tz_convert('UTC').tz_localize(None)
-            if t.second or t.microsecond or not math.isfinite(t.timestamp()):
+            if t.tz_localize('UTC')>=cutoff:
+                raise PublicDataError('PUBLIC_INVALID_CANDLE_TIME')
+            if t.second or t.microsecond or t.nanosecond or not math.isfinite(t.tz_localize('UTC').timestamp()):
                 raise PublicDataError('PUBLIC_INVALID_CANDLE_TIME')
             if not self.clock()-86400<=t.tz_localize('UTC').timestamp()<=self.clock()+5:
                 raise PublicDataError('PUBLIC_STALE_CANDLE')
@@ -200,6 +207,8 @@ class PublicMarketClient:
         if len(set(timestamps))!=200 or any(a<=b for a,b in zip(timestamps,timestamps[1:])):
             raise PublicDataError('PUBLIC_CANDLE_ORDER')
         if any((a-b).total_seconds()!=60 for a,b in zip(timestamps,timestamps[1:])):
+            raise PublicDataError('PUBLIC_CANDLE_GAP')
+        if timestamps[0].tz_localize('UTC')!=cutoff-pd.Timedelta(minutes=1):
             raise PublicDataError('PUBLIC_CANDLE_GAP')
         if self.clock()-timestamps[0].tz_localize('UTC').timestamp()>180:
             raise PublicDataError('PUBLIC_STALE_CANDLE')

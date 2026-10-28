@@ -119,6 +119,7 @@ class DataAnalyzer:
             # 거래량 확인
             volume = self.df['volume'].iloc[index]
             avg_volume = self.df['volume'].rolling(window=20).mean().iloc[index]
+            self.last_volume_check=(float(volume),float(avg_volume))
             
             # 거래량이 평균 거래량의 50% 미만이면 거래 제한
             if volume < avg_volume * 0.5:

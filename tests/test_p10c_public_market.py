@@ -89,7 +89,7 @@ class PublicMarketTests(unittest.TestCase):
         session.get.assert_not_called()
 
     def candles(self):
-        start=pd.Timestamp(self.now,unit='s').floor('min')
+        start=pd.Timestamp(self.now,unit='s').floor('min')-pd.Timedelta(minutes=1)
         return [{'market':'KRW-BTC','unit':1,'candle_date_time_utc':(start-pd.Timedelta(minutes=i)).isoformat(),
                  'opening_price':100,'high_price':101,'low_price':99,'trade_price':100,
                  'candle_acc_trade_volume':10,'candle_acc_trade_price':1000} for i in range(200)]
@@ -98,7 +98,7 @@ class PublicMarketTests(unittest.TestCase):
         self.client.get=Mock(return_value=self.candles())
         frame=self.client.candles('KRW-BTC')
         self.assertEqual(len(frame),200);self.assertTrue(frame.index.is_monotonic_increasing)
-        self.assertIsNone(frame.index.tz);self.assertEqual(frame.index[-1].hour,((self.now//3600)%24+9)%24)
+        self.assertIsNone(frame.index.tz);self.assertEqual(frame.index[-1],(pd.Timestamp(self.now,unit='s',tz='UTC').floor('min')-pd.Timedelta(minutes=1)).tz_convert('Asia/Seoul').tz_localize(None))
         self.assertEqual(list(frame.columns),['open','high','low','close','volume','value'])
 
     def test_candle_gaps_duplicates_wrong_markets_and_nan_blocked(self):
