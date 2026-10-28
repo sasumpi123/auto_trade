@@ -23,7 +23,7 @@ def view(event):
           'session_ticks','historical_ticks','markets','cumulative_buys','cumulative_sells','fees',
           'net_realized_pnl','unrealized_pnl','net_return_percent','equity','valuation_reason',
           'engine_started','post_validation','session_finalization','supervisor_reason','automatic_restart',
-          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation')
+          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation','regression_evidence')
     return {k:event[k] for k in keys if k in event}
 
 
@@ -146,6 +146,21 @@ def read_report(directory,*,limit=20):
         if (p/'session.json').exists():
             m=exp.marker(p)
             from services.paper_decisions import validate_trace
+            result['regression_evidence']='N/A_NOT_RECORDED'
+            if m.get('phase')=='PREPARATION_FAILED' and m.get('end_sha256')==digest and 'preparation_failure_reason' in m:
+                exp.require(m['preparation_failure_reason']==exp.session_reason(m['preparation_failure_reason']),
+                            'REGRESSION_EVIDENCE_UNVERIFIED')
+                result['session_failure_or_stop_reason']=m['preparation_failure_reason']
+            if isinstance(m.get('regression_checkpoint'),dict):
+                c=m['regression_checkpoint']
+                exp.require(set(c)=={'experiment_id','session_id','state_sha256','before_sha256','reason','scope','evidence'}
+                    and c['experiment_id']==saved['paper_experiment']['experiment_id'] and c['session_id']==m['session_id']
+                    and c['state_sha256']==digest and c['before_sha256']==m['before_sha256']
+                    and c['scope']=='OBSERVATION_ONLY_NOT_RESTART_AUTHORITY','REGRESSION_EVIDENCE_UNVERIFIED')
+                from services.realtime_activity import validate_regression_evidence
+                exp.require(c['reason']==exp.session_reason(c['reason']),'REGRESSION_EVIDENCE_UNVERIFIED')
+                result['regression_evidence']=validate_regression_evidence(c['evidence'])
+                result['regression_evidence_scope']=c['scope'];result['session_failure_or_stop_reason']=c['reason']
             if m.get('phase')=='STOPPED_VERIFIED' and m.get('end_sha256')==digest and phase=='STOPPED_VERIFIED' and 'decision_trace' in m:
                 result['decision_trace']=validate_trace(m['decision_trace'])
                 result['decision_trace_scope']='STOPPED_VERIFIED_LAST_SESSION_ONLY'
@@ -183,6 +198,7 @@ def main(argv=None):
             print('Usage: python -m ops.paper_bot run --directory DIR --connect-public --seconds 1..3600')
             print('Markets: --tickers KRW-BTC ... | --top N | --eligible-top N --candidate-limit M')
             print('Optional existing experiment flags: --observe-realtime-seconds N --select-realtime-active --discard-small-timestamp-regressions')
+            print('Fixed tickers only: --discard-small-timestamp-regressions-during-observation')
             print('Foreground only. Ctrl+C or paper_bot stop requests cooperative shutdown. No implicit init or restart.')
             return 0
         if '--connect-public' not in args[1:]:

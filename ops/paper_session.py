@@ -60,11 +60,12 @@ class ExistingPaperStore(StateStore):
             if os.name=='posix' and info.st_uid!=os.getuid():raise ValueError('PAPER_LOCK_UNVERIFIED')
             lock_handle(handle,initialize=False)
             saved=self.validate_existing(p)
+            self._lock=handle  # Preparation may atomically checkpoint under this same owner.
             if self.prepare is not None:
                 self.preparation_snapshot=state_summary(saved)
                 self.prepare(saved)  # Lock held; engine has not loaded/saved/opened yet.
         except Exception:
-            handle.close();raise
+            self._lock=None;handle.close();raise
         self._lock=handle
 
     def validate_existing(self,path):
@@ -232,13 +233,28 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     if discard_enabled and (experiment.get('observe_realtime_seconds') is None
                             or type(seconds) is not int or not 1<=seconds<=DISCARD_SESSION_SECONDS):
         raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+    observation_discard=bool(experiment and experiment.get('discard_small_timestamp_regressions_during_observation') is True)
+    if experiment and type(experiment.get('discard_small_timestamp_regressions_during_observation',False)) is not bool:
+        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+    if observation_discard and (not discard_enabled or not tickers or experiment.get('eligible_top') is not None
+            or experiment.get('select_realtime_active') or experiment.get('candidate_limit') is not None):
+        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
     decisions=DecisionCounters(wall=wall)
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
     p=_private(state,{'.json'})
     bot=None;stream=None;timing=None;activity=None;ignored_activity_messages=0;cleanup_error=None;counts={};last={};marks={};status='HALTED';reason='SESSION_FAILED'
     phase='PREPARATION'
+    def regression_evidence():
+        from services.realtime_activity import timing_evidence,validate_regression_evidence
+        observed=timing_evidence(activity.observation_timing or activity.guard.report())
+        combined=timing_evidence(timing.report()) if timing is not None else observed
+        # Legacy runtime-only mode has separate timing counters, but no observation discards.
+        return validate_regression_evidence({'observation':observed,'combined':combined,
+            'runtime_enabled':discard_enabled,'runtime_started':timing is not None,
+            'runtime_discarded':combined['discarded']-observed['discarded']})
     def publish(report):
+        if activity is not None:report['regression_evidence']=regression_evidence()
         if bot is not None and bot._initialized:
             report['candle_evaluation']={t:a.candle_report() for t,a in bot.analyzers.items() if callable(getattr(a,'candle_report',None)) and not a.df.empty}
         emit(report)
@@ -257,13 +273,15 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         def check_activity(pool,held,wanted,replace,report):
             nonlocal stream,activity
             try:
-                activity=Observation(pool,wall=wall,monotonic=monotonic)
+                activity=Observation(pool,wall=wall,monotonic=monotonic,discard_small_regressions=observation_discard,
+                                     clock_origin=(wall_begun,begun) if observation_discard else None)
                 try:
                     stream=stream_factory(pool);stream.connect()
                 except Exception:
                     activity.end=monotonic();activity.connection_end='SUBSCRIPTION_OR_CONNECT_FAILED_CAUSE_UNKNOWN'
                     raise ActivityError('ACTIVITY_CONNECTION_FAILED') from None
-                activity=Observation(pool,wall=wall,monotonic=monotonic)
+                activity=Observation(pool,wall=wall,monotonic=monotonic,discard_small_regressions=observation_discard,
+                                     clock_origin=(wall_begun,begun) if observation_discard else None)
                 activity.observe(stream,experiment['observe_realtime_seconds'],stopped=stopped,deadline=deadline)
                 active=[t for t in pool if activity.active(t)]
                 report['realtime_activity']=activity.report();report['wire_subscription']=pool.copy()
@@ -293,9 +311,22 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 from ops.paper_experiment import validate_start, prepare_markets
                 validate_start(saved,p,experiment.get('session_id') if experiment else None)
                 # No per-hour recharge via another session on the same account.
-                # Preparation failures have never entered the runtime/discard path.
+                # P15 reserves observation use durably BEFORE network/engine startup.
                 if discard_enabled and saved['paper_experiment']['last_session_id'] is not None:
                     raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+                from ops.paper_experiment import first_use_path
+                used=_json(_private(first_use_path(p.parent),{'.json'}).read_text(encoding='utf-8'))
+                reservation=used.get('observation_discard_session')
+                if (observation_discard and reservation!=experiment['session_id']) or (discard_enabled
+                        and reservation is not None and reservation!=experiment['session_id']):
+                    raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+                if observation_discard:
+                    from ops.paper_experiment import marker,save_marker
+                    m=marker(p.parent)
+                    if m.get('observation_discard_started') is not None:
+                        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+                    m['observation_discard_started']=experiment['session_id']
+                    save_marker(bot.engine.store,m)  # Durable before even candle preparation/network.
                 chosen,analyzers=prepare_markets(saved,client,top,tickers,experiment,emit,analyzer_factory,
                     activity_check=check_activity if experiment.get('observe_realtime_seconds') is not None else None,cancelled=stop_requested)
                 selected.extend(chosen);prepared.update(analyzers)
@@ -431,6 +462,13 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                     checkpoint_decisions(bot.engine.store,experiment['session_id'],bot.engine.state,result['decision_trace'])
                     result['decision_checkpoint']='WORKER_OBSERVATION_ONLY_NOT_FINALIZATION'
                 except Exception:result['decision_checkpoint']='UNVERIFIED_NOT_SAVED'
+            if activity is not None and experiment is not None:
+                try:
+                    from ops.paper_experiment import checkpoint_regression
+                    checkpoint_regression(bot.engine.store,experiment['session_id'],regression_evidence(),result['reason'])
+                except Exception:
+                    bot.engine.halt('PAPER_SESSION_FAILURE');result['status']='HALTED';result['halted']=True
+                    result['reason']='REGRESSION_EVIDENCE_UNVERIFIED'
             bot.stop()
         elif bot is not None:
             snapshot=getattr(bot.engine.store,'preparation_snapshot',None)

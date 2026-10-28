@@ -157,15 +157,21 @@ def save_marker(owner,value):
     finally:writer._lock=None  # The original owner alone releases the shared handle.
 
 
-def begin(value):
+def begin(value,*,observation_discard=False):
     require(sys.version_info[:2]==(3,12),'PYTHON312_REQUIRED')
     p=directory(value);owner=ExistingPaperStore(p/STATE,1_000_000)
     try:
         require(initial_cash()==1_000_000,'FIXED_EXPERIMENT_CAPITAL_REQUIRED')
         owner.acquire();saved=owner.load();resumable(saved,owner.path)
+        require(type(observation_discard) is bool,'PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+        if observation_discard:
+            require(not first_use_path(p).exists() and saved['paper_experiment']['last_session_id'] is None,
+                    'PAPER_REGRESSION_EXPERIMENT_BLOCKED')
         token=uuid.uuid4().hex
         if not first_use_path(p).exists():
-            exclusive_write(first_use_path(p),encoded({'experiment_id':saved['paper_experiment']['experiment_id']}))
+            used={'experiment_id':saved['paper_experiment']['experiment_id']}
+            if observation_discard:used['observation_discard_session']=token
+            exclusive_write(first_use_path(p),encoded(used))
         m={'session_id':token,'previous_session':saved['paper_experiment']['last_session_id'],
            'phase':'IN_PROGRESS','before_sha256':sha(owner.path.read_bytes())}
         save_marker(owner,m)
@@ -191,6 +197,9 @@ def finish(value,token,result,*,record_summary=False):
         require(not (p/'blocked.json').exists(),'UNCONFIRMED_SESSION_FINALIZATION')
         require(m['phase']=='IN_PROGRESS' and m['session_id']==token,'SESSION_OWNER_MISMATCH')
         leaf=result.get('last_snapshot') or result
+        if 'regression_evidence' in leaf:
+            # Persist failure diagnostics too, under the reacquired owner and exact hash.
+            m['regression_checkpoint']=regression_checkpoint(owner,token,leaf['regression_evidence'],leaf.get('reason'))
         if (result.get('status')=='STOPPED' and leaf.get('engine_started') is True
                 and leaf.get('post_validation')=='VERIFIED_UNDER_OWNER_LOCK'
                 and saved['paper_experiment']['last_session_id']==token):
@@ -200,6 +209,7 @@ def finish(value,token,result,*,record_summary=False):
             m['phase']='PREPARATION_FAILED'  # Failure, never a successful stop.
         else:raise ExperimentError('UNCONFIRMED_SESSION_NO_RESTART')
         m['end_sha256']=sha(owner.path.read_bytes())
+        if m['phase']=='PREPARATION_FAILED':m['preparation_failure_reason']=session_reason(leaf.get('reason'))
         if record_summary and m['phase']=='STOPPED_VERIFIED':
             from ops.paper_session import state_summary
             markets=leaf.get('markets',{})
@@ -241,6 +251,29 @@ def finish(value,token,result,*,record_summary=False):
                 'account_scope':SCOPE,'automatic_restart':False}
     finally:owner.close()
 
+
+
+def session_reason(value):
+    known={'TIME_LIMIT_OR_USER_STOP','SESSION_FAILED','PAPER_STALE_TICK','PAPER_MARKET_STALE',
+           'PAPER_STREAM_TIMEOUT','PAPER_CLOCK_DISCONTINUITY','PAPER_INVALID_TICK',
+           'PAPER_REGRESSION_EXPERIMENT_BLOCKED','REGRESSION_EVIDENCE_UNVERIFIED'} | ACTIVITY_ERRORS | PUBLIC_ERROR_CODES
+    return value if isinstance(value,str) and value in known else 'SESSION_FAILED'
+
+
+def regression_checkpoint(owner,token,evidence,reason):
+    from services.realtime_activity import validate_regression_evidence
+    require(owner._lock is not None,'REGRESSION_OWNER_REQUIRED')
+    saved=owner.load();m=marker(owner.path.parent)
+    require(m['phase']=='IN_PROGRESS' and m['session_id']==token,'SESSION_OWNER_MISMATCH')
+    return {'experiment_id':saved['paper_experiment']['experiment_id'],'session_id':token,
+            'state_sha256':sha(owner.path.read_bytes()),'before_sha256':m['before_sha256'],
+            'reason':session_reason(reason),
+            'scope':'OBSERVATION_ONLY_NOT_RESTART_AUTHORITY','evidence':validate_regression_evidence(evidence)}
+
+
+def checkpoint_regression(owner,token,evidence,reason):
+    checkpoint=regression_checkpoint(owner,token,evidence,reason)
+    m=marker(owner.path.parent);m['regression_checkpoint']=checkpoint;save_marker(owner,m)
 
 
 def checkpoint_decisions(owner,token,saved,trace):
@@ -356,11 +389,12 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
     parser.add_argument('--observe-realtime-seconds',type=int)
     parser.add_argument('--select-realtime-active',action='store_true')
     parser.add_argument('--discard-small-timestamp-regressions',action='store_true')
+    parser.add_argument('--discard-small-timestamp-regressions-during-observation',action='store_true')
     args=parser.parse_args(argv)
     if emit is None:
         def emit(r):print(json.dumps({'account_scope':SCOPE,**r},ensure_ascii=False,sort_keys=True),flush=True)
     if not args.connect_public:
-        if args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
+        if args.discard_small_timestamp_regressions_during_observation or args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
             parser.error('network options require explicit connection')
         r=create(args.directory) if args.create else inspect_experiment(args.directory)
         emit(r);return 0 if r['status']=='CREATED_NEW_INDEPENDENT_EXPERIMENT' else 2
@@ -373,6 +407,9 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
     if args.select_realtime_active and (args.eligible_top is None or args.observe_realtime_seconds is None):parser.error('explicit activity eligibility required')
     if args.observe_realtime_seconds is not None and args.seconds<args.observe_realtime_seconds+5:parser.error('observation and startup must fit duration')
     if args.discard_small_timestamp_regressions and args.observe_realtime_seconds is None:parser.error('explicit realtime observation required for discard experiment')
+    if args.discard_small_timestamp_regressions_during_observation and (not args.discard_small_timestamp_regressions
+            or args.observe_realtime_seconds is None or not args.tickers or args.select_realtime_active):
+        parser.error('observation discard requires runtime discard, observation and fixed explicit tickers')
     from services.public_market import MARKET
     if args.tickers is not None and (not 1<=len(args.tickers)<=MAX_CANDIDATES or len(set(args.tickers))!=len(args.tickers)
                                     or any(not MARKET.fullmatch(t) for t in args.tickers)):parser.error('invalid markets')
@@ -380,10 +417,11 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
         from ops.paper_watch import supervise,_worker
         p=directory(args.directory)
         with (control_factory(p) if control_factory is not None else nullcontext()) as control:
-            token=begin(p)
+            token=begin(p,observation_discard=True) if args.discard_small_timestamp_regressions_during_observation else begin(p)
             options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit,
                      'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active,
-                     'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions,'record_decisions':record_summary}
+                     'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions,
+                     'discard_small_timestamp_regressions_during_observation':args.discard_small_timestamp_regressions_during_observation,'record_decisions':record_summary}
             extra={'control':control} if control is not None else {}
             result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
                              worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3',**extra)
