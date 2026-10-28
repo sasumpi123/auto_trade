@@ -41,9 +41,17 @@ def check(condition, reason):
 
 def reason_group(order):
     # Never forward raw reason/strategy strings or infer a strategy from indicators.
-    raw=order.get('reason')
-    if not isinstance(raw,str):return '기타/미기록'
-    return next((tag for tag in ('물타기','손절','이익 실현','매수','매도') if tag in raw),'기타/미기록')
+    raw=order.get('reason');side=order.get('side')
+    if side not in ('bid','ask') or not isinstance(raw,str):return '기타/미기록'
+    risks=[tag for tag in ('물타기','손절','이익 실현') if tag in raw]
+    if risks:
+        # Conflicting or opposite-side risk descriptions are not reliable evidence.
+        if len(risks)!=1 or side!=('bid' if risks[0]=='물타기' else 'ask'):return '기타/미기록'
+        return risks[0]
+    if '매수' in raw or '매도' in raw:
+        # 과매수/과매도 describe indicators, never the order direction.
+        return '매수' if side=='bid' else '매도'
+    return '기타/미기록'
 
 
 def replay(state, start, *, as_of, calendar):

@@ -54,3 +54,9 @@ P8에서 수수료가 있으면 N/A였던 누적 실현/평가손익·승률을 
 P9-B 통합 검증: [PAPER_END_TO_END_VALIDATION.md](PAPER_END_TO_END_VALIDATION.md)에 실제 PAPER→원장→P9-A 정산→포맷→SQLite→Mock 전달과 MacBook 운영 전 체크리스트를 정리했습니다. SlackApiError와 outbox 기록 장애가 겹치면 UNKNOWN/SENDING으로 차단하고 재전송하지 않습니다. 운영은 반드시 단일 소비자이며 SQLite 선점 자체를 프로세스 독점 소유 증명으로 해석하지 않습니다. 실제 발송/설정/스케줄은 계속 OFF입니다.
 
 P10 사전 준비: [MacBook 점검](P10_MAC_PREFLIGHT.md), [cold backup/복구](P10_BACKUP_RECOVERY.md). 소유권 확인 전 SENDING을 바꾸지 않으며, 전송 중 close는 요청 종료를 기다립니다. `python -m ops.local_preflight`는 MessageQueue를 열지 않고 기존 잠금/원장/metadata만 검사합니다. enqueue는 Slack 전달 성공이 아니며 실제 발송은 OFF입니다.
+
+P16 사유 분류: 검증된 `side=bid/ask`가 주문 방향의 근거이며, `과매수/과매도` 안의
+단어로 방향을 뒤집지 않습니다. `물타기`는 bid, `손절`·`이익 실현`은 ask에만 허용하고,
+서로 모순된 위험관리 사유는 `기타/미기록`으로 표시합니다. 미기록·미확인 사유에서
+전략 ID를 추정하거나 원문을 출력하지 않습니다. `paper_bot report`와 사유별 집계에
+같은 분류를 사용하며, 현금·포지션·손익·수수료 계산과 저장된 원장은 변경하지 않습니다.
