@@ -1,4 +1,5 @@
 """Bounded unauthenticated Upbit GETs only. No account/order/client credentials."""
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import json
 from email.utils import parsedate_to_datetime
@@ -106,6 +107,10 @@ class PublicMarketClient:
                     server=parsedate_to_datetime(response.headers.get('Date',''))
                     if server.tzinfo is None or abs(self.clock()-server.timestamp())>5:
                         raise ValueError()
+                    if endpoint=='candles/minutes/1' and 'to' in params:
+                        boundary=datetime.fromisoformat(params['to'].replace('Z','+00:00'))
+                        if boundary.tzinfo is None or boundary.timestamp()>server.timestamp():
+                            raise ValueError()  # A small local lead must not cross the exchange's minute boundary.
                 except Exception:
                     raise PublicDataError('PUBLIC_RESPONSE_CLOCK_UNVERIFIED') from None
                 content=bytearray()
