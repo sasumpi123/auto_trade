@@ -18,13 +18,16 @@ class ActivityError(ValueError):pass
 
 
 class Observation:
-    def __init__(self,markets,*,wall=time.time,monotonic=time.monotonic):
+    def __init__(self,markets,*,wall=time.time,monotonic=time.monotonic,
+                 discard_small_regressions=False,clock_origin=None):
         if not 1<=len(markets)<=MAX_MARKETS:raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
         self.wall,self.monotonic=wall,monotonic
         self.start=monotonic();self.started_wall=wall();self.end=None
-        self.guard=TickTiming(markets,self.started_wall,self.start)
+        self.guard=TickTiming(markets,self.started_wall,self.start,clock_origin=clock_origin,
+                              discard_small_regressions=discard_small_regressions)
         self.stats={t:{'realtime':0,'snapshot':0,'unknown_type':0,'first_receive_ms':None,
                        'first_realtime_ms':None,'last_realtime_receive':None} for t in markets}
+        self.observation_timing=None;self.observation_progress=None
         self.received=0;self.completed=False;self.connection_end='UNKNOWN';self.close_code=None;self.start_check_delay_ms=None
 
     def observe(self,stream,seconds,*,stopped,deadline):
@@ -52,10 +55,13 @@ class Observation:
                     m['unknown_type']+=1;raise ActivityError('ACTIVITY_STREAM_TYPE_UNKNOWN')
                 # Only the pre-trade observer disables liveness rejection, so zero-tick
                 # candidates can be measured for the FULL window. Runtime never does.
-                self.guard.observe(data,self.wall(),now,check_liveness=False);positive(data.get('trade_price'))
+                if self.guard.observe(data,self.wall(),now,check_liveness=False) is None:continue
+                positive(data.get('trade_price'))
                 m['realtime']+=1;m['last_realtime_receive']=now
                 if m['first_realtime_ms'] is None:m['first_realtime_ms']=numeric((now-self.start)*1000)
             self.guard.clock(self.wall(),self.monotonic())
+            if self.guard.awaiting_followup is not None:
+                self.guard.fail('TIMESTAMP_REGRESSION',self.guard.awaiting_followup,followup_newer_received=False)
             self.end=self.monotonic();self.completed=True
             self.connection_end='OBSERVATION_COMPLETED_CONNECTION_RETAINED'
         except Exception as exc:
@@ -70,6 +76,8 @@ class Observation:
                 self.connection_end='OBSERVATION_INTERRUPTED_OR_VALIDATION_FAILED';raise
             self.connection_end='READ_OR_CONNECTION_FAILURE_CAUSE_UNKNOWN'
             raise ActivityError('ACTIVITY_CONNECTION_FAILED') from None
+        finally:
+            self.observation_timing=self.guard.report();self.observation_progress=dict(self.guard.progress)
         return self
 
     def active(self,t,now=None):
@@ -84,6 +92,8 @@ class Observation:
     def validate_start(self,selected):
         now=self.monotonic()
         self.guard.clock(self.wall(),now)
+        if self.guard.awaiting_followup is not None:
+            self.guard.fail('TIMESTAMP_REGRESSION',self.guard.awaiting_followup,followup_newer_received=False)
         self.start_check_delay_ms=numeric((now-self.end)*1000) if self.end is not None else None
         if (not self.completed or self.end is None or not 0<=now-self.end<=MAX_START_DELAY
                 or any(self.stats[t]['realtime']==0 or not 0<=now-self.guard.progress[t]<15 for t in selected)):
@@ -91,6 +101,12 @@ class Observation:
 
     def runtime_guard(self,selected,clock_origin,*,discard_small_regressions=False):
         self.validate_start(selected)
+        if self.guard.discard_enabled:
+            # P15 has fixed explicit markets: retain the SAME guard, budget and clock.
+            if (not discard_small_regressions or set(selected)!=set(self.stats)
+                    or clock_origin!=(self.guard.start_wall,self.guard.start_mono)):
+                raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
+            return self.guard
         g=TickTiming(selected,self.wall(),self.monotonic(),clock_origin=clock_origin,discard_small_regressions=discard_small_regressions)
         g.previous={t:self.guard.previous[t] for t in selected}
         g.progress={t:self.guard.progress[t] for t in selected};g.last_progress=max(g.progress.values())
@@ -102,8 +118,9 @@ class Observation:
             m={k:v for k,v in stats.items() if k!='last_realtime_receive'}
             m['last_realtime_receive_age_ms']=(numeric((assessment-stats['last_realtime_receive'])*1000)
                                               if stats['last_realtime_receive'] is not None else None)
-            m['no_progress_ms']=numeric((assessment-self.guard.progress[t])*1000)
-            m['status']=('REALTIME_ACTIVITY_OBSERVED' if self.active(t,assessment) else self.exclusion(t)) if self.completed else 'INCOMPLETE_UNKNOWN'
+            progress=(self.observation_progress or self.guard.progress)[t]
+            m['no_progress_ms']=numeric((assessment-progress)*1000)
+            m['status']=('REALTIME_ACTIVITY_OBSERVED' if stats['realtime']>0 and 0<=assessment-progress<=MAX_PROGRESS_AGE else self.exclusion(t)) if self.completed else 'INCOMPLETE_UNKNOWN'
             rows[t]=m
         transport=('INCOMPLETE_UNKNOWN' if not self.completed else
                    'NO_MESSAGES_CONNECTION_OR_ACTIVITY_UNKNOWN' if self.received==0 else
@@ -117,4 +134,54 @@ class Observation:
                 'max_progress_age_at_observation_end_ms':MAX_PROGRESS_AGE*1000,
                 'classification_basis':'SERVER_STREAM_TYPE_REALTIME_NOT_TRADE_OR_API_HEALTH_PROOF',
                 'wire_request_isOnlyRealtime':True,'official_parameter_contract':'PENDING_EXTERNAL_DOC_VERIFICATION',
-                'tick_timing':self.guard.report(),'max_messages':MAX_MESSAGES,'retained_log_files':0}
+                'tick_timing':self.observation_timing or self.guard.report(),'max_messages':MAX_MESSAGES,'retained_log_files':0}
+
+
+def timing_evidence(report):
+    """Small allowlisted projection; deliberately excludes prices and raw payloads."""
+    d=report['regression_discard']
+    return {'enabled':d['enabled'],'received':report['received_total'],'accepted':report['timing_accepted_total'],
+            'discarded':d['discarded_total'],'awaiting_followup':d['awaiting_followup'],
+            'markets':{t:{'count':r['count'],'width_ms':r['max_regression_ms'],
+                          'followup_newer_received':r['followup_newer_received']} for t,r in d['markets'].items()},
+            'samples':[{k:s.get(k) for k in ('issue','market','received_timestamp_ms','previous_timestamp_ms',
+                'timestamp_minus_previous_ms','local_receive_minus_timestamp_ms','wall_minus_monotonic_ms','idle_ms')}
+                for s in report['samples']]}
+
+
+def validate_regression_evidence(value):
+    """Validate persisted/IPC summaries before re-exposing them; no arbitrary strings."""
+    import copy,json
+    from services.public_market import MARKET
+    from services.tick_timing import ISSUES,MAX_COUNTER,MAX_NUMBER
+    def require(ok):
+        if not ok:raise ValueError('REGRESSION_EVIDENCE_UNVERIFIED')
+    require(type(value) is dict and set(value)=={'observation','combined','runtime_started','runtime_enabled','runtime_discarded'})
+    require(type(value['runtime_started']) is bool and type(value['runtime_enabled']) is bool)
+    require(type(value['runtime_discarded']) is int and 0<=value['runtime_discarded']<=3)
+    for stage in ('observation','combined'):
+        row=value[stage]
+        require(type(row) is dict and set(row)=={'enabled','received','accepted','discarded','awaiting_followup','markets','samples'})
+        require(type(row['enabled']) is bool)
+        for k in ('received','accepted','discarded'):require(type(row[k]) is int and 0<=row[k]<=MAX_COUNTER)
+        require(row['discarded']<=3 and row['accepted']+row['discarded']<=row['received'])
+        require(type(row['markets']) is dict and 1<=len(row['markets'])<=MAX_MARKETS)
+        for t,r in row['markets'].items():
+            require(type(t) is str and MARKET.fullmatch(t) is not None)
+            require(type(r) is dict and set(r)=={'count','width_ms','followup_newer_received'})
+            require(type(r['count']) is int and 0<=r['count']<=1)
+            require(type(r['width_ms']) is int and 0<=r['width_ms']<=5)
+            require(r['followup_newer_received'] is None or type(r['followup_newer_received']) is bool)
+        require(sum(r['count'] for r in row['markets'].values())==row['discarded'])
+        require(row['awaiting_followup'] is None or row['awaiting_followup'] in row['markets'])
+        require(type(row['samples']) is list and len(row['samples'])<=16)
+        for s in row['samples']:
+            require(type(s) is dict and set(s)=={'issue','market','received_timestamp_ms','previous_timestamp_ms',
+                'timestamp_minus_previous_ms','local_receive_minus_timestamp_ms','wall_minus_monotonic_ms','idle_ms'})
+            require(s['issue'] in (*ISSUES,'SMALL_REGRESSION_DISCARDED'))
+            require(s['market'] in row['markets'] or s['market']=='ALL_OR_UNKNOWN')
+            for k,n in s.items():
+                if k not in ('issue','market'):require(n is None or (type(n) in (int,float) and -MAX_NUMBER<=n<=MAX_NUMBER))
+    require(value['runtime_discarded']==value['combined']['discarded']-value['observation']['discarded'])
+    require(len(json.dumps(value,allow_nan=False).encode())<=16384)
+    return copy.deepcopy(value)
