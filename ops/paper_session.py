@@ -138,14 +138,79 @@ def offline_report(state, *, outbox=None):
     return result
 
 
-def public_analyzer_factory(client):
+
+def validate_candle_report(report):
+    """Small typed observation, separate from P13's existing trace schema."""
+    import math
+    import pandas as pd
+    from copy import deepcopy
+    keys={'last_completed_open_utc','last_evaluated_open_utc','skipped_same_candle','refreshes',
+          'volume','mean_volume_20_completed','threshold_fraction','mean_includes_evaluated_candle'}
+    if type(report) is not dict or len(report)>30:raise ValueError('CANDLE_REPORT_INVALID')
+    for ticker,r in report.items():
+        if not isinstance(ticker,str) or not MARKET.fullmatch(ticker) or type(r) is not dict or set(r)!=keys:raise ValueError('CANDLE_REPORT_INVALID')
+        for k in ('last_completed_open_utc','last_evaluated_open_utc'):
+            if r[k] is not None:
+                t=pd.Timestamp(r[k])
+                if t.tzinfo is None or t.utcoffset().total_seconds()!=0 or t!=t.floor('min'):raise ValueError('CANDLE_REPORT_TIME')
+        for k in ('skipped_same_candle','refreshes'):
+            if type(r[k]) is not int or not 0<=r[k]<=2_147_483_647:raise ValueError('CANDLE_REPORT_COUNT')
+        for k in ('volume','mean_volume_20_completed'):
+            if r[k] is not None and (type(r[k]) not in (int,float) or not math.isfinite(r[k]) or r[k]<0):raise ValueError('CANDLE_REPORT_VOLUME')
+        if type(r['threshold_fraction']) is not float or r['threshold_fraction']!=.5 or r['mean_includes_evaluated_candle'] is not True:raise ValueError('CANDLE_REPORT_FILTER')
+    return deepcopy(report)
+
+
+def public_analyzer_factory(client,*,wall=time.time,cancelled=lambda:False):
     from data_analyzer.analyzer import DataAnalyzer
     class PublicAnalyzer(DataAnalyzer):
+        def __init__(self,ticker):
+            super().__init__(ticker);self._evaluated=None;self._requested=None;self.skipped_same_candle=0;self.refreshes=0
+        def candle_open(self):
+            # PublicMarketClient explicitly preserves pyupbit's KST-naive contract.
+            import pandas as pd
+            t=self.df.index[-1]
+            if not isinstance(t,pd.Timestamp) or t.tzinfo is not None:raise PublicDataError('PUBLIC_INVALID_CANDLE_TIME')
+            return t.tz_localize('Asia/Seoul').tz_convert('UTC')
+        def ready_for_strategy(self):
+            import pandas as pd
+            cutoff=pd.Timestamp(wall(),unit='s',tz='UTC').floor('min')
+            latest=self.candle_open()
+            if latest>=cutoff or (self._evaluated is not None and latest<self._evaluated):
+                raise PublicDataError('PUBLIC_INVALID_CANDLE_TIME')
+            if self._requested is not None and cutoff<self._requested:
+                raise PublicDataError('PUBLIC_RESPONSE_CLOCK_UNVERIFIED')
+            if latest!=cutoff-pd.Timedelta(minutes=1):
+                if self._requested==cutoff:raise PublicDataError('PUBLIC_STALE_CANDLE')
+                self._requested=cutoff
+                try:self.update_data()
+                except PublicDataError as exc:
+                    if str(exc) in ('PUBLIC_STOP_REQUESTED','PUBLIC_DEADLINE') and cancelled():return False
+                    raise
+                latest=self.candle_open()
+                if latest!=cutoff-pd.Timedelta(minutes=1):raise PublicDataError('PUBLIC_CANDLE_GAP')
+            if self._evaluated is not None and latest<self._evaluated:raise PublicDataError('PUBLIC_CANDLE_ORDER')
+            if latest==self._evaluated:
+                self.skipped_same_candle=min(2_147_483_647,self.skipped_same_candle+1);return False
+            self._evaluated=latest;self.last_volume_check=None
+            return True
+        def candle_report(self):
+            import math
+            values=getattr(self,'last_volume_check',None)
+            valid=values is not None and all(math.isfinite(v) and v>=0 for v in values)
+            try:latest=self.candle_open().isoformat()
+            except Exception:latest=None
+            return {'last_completed_open_utc':latest,
+                'last_evaluated_open_utc':self._evaluated.isoformat() if self._evaluated is not None else None,
+                'skipped_same_candle':self.skipped_same_candle,'refreshes':self.refreshes,
+                'volume':values[0] if valid else None,'mean_volume_20_completed':values[1] if valid else None,
+                'threshold_fraction':.5,'mean_includes_evaluated_candle':True}
         # Reuse exact indicator, signal, filter and cooldown bodies. Bypass only raw-error
         # decorators (which contain legacy Slack/log paths); no strategy change.
         def fetch_data(self,interval='minute1',count=200):
             if interval!='minute1' or count!=200:raise ValueError('PAPER_CANDLE_CONTRACT')
             self.df=client.candles(self.ticker)
+            self.refreshes=min(2_147_483_647,self.refreshes+1)
         def update_data(self):
             self.fetch_data()
             DataAnalyzer.calculate_indicators.__wrapped__(self)
@@ -173,10 +238,15 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     p=_private(state,{'.json'})
     bot=None;stream=None;timing=None;activity=None;ignored_activity_messages=0;cleanup_error=None;counts={};last={};marks={};status='HALTED';reason='SESSION_FAILED'
     phase='PREPARATION'
+    def publish(report):
+        if bot is not None and bot._initialized:
+            report['candle_evaluation']={t:a.candle_report() for t,a in bot.analyzers.items() if callable(getattr(a,'candle_report',None)) and not a.df.empty}
+        emit(report)
     try:
         # Take the original state lock and validate recovery before ANY network discovery.
         # Build the bot with a seed ticker so its constructor never discovers implicitly.
-        base_factory=analyzer_factory or public_analyzer_factory(client)
+        def stop_requested():return stopped() or monotonic()>=deadline or wall()>=wall_deadline
+        base_factory=analyzer_factory or public_analyzer_factory(client,wall=wall,cancelled=stop_requested)
         def factory(t):
             analyzer=base_factory(t);analyzer.decision_observer=decisions;return analyzer
         prepared={}
@@ -227,7 +297,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 if discard_enabled and saved['paper_experiment']['last_session_id'] is not None:
                     raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
                 chosen,analyzers=prepare_markets(saved,client,top,tickers,experiment,emit,analyzer_factory,
-                    activity_check=check_activity if experiment.get('observe_realtime_seconds') is not None else None)
+                    activity_check=check_activity if experiment.get('observe_realtime_seconds') is not None else None,cancelled=stop_requested)
                 selected.extend(chosen);prepared.update(analyzers)
                 return
             if experiment is not None:raise ValueError('PAPER_EXPERIMENT_IDENTITY_REQUIRED')
@@ -243,7 +313,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         bot.engine.store=ExistingPaperStore(p,START_CASH,prepare=prepare,before_first_save=before_first_save)
         bot.engine._experiment_session=experiment.get('session_id') if experiment else None
         bot.initialize()
-        emit({'status':'STARTING',**state_summary(bot.engine.state,decisions=decisions)})
+        publish({'status':'STARTING',**state_summary(bot.engine.state,decisions=decisions)})
         bot.tickers=selected;bot.analyzers=prepared or {t:factory(t) for t in selected}
         for analyzer in bot.analyzers.values():analyzer.decision_observer=decisions
         bot.performance_analyzer.tickers=selected
@@ -251,7 +321,6 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             if t in bot.analyzers:
                 bot.analyzers[t].last_signal=saved['action'];bot.analyzers[t].last_signal_time=saved['timestamp']
         counts={t:0 for t in selected};bot._sync_views()
-        def stop_requested():return stopped() or monotonic()>=deadline or wall()>=wall_deadline
         for analyzer in bot.analyzers.values():
             if stop_requested():break
             if not prepared:analyzer.update_data()
@@ -293,14 +362,16 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 before_orders=len(bot.engine.state['orders'])
                 bot.process_market_data(t,data)
                 now=monotonic()
+                # Preserve injected legacy analyzers' refresh contract. Public adapters
+                # refresh inside ready_for_strategy, after risk, once per new minute.
                 if now-last_update>=DATA_UPDATE_INTERVAL:
                     phase='CANDLE_REFRESH'
                     for analyzer in bot.analyzers.values():
                         if stop_requested():break
-                        analyzer.update_data()
+                        if not callable(getattr(analyzer,'ready_for_strategy',None)):analyzer.update_data()
                     last_update=monotonic()
                 if now-last_report>=5 or len(bot.engine.state['orders'])!=before_orders:
-                    emit({'status':'RUNNING',**state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic(),decisions=decisions,timing=timing)})
+                    publish({'status':'RUNNING',**state_summary(bot.engine.state,counts,last,marks=marks,now=monotonic(),decisions=decisions,timing=timing)})
                     last_report=now
             if timing.awaiting_followup is not None:
                 timing.fail('TIMESTAMP_REGRESSION',timing.awaiting_followup,followup_newer_received=False)
@@ -308,7 +379,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     except Exception as exc:
         if phase=='MARKET_VALIDATION' or str(exc) in {'PAPER_STREAM_TIMEOUT','PAPER_STALE_TICK','PAPER_MARKET_STALE','PAPER_CLOCK_DISCONTINUITY','PAPER_INVALID_TICK'}:
             decisions.record('data_error',reason='MARKET_VALIDATION')
-        elif phase in ('PREPARATION','CANDLE_REFRESH') and isinstance(exc,PublicDataError):decisions.record('data_error',reason='CANDLE_PREPARATION_OR_REFRESH')
+        elif isinstance(exc,PublicDataError):decisions.record('data_error',reason='CANDLE_PREPARATION_OR_REFRESH')
         allowed={'PAPER_STREAM_TIMEOUT','PAPER_STALE_TICK','PAPER_MARKET_STALE','PAPER_CLOCK_DISCONTINUITY',
                  'PAPER_INVALID_TICK','PAPER_INVALID_MARKETS','PAPER_TOO_MANY_HELD_MARKETS',
                  'INSUFFICIENT_CONTIGUOUS_CANDIDATES','HELD_CANDLE_GAP_RISK_MANAGEMENT_UNAVAILABLE',
@@ -372,5 +443,5 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             result['cleanup_error']='PUBLIC_CLIENT_CLOSE_UNCONFIRMED'
             if result['status']!='HALTED':result['reason']='PUBLIC_CLIENT_CLOSE_UNCONFIRMED'
             result['status']='HALTED'
-        emit(result)
+        publish(result)
     return result

@@ -65,7 +65,7 @@ class RuntimeDecisionTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(dir='/tmp');self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name).resolve();self.account=self.root/'account';cli.initialize(self.account)
-        self.now=0;self.wall=time.time();self.stop=threading.Event();self.reports=[];self.frames='HOLD';self.low=False;self.cooldown=False
+        self.now=0;self.wall=(time.time()//60)*60+10;self.stop=threading.Event();self.reports=[];self.frames='HOLD';self.low=False;self.cooldown=False
         self.errors={};self.prices=[10000]*3;self.stamps=None;self.before={}
         for i in range(3):
             p=self.root/f'protected-{i}.json';p.write_bytes(b'HALTED private protected evidence')
@@ -108,7 +108,7 @@ class RuntimeDecisionTests(unittest.TestCase):
                 return {'type':'ticker','code':'KRW-BTC','trade_price':owner.prices[i],
                     'timestamp':owner.stamps[i] if owner.stamps is not None else int((owner.wall+owner.now)*1000)}
             def close(self):pass
-        factory=public_analyzer_factory(client)
+        factory=public_analyzer_factory(client,wall=client.clock)
         def analyzer(t):
             a=factory(t)
             if self.cooldown:a.last_signal='BUY';a.last_signal_time=self.wall
@@ -121,25 +121,25 @@ class RuntimeDecisionTests(unittest.TestCase):
     def test_received_ticks_hold_only_has_real_evaluations_no_orders(self):
         r,end=self.execute();d=r['decision_trace'];c=d['counts']
         self.assertEqual(d['availability'],'RECORDED');self.assertEqual(end['status'],'STOPPED_VERIFIED')
-        self.assertEqual((c['stream_messages_received'],c['timing_accepted'],c['analyzer_calls'],c['strategy_evaluations']),(3,3,3,3))
-        self.assertEqual(c['strategy_HOLD'],3);self.assertEqual(c['decision_HOLD'],3)
-        self.assertEqual(d['final_blocks']['NO_ACTIONABLE_SIGNAL'],3);self.assertEqual(c['buy_attempts'],0)
+        self.assertEqual((c['stream_messages_received'],c['timing_accepted'],c['analyzer_calls'],c['strategy_evaluations']),(3,3,1,1))
+        self.assertEqual(c['strategy_HOLD'],1);self.assertEqual(c['decision_HOLD'],1)
+        self.assertEqual(d['final_blocks']['NO_ACTIONABLE_SIGNAL'],1);self.assertEqual(c['buy_attempts'],0)
         self.assertEqual(d['last_strategy_result']['action'],'HOLD');self.assertIsNotNone(d['last_decision']['at_epoch_seconds'])
         self.assertEqual(cli.read_report(self.account)['decision_trace'],d)
     def test_buy_conditions_but_volume_gate_never_calls_or_fabricates_strategy_buy(self):
         self.frames='BUY';self.low=True;r,_=self.execute();d=r['decision_trace'];c=d['counts']
-        self.assertEqual(c['analyzer_calls'],3);self.assertEqual(c['strategy_evaluations'],0)
-        self.assertEqual(c['strategy_BUY'],0);self.assertEqual(c['decision_HOLD'],3)
-        self.assertEqual(d['strategy_not_evaluated']['VOLUME_GATE'],3);self.assertEqual(d['final_blocks']['VOLUME_GATE'],3)
+        self.assertEqual(c['analyzer_calls'],1);self.assertEqual(c['strategy_evaluations'],0)
+        self.assertEqual(c['strategy_BUY'],0);self.assertEqual(c['decision_HOLD'],1)
+        self.assertEqual(d['strategy_not_evaluated']['VOLUME_GATE'],1);self.assertEqual(d['final_blocks']['VOLUME_GATE'],1)
         self.assertIsNone(d['last_strategy_result']);self.assertEqual(d['last_decision']['reason'],'VOLUME_GATE')
     def test_cooldown_and_overlapping_volume_have_one_terminal_gate(self):
         self.frames='BUY';self.cooldown=True;r,_=self.execute();d=r['decision_trace']
-        self.assertEqual(d['strategy_not_evaluated']['COOLDOWN'],3);self.assertEqual(d['counts']['strategy_evaluations'],0)
+        self.assertEqual(d['strategy_not_evaluated']['COOLDOWN'],1);self.assertEqual(d['counts']['strategy_evaluations'],0)
         # A second new test account; never reset or reuse the just-finished account.
         self.account=self.root/'second';cli.initialize(self.account);self.stop.clear();self.now=0;self.low=True
         r,_=self.execute();d=r['decision_trace']
-        self.assertEqual(d['gate_conditions_overlapping']['BOTH'],3)
-        self.assertEqual(d['final_blocks']['VOLUME_GATE'],3);self.assertEqual(d['final_blocks']['COOLDOWN'],0)
+        self.assertEqual(d['gate_conditions_overlapping']['BOTH'],1)
+        self.assertEqual(d['final_blocks']['VOLUME_GATE'],1);self.assertEqual(d['final_blocks']['COOLDOWN'],0)
     def test_real_buy_hold_take_profit_trace_matches_ipc_and_persistent_report(self):
         self.frames='BUY';self.prices=[8200,8200,8610];snapshots=[]
         with cli.ControlServer(self.account) as control:
@@ -153,8 +153,8 @@ class RuntimeDecisionTests(unittest.TestCase):
             r,end=self.execute(emit=emit)
         d=r['decision_trace'];c=d['counts'];self.assertEqual(end['status'],'STOPPED_VERIFIED')
         self.assertEqual((c['buy_attempts'],c['buy_fills'],c['sell_attempts'],c['sell_fills']),(1,1,1,1))
-        self.assertEqual(c['analyzer_calls'],2);self.assertEqual(c['strategy_evaluations'],1)
-        self.assertEqual((c['decision_BUY'],c['decision_HOLD'],c['decision_SELL']),(1,1,0))
+        self.assertEqual(c['analyzer_calls'],1);self.assertEqual(c['strategy_evaluations'],1)
+        self.assertEqual((c['decision_BUY'],c['decision_HOLD'],c['decision_SELL']),(1,0,0))
         self.assertEqual(d['risk_priority']['TAKE_PROFIT'],1);self.assertEqual(d['strategy_not_evaluated']['RISK_PRIORITY'],1)
         self.assertEqual(d['last_order']['stage'],'FILLED');self.assertEqual(d['last_order']['side'],'SELL')
         report=cli.read_report(self.account);self.assertEqual(snapshots,[d]);self.assertEqual(report['decision_trace'],d)
@@ -189,7 +189,7 @@ class RuntimeDecisionTests(unittest.TestCase):
         self.account=self.root/'many';cli.initialize(self.account);self.stop.clear();self.now=0;self.prices=[10000]*40;paths.clear()
         with patch.object(StateStore,'save',record):r,_=self.execute()
         self.assertEqual(sum(p.name==exp.STATE for p in paths),first)
-        self.assertEqual(r['decision_trace']['counts']['strategy_evaluations'],40)
+        self.assertEqual(r['decision_trace']['counts']['strategy_evaluations'],1)
 
 class AdditionalDecisionTests(unittest.TestCase):
     def test_actual_buy_while_held_and_sell_without_position_are_final_guards(self):

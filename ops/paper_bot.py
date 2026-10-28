@@ -23,7 +23,7 @@ def view(event):
           'session_ticks','historical_ticks','markets','cumulative_buys','cumulative_sells','fees',
           'net_realized_pnl','unrealized_pnl','net_return_percent','equity','valuation_reason',
           'engine_started','post_validation','session_finalization','supervisor_reason','automatic_restart',
-          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint')
+          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation')
     return {k:event[k] for k in keys if k in event}
 
 
@@ -149,6 +149,9 @@ def read_report(directory,*,limit=20):
             if m.get('phase')=='STOPPED_VERIFIED' and m.get('end_sha256')==digest and phase=='STOPPED_VERIFIED' and 'decision_trace' in m:
                 result['decision_trace']=validate_trace(m['decision_trace'])
                 result['decision_trace_scope']='STOPPED_VERIFIED_LAST_SESSION_ONLY'
+                if 'candle_evaluation' in m:
+                    from ops.paper_session import validate_candle_report
+                    result['candle_evaluation']=validate_candle_report(m['candle_evaluation'])
             elif phase=='HALTED_NO_RESTART' and isinstance(m.get('decision_checkpoint'),dict):
                 c=m['decision_checkpoint']
                 if (set(c)=={'trace','state_sha256','session_id','scope'} and c['state_sha256']==digest

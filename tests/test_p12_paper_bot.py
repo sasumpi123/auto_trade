@@ -77,7 +77,7 @@ class PaperBotTests(unittest.TestCase):
         return box[0],stop
     def test_one_cli_buy_hold_sell_fee_shutdown_and_readback(self):
         self.assertEqual(self.command('check')[1]['status'],'READY_FOR_EXPLICIT_RUN')
-        owner=self;observed=[];steps=[0];wall=time.time()
+        owner=self;observed=[];steps=[0];wall=(time.time()//60)*60+10
         class Public:
             calls=0
             clock=lambda _:wall+steps[0]

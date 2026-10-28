@@ -265,6 +265,9 @@ class AutoTrade:
                             return self.sell_coin(ticker, price, stop_loss_triggered=True)
                         return
                 analyzer = self.analyzers[ticker]
+                # PAPER public adapter gates strategy only, AFTER per-tick position risk.
+                ready=getattr(analyzer,'ready_for_strategy',None)
+                if ready is not None and not ready():return False
                 observe(self,'analyzer_calls',ticker)
                 try:analysis = analyzer.analyze()
                 except Exception:

@@ -220,6 +220,9 @@ def finish(value,token,result,*,record_summary=False):
             if leaf.get('decision_trace') is not None:
                 from services.paper_decisions import validate_trace
                 m['decision_trace']=validate_trace(leaf['decision_trace'])
+            if 'candle_evaluation' in leaf:
+                from ops.paper_session import validate_candle_report
+                m['candle_evaluation']=validate_candle_report(leaf['candle_evaluation'])
         save_marker(owner,m)
         return {'status':m['phase'],'automatic_restart':False,'account_scope':SCOPE}
     except Exception:
@@ -268,7 +271,7 @@ def inspect_experiment(value):
     return result
 
 
-def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None,*,activity_check=None):
+def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None,*,activity_check=None,cancelled=lambda:False):
     eligible=options.get('eligible_top');limit=options.get('candidate_limit')
     replace=options.get('select_realtime_active') is True
     require(not replace or (eligible is not None and activity_check is not None),'SELECTION_LIMIT_INVALID')
@@ -292,7 +295,7 @@ def prepare_markets(saved,client,top,tickers,options,emit,analyzer_factory=None,
         def candles(self,t):
             if t in frames:return frames.pop(t)
             return client.candles(t)
-    factory=analyzer_factory or public_analyzer_factory(CachedClient())
+    factory=analyzer_factory or public_analyzer_factory(CachedClient(),wall=client.clock,cancelled=cancelled)
     try:
         for t in candidates:
             report['inspected_candidates']+=1

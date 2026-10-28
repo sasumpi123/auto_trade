@@ -1,0 +1,79 @@
+{
+  "schema": "P14_SYNTHETIC_UPBIT_MINUTE_FIXTURE_V1",
+  "origin": "SYNTHETIC_NOT_CAPTURED_FROM_MAC_OR_UPBIT",
+  "baseline_commit": "69e790ed314090c2dc4c81df6251d4ca7f2d83cf",
+  "patch_forward_fixed_commit": "ccf25aef93ef674f599a1372657effbc7234fdc0",
+  "patch_sha256": "5f27ad042c58c1ae4d645d7477bcd8eae96fda2dbbe3a801f5209e1c07bdd6e1",
+  "baseline_source_sha256": {
+    "services/public_market.py": "b99ca398ded147237441c811ce27d77ea8ec296ce9f738c9ba8bf4b7903a6206",
+    "ops/paper_session.py": "3987b5edf3a3860769569144459e8e1281c7b147697ca2c4ca7aef8a3b61b200",
+    "ops/paper_experiment.py": "2ee2eb89ec0bb6d62e85491f56415a826fae71a299c01668d12070be0479dc14",
+    "data_analyzer/analyzer.py": "60ea8c7044dc96d0f52776741ebe8f6f19556b090bfafd510676e7676ca2d1d0",
+    "trading/auto_trade.py": "577c315a0cd6e2a2e1f6cf51f4fe352880aa3630e1a39e38e3dac55a45fd7bce"
+  },
+  "utc_start": "2026-10-28T00:00:01+00:00",
+  "market": "KRW-BTC",
+  "unit": 1,
+  "volume_model": {
+    "trade_interval_seconds": "0.25",
+    "first_trade_volume": "1",
+    "early_trade_volume": "0.01",
+    "early_until_exclusive_seconds": "10",
+    "late_trade_volume": "0.49305",
+    "trades_per_full_minute": 240,
+    "full_minute_volume": "100"
+  },
+  "cases": {
+    "forming_only": {
+      "tick_count": 1,
+      "duration_seconds": 5,
+      "query_control": "NONE"
+    },
+    "repeated_1085": {
+      "tick_count": 1085,
+      "last_offset_seconds": "599",
+      "duration_seconds": 605,
+      "query_control": "NONE"
+    },
+    "cache_only": {
+      "tick_offsets_seconds": [
+        1,
+        21,
+        41,
+        61,
+        81,
+        101,
+        121,
+        141,
+        161,
+        181,
+        201,
+        221,
+        241,
+        261,
+        281,
+        301,
+        321
+      ],
+      "duration_seconds": 330,
+      "query_control": "ADD_EXCLUSIVE_TO_ONLY_WHEN_MISSING",
+      "initial_completed_minute_volume": "1"
+    },
+    "legitimate_low_completed": {
+      "tick_count": 1,
+      "duration_seconds": 5,
+      "query_control": "NONE",
+      "initial_completed_minute_volume": "1"
+    },
+    "paper_round_trip": {
+      "tick_offsets_seconds": [
+        1,
+        2,
+        4
+      ],
+      "duration_seconds": 10,
+      "query_control": "NONE",
+      "price_model": "SYNTHETIC_ENTRY_REBOUND"
+    }
+  }
+}
