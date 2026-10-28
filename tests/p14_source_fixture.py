@@ -14,7 +14,7 @@ FIXTURES=Path(__file__).parent/'fixtures'
 @contextmanager
 def baseline_tree():
     spec=json.loads((FIXTURES/'p14_upbit_minutes.json').read_text())
-    patch=(FIXTURES/'p14_before.patch').read_text(encoding='utf-8').encode()  # Normalize checkout CRLF.
+    patch=('\n'.join(json.loads((FIXTURES/'p14_before.patch.json').read_text(encoding='utf-8')))+'\n').encode()
     if hashlib.sha256(patch).hexdigest()!=spec['patch_sha256']:raise ValueError('BASELINE_PATCH_SHA_MISMATCH')
     with tempfile.TemporaryDirectory(dir='/tmp') as temp:
         source=Path(temp).resolve()/'source';source.mkdir(mode=0o700)
