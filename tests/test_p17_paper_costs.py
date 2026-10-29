@@ -171,7 +171,7 @@ class CostAccountTests(unittest.TestCase):
                 saved=json.loads((account/exp.STATE).read_bytes())
                 self.assertEqual(saved['paper_experiment']['schema_version'],2)
                 self.assertNotIn('ZERO_FEE',r['fee_policy'])
-    def test_auto_trade_minimum_total_budget_and_averaging_use_same_cost_policy(self):
+    def test_auto_trade_net_minimum_and_averaging_use_same_cost_policy(self):
         from unittest.mock import Mock
         from trading.auto_trade import AutoTrade
         token=exp.begin(self.account)
@@ -182,11 +182,16 @@ class CostAccountTests(unittest.TestCase):
             bot.max_per_coin=D(4999)
             self.assertFalse(bot.buy_coin('KRW-BTC',10000));self.assertEqual(bot.engine.state['orders'],{})
             bot.max_per_coin=D(5000)
+            self.assertFalse(bot.buy_coin('KRW-BTC',10000));self.assertFalse(bot.engine.halted)
+            self.assertEqual(bot.engine.state['orders'],{})
+            bot.max_per_coin=D('5002.50')
             self.assertTrue(bot.buy_coin('KRW-BTC',10000))
-            self.assertTrue(bot.buy_coin('KRW-BTC',9000,reason='물타기 매수',amount=D(5000)))
-            self.assertFalse(bot.buy_coin('KRW-BTC',8000,reason='물타기 매수',amount=D(5000)))
+            self.assertFalse(bot.buy_coin('KRW-BTC',9000,reason='물타기 매수',amount=D(5000)))
+            self.assertTrue(bot.buy_coin('KRW-BTC',9000,reason='물타기 매수',amount=D('5002.50')))
+            self.assertFalse(bot.buy_coin('KRW-BTC',8000,reason='물타기 매수',amount=D('5002.50')))
             for o in bot.engine.state['orders'].values():
-                self.assertLessEqual(D(o['funds'])+D(o['paid_fee']),5000)
+                self.assertLessEqual(D(o['funds'])+D(o['paid_fee']),D('5002.50'))
+                self.assertEqual(D(o['funds']),5000)
                 self.assertGreater(D(o['paid_fee']),0)
         finally:bot.stop()
     def test_halted_cost_account_and_cold_backup_are_not_restarted_or_modified(self):
@@ -271,6 +276,44 @@ class CostAccountTests(unittest.TestCase):
                 self.assertEqual(D(order['paid_fee']),0)
                 self.assertAlmostEqual(D(order['funds']),5000,delta=D('1e-20'))
             finally:e.close()
+
+    def test_normal_and_averaging_all_cash_net_minimum_and_total_cap(self):
+        for averaging in (False,True):
+            for n,(target,accepted) in enumerate(((D(5000),False),(D('5002.49'),False),(D('5002.50'),True))):
+                with self.subTest(averaging=averaging,target=target):
+                    p=self.parent/f'all-cash-{averaging}-{n}';exp.create(p,cost_policy=POLICY)
+                    token=exp.begin(p);e=ExecutionEngine(p/exp.STATE,1_000_000,real_trading=False)
+                    e._experiment_session=token;e.open()
+                    try:
+                        seed='KRW-BTC' if averaging else 'KRW-ETH'
+                        self.assertTrue(e.buy(seed,10000,D(1000000)-target))
+                        budget=e.cash;before=(p/exp.STATE).read_bytes();orders=len(e.state['orders'])
+                        result=e.buy('KRW-BTC',9000,budget,averaging=averaging)
+                        self.assertEqual(result,accepted);self.assertFalse(e.halted);self.assertTrue(e.ready)
+                        if not accepted:
+                            self.assertEqual(before,(p/exp.STATE).read_bytes());self.assertEqual(e.cash,budget)
+                            self.assertEqual(len(e.state['orders']),orders)
+                        else:
+                            order=list(e.state['orders'].values())[-1]
+                            self.assertGreaterEqual(D(order['funds']),5000)
+                            self.assertLessEqual(D(order['funds'])+D(order['paid_fee']),budget)
+                            self.assertGreaterEqual(e.cash,0)
+                    finally:e.close()
+    def test_legacy_zero_cost_auto_trade_minimum_retains_original_boundary(self):
+        from unittest.mock import Mock
+        from trading.auto_trade import AutoTrade
+        p=self.parent/'legacy-minimum';exp.create(p);token=exp.begin(p)
+        bot=AutoTrade(tickers=['KRW-BTC'],state_path=p/exp.STATE,real_trading=False,
+                      analyzer_factory=lambda _:Mock(),notification=None)
+        bot.engine._experiment_session=token;bot.initialize()
+        try:
+            before=(p/exp.STATE).read_bytes();bot.max_per_coin=D(4999)
+            self.assertFalse(bot.buy_coin('KRW-BTC',10000));self.assertEqual(before,(p/exp.STATE).read_bytes())
+            bot.max_per_coin=D(5000);self.assertTrue(bot.buy_coin('KRW-BTC',10000))
+            order=list(bot.engine.state['orders'].values())[0]
+            self.assertEqual(D(order['funds']),5000);self.assertEqual(D(order['paid_fee']),0)
+            self.assertFalse(bot.engine.halted)
+        finally:bot.stop()
 
 
 class PureCostTests(unittest.TestCase):

@@ -249,6 +249,19 @@ class ExecutionEngine:
                     value = number(value, positive=True)
                     if value > self.cash:
                         return False
+                    if not self.real_trading and self._paper_cost_policy is not None:
+                        planned_funds=value/(1+self._paper_costs.fee_rate)
+                        planned_fee=planned_funds*self._paper_costs.fee_rate
+                        # Reserve fees and apply the existing Decimal cap correction
+                        # before minimum-notional validation and durable intent.
+                        if planned_funds+planned_fee>value or self.cash-planned_funds-planned_fee<0:
+                            planned_funds=planned_funds.next_minus()
+                            planned_fee=planned_funds*self._paper_costs.fee_rate
+                        if planned_funds+planned_fee>value or self.cash-planned_funds-planned_fee<0:
+                            raise ValueError('PAPER_COST_BUDGET_UNVERIFIED')
+                        from config import MIN_TRADING_AMOUNT
+                        if planned_funds<number(MIN_TRADING_AMOUNT,positive=True):
+                            return False  # Normal rejection: no intent, fill or HALT.
                 else:
                     if quantity == 0:
                         return False
@@ -281,14 +294,8 @@ class ExecutionEngine:
                     else:
                         execution=costs.price(price,'BUY' if side=='bid' else 'SELL')
                         if side=='bid':
-                            funds=value/(1+costs.fee_rate)
-                            fee=funds*costs.fee_rate
-                            # One representable Decimal step, only if rounding exceeds the
-                            # all-in cap (or sequential cash subtraction). No KRW/coin quantization.
-                            if funds+fee>value or self.cash-funds-fee<0:
-                                funds=funds.next_minus();fee=funds*costs.fee_rate
+                            funds,fee=planned_funds,planned_fee
                             executed=funds/execution
-                            if funds+fee>value or self.cash-funds-fee<0:raise ValueError('PAPER_COST_BUDGET_UNVERIFIED')
                         else:
                             executed=value;funds=executed*execution;fee=funds*costs.fee_rate
                         receipt={'uuid':identifier,'market':ticker,'side':side,'state':'done',
