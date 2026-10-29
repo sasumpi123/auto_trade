@@ -23,7 +23,7 @@ def view(event):
           'session_ticks','historical_ticks','markets','cumulative_buys','cumulative_sells','fees',
           'net_realized_pnl','unrealized_pnl','net_return_percent','equity','valuation_reason',
           'engine_started','post_validation','session_finalization','supervisor_reason','automatic_restart',
-          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation','regression_evidence')
+          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation','regression_evidence','cost_policy','fee_policy')
     return {k:event[k] for k in keys if k in event}
 
 
@@ -92,11 +92,14 @@ def query(directory,command):
         return _json(raw.decode())
 
 
-def initialize(directory):
+def initialize(directory,*,cost_policy=None):
     """Explicit init may create one new private parent; never chmod/reset existing paths."""
-    if os.name!='posix':return exp.create(directory)  # Existing fail-closed Windows contract.
+    if os.name!='posix':return exp.create(directory,cost_policy=cost_policy)  # Existing fail-closed Windows contract.
     exp.require(sys.version_info[:2]==(3,12),'PYTHON312_REQUIRED')
     exp.require(exp.initial_cash()==1_000_000,'PAPER_POLICY_REQUIRED')
+    if cost_policy is not None:
+        from trading.costs import from_policy
+        from_policy(cost_policy)
     p=Path(directory).expanduser().absolute()
     exp.require(not any(q.is_symlink() for q in (p,*p.parents)),'SYMLINK_PATH_FORBIDDEN')
     p=p.resolve()
@@ -106,7 +109,7 @@ def initialize(directory):
     exp.require(not any((q/'.git').is_file() or (q/'.git/HEAD').is_file() for q in p.parents),'GIT_CHECKOUT_PATH_FORBIDDEN')
     exp.require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',p.name),'INVALID_EXPERIMENT_NAME')
     if not p.parent.exists():p.parent.mkdir(mode=0o700)  # Immediate existing ancestor required; no recursive setup.
-    return exp.create(p)
+    return exp.create(p,cost_policy=cost_policy)
 
 
 def read_report(directory,*,limit=20):
@@ -132,6 +135,9 @@ def read_report(directory,*,limit=20):
             'net_return_percent':str((accounting['cash']/1_000_000-1)*100) if flat else 'N/A',
             'valuation_reason':'NO_OPEN_POSITION' if flat else 'OFFLINE_NO_FRESH_MARKS',
             'fee_policy':'CONFIRMED_RECEIPTS;CURRENT_PAPER_GENERATOR_ZERO_FEE'}
+        from trading.costs import summary as cost_summary
+        costs=cost_summary(saved)
+        if costs['cost_policy'] is not None:summary.update(costs)
         from services.notification_metrics import reason_group
         orders=[o for o in saved['orders'].values() if o['status']=='settled' and Decimal(o['executed_volume'])>0]
         trades=[{'sequence':r['sequence'],'market':r['ticker'],'side':r['side'],
@@ -143,6 +149,7 @@ def read_report(directory,*,limit=20):
             'summary':summary,'trades':trades,'trade_history_total':len(accounting['rows']),
             'trade_history_shown':len(trades),'account_scope':exp.SCOPE,'network_calls':0,'state_writes':0,
             'execution_authorized':False,'automatic_restart':False,'decision_trace':'N/A_NOT_RECORDED'}
+        result.update(costs)
         if (p/'session.json').exists():
             m=exp.marker(p)
             from services.paper_decisions import validate_trace
@@ -205,22 +212,33 @@ def main(argv=None):
             print(json.dumps({'status':'BLOCKED','reason':'EXPLICIT_PUBLIC_RUN_REQUIRED','network_calls':0}));return 2
         # Delegate argument validation, explicit network opt-in, ownership and supervision.
         def emit(event):
-            print(json.dumps({'account_scope':exp.SCOPE,'fee_policy':'EXISTING_PAPER_ZERO_FEE',**view(event)},ensure_ascii=False),flush=True)
+            print(json.dumps({'account_scope':exp.SCOPE,'fee_policy':'NOT_LOADED_NO_EXECUTION',**view(event)},ensure_ascii=False),flush=True)
         return exp.main(args[1:],emit=emit,control_factory=ControlServer,record_summary=True)
     parser=SafeParser(description=__doc__)
     parser.add_argument('command',choices=('init','check','run','status','stop','report'))
     parser.add_argument('--directory',type=Path,required=True)
     parser.add_argument('--limit',type=int,default=20)
+    parser.add_argument('--fee-bps')
+    parser.add_argument('--slippage-bps')
+    parser.add_argument('--full-spread-bps')
     options=parser.parse_args(args)
+    values=(options.fee_bps,options.slippage_bps,options.full_spread_bps)
+    cost_policy=None
+    if any(v is not None for v in values):
+        if options.command!='init' or any(v is None for v in values):parser.error('all costs must be explicit at init only')
+        from trading.costs import CostModel,policy
+        try:cost_policy=policy(CostModel(*values))
+        except ValueError:parser.error('invalid costs')
     if options.command=='run':parser.error('run must be the first subcommand; explicit connection required')
     try:
-        if options.command=='init':r=initialize(options.directory)
+        if options.command=='init':r=initialize(options.directory,cost_policy=cost_policy)
         elif options.command=='check':
             exp.require(not os.path.lexists(exp.directory(options.directory)/CONTROL),'CONTROL_PRESENT_NO_RUN_AUTHORITY')
             r=exp.inspect_experiment(options.directory)
             if r['status']=='READ_ONLY_NO_EXECUTION_AUTHORITY':
                 r={'status':'READY_FOR_EXPLICIT_RUN','session_state':r['session_state'],
-                    'summary':r['diagnostic']['summary'],'execution_authorized':False,'network_calls':0}
+                    'summary':r['diagnostic']['summary'],'execution_authorized':False,'network_calls':0,
+                    'cost_policy':r['cost_policy'],'fee_policy':r['fee_policy']}
         elif options.command=='stop':r=query(options.directory,'STOP')
         elif options.command=='status' and os.path.lexists(exp.directory(options.directory)/CONTROL):r=query(options.directory,'STATUS')
         else:r=read_report(options.directory,limit=options.limit)

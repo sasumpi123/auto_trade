@@ -7,6 +7,7 @@ import time
 import uuid
 
 from .state_store import StateStore
+from .costs import from_policy
 
 
 class TradingHalted(RuntimeError):
@@ -30,6 +31,8 @@ class ExecutionEngine:
             raise ValueError('A broker is required for real execution')
         if not real_trading and broker is not None:
             raise ValueError('Paper mode must not receive a real broker')
+        self._paper_cost_policy=None
+        self._paper_costs=None
         self.real_trading = real_trading
         self.broker = broker
         self.store = StateStore(state_path)
@@ -105,6 +108,10 @@ class ExecutionEngine:
                         from ops.paper_experiment import validate_start
                         token=getattr(self,'_experiment_session',None)
                         validate_start(saved,self.store.path,token)
+                        costs=saved['paper_experiment'].get('cost_policy')
+                        if costs is not None:
+                            if self.real_trading:raise ValueError('PAPER_COSTS_ONLY')
+                            self._paper_costs=from_policy(costs);self._paper_cost_policy=deepcopy(costs)
                         saved['paper_experiment']['last_session_id']=token
                     self.state = saved
                 self._journal_writable = True
@@ -185,6 +192,8 @@ class ExecutionEngine:
     def _ensure_ready(self):
         if not self.ready or self.halted:
             raise TradingHalted(self.state.get('halt_reason') or 'Engine is not ready')
+        if self.state.get('paper_experiment',{}).get('cost_policy')!=self._paper_cost_policy:
+            raise TradingHalted('PAPER_COST_POLICY_MISMATCH')
         if any(o['status'] != 'settled' for o in self.state['orders'].values()):
             raise TradingHalted('An unresolved order blocks all new orders')
 
@@ -262,11 +271,29 @@ class ExecutionEngine:
                     self.store.save(self.state)
                     receipt = self._wait_for_terminal(order)
                 else:
-                    executed = value / price if side == 'bid' else value
-                    receipt = {'uuid': identifier, 'market': ticker, 'side': side,
-                               'state': 'done', 'executed_volume': str(executed),
-                               'remaining_volume': '0', 'paid_fee': '0',
-                               'trades': [{'volume': str(executed), 'funds': str(executed * price)}]}
+                    costs=self._paper_costs
+                    if costs is None or not (costs.fee_bps or costs.slippage_bps or costs.spread_bps):
+                        executed = value / price if side == 'bid' else value
+                        receipt = {'uuid': identifier, 'market': ticker, 'side': side,
+                                   'state': 'done', 'executed_volume': str(executed),
+                                   'remaining_volume': '0', 'paid_fee': '0',
+                                   'trades': [{'volume': str(executed), 'funds': str(executed * price)}]}
+                    else:
+                        execution=costs.price(price,'BUY' if side=='bid' else 'SELL')
+                        if side=='bid':
+                            funds=value/(1+costs.fee_rate)
+                            fee=funds*costs.fee_rate
+                            # One representable Decimal step, only if rounding exceeds the
+                            # all-in cap (or sequential cash subtraction). No KRW/coin quantization.
+                            if funds+fee>value or self.cash-funds-fee<0:
+                                funds=funds.next_minus();fee=funds*costs.fee_rate
+                            executed=funds/execution
+                            if funds+fee>value or self.cash-funds-fee<0:raise ValueError('PAPER_COST_BUDGET_UNVERIFIED')
+                        else:
+                            executed=value;funds=executed*execution;fee=funds*costs.fee_rate
+                        receipt={'uuid':identifier,'market':ticker,'side':side,'state':'done',
+                                 'executed_volume':str(executed),'remaining_volume':'0','paid_fee':str(fee),
+                                 'trades':[{'volume':str(executed),'funds':str(funds)}]}
                 filled = self._apply_fill(order, receipt)
                 self.store.save(self.state)
                 return filled
@@ -313,6 +340,8 @@ class ExecutionEngine:
             raise ValueError('Fees/funds without a fill')
         if order['side'] == 'bid' and funds > number(order['value']):
             raise ValueError('Buy fills exceed the requested amount')
+        if self._paper_cost_policy is not None and order['side']=='bid' and funds+fee>number(order['value']):
+            raise ValueError('Paper buy fills and fee exceed total budget')
         if order['side'] == 'ask' and executed > number(order['value']):
             raise ValueError('Sell fills exceed the requested quantity')
         if executed > 0 and (funds == 0 or fee > funds):
