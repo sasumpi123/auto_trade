@@ -70,21 +70,28 @@ def receipt_path(p):return p.parent/('.paper-experiment-'+location_hash(p)+'.jso
 def first_use_path(p):return p.parent/('.paper-experiment-used-'+location_hash(p)+'.json')
 
 
-def identity(identifier,p,last=None):
-    return {'schema_version':1,'scope':SCOPE,'experiment_id':identifier,
+def identity(identifier,p,last=None,*,cost_policy=None):
+    result={'schema_version':1,'scope':SCOPE,'experiment_id':identifier,
             'directory_sha256':sha(str(p).encode()),'initial_cash':'1000000','last_session_id':last}
+    if cost_policy is not None:
+        from trading.costs import from_policy,policy
+        result.update(schema_version=2,cost_policy=policy(from_policy(cost_policy)))
+    return result
 
 
-def create(value):
+def create(value,*,cost_policy=None):
     result={'status':'BLOCKED','account_scope':SCOPE,'network_calls':0,'automatic_start':False}
     try:
         require(sys.version_info[:2]==(3,12),'PYTHON312_REQUIRED')
         require(initial_cash()==1_000_000,'FIXED_EXPERIMENT_CAPITAL_REQUIRED')
+        if cost_policy is not None:
+            from trading.costs import from_policy
+            from_policy(cost_policy)  # Validate before ANY account/path creation.
         p=directory(value);require(not p.exists(),'DIRECTORY_ALREADY_EXISTS_NO_RESET')
         state=ExecutionEngine(p/STATE,1_000_000,real_trading=False).state
-        state['paper_experiment']=identity(uuid.uuid4().hex,p)
+        state['paper_experiment']=identity(uuid.uuid4().hex,p,cost_policy=cost_policy)
         raw=encoded(state)
-        receipt={'schema_version':1,'identity':state['paper_experiment'],'initial_state_sha256':sha(raw)}
+        receipt={'schema_version':state['paper_experiment']['schema_version'],'identity':state['paper_experiment'],'initial_state_sha256':sha(raw)}
         # Parent reservation survives leaf loss; never removed on failure/retry.
         exclusive_write(receipt_path(p),encoded(receipt))
         p.mkdir(mode=0o700)
@@ -96,6 +103,9 @@ def create(value):
             exclusive_write(p/STATE,raw)  # Last creation commit; never engine.open/reset.
         result.update(status='CREATED_NEW_INDEPENDENT_EXPERIMENT',initial_cash='1000000',
                       inherited_positions=False,initial_orders=0,verification_required=True)
+        if cost_policy is not None:
+            from trading.costs import summary
+            result.update(summary(state))
     except ExperimentError as exc:result['reason']=str(exc)
     except Exception:result['reason']='CREATION_UNVERIFIED_NO_RETRY_OR_CLEANUP'
     return result
@@ -109,14 +119,18 @@ def validate_identity(saved,state):
     r=_json(receipt_raw.decode());meta=saved['paper_experiment']
     require(type(meta) is dict and isinstance(meta.get('experiment_id'),str) and ID.fullmatch(meta['experiment_id']),
             'EXPERIMENT_IDENTITY_UNVERIFIED')
-    require(meta==identity(meta['experiment_id'],p,meta.get('last_session_id')),'EXPERIMENT_IDENTITY_UNVERIFIED')
+    require(type(meta.get('schema_version')) is int,'EXPERIMENT_IDENTITY_UNVERIFIED')
+    require(type(r['schema_version']) is int and r['schema_version'] in (1,2),'CREATION_RECEIPT_MISMATCH')
+    cost_policy=r['identity'].get('cost_policy')
+    require((r['schema_version']==2)==(cost_policy is not None),'CREATION_RECEIPT_MISMATCH')
+    require(meta==identity(meta['experiment_id'],p,meta.get('last_session_id'),cost_policy=cost_policy),'EXPERIMENT_IDENTITY_UNVERIFIED')
     require(meta['last_session_id'] is None or (isinstance(meta['last_session_id'],str) and ID.fullmatch(meta['last_session_id'])),
             'EXPERIMENT_SESSION_INVALID')
-    require(r['identity']==identity(meta['experiment_id'],p),'CREATION_RECEIPT_MISMATCH')
+    require(r['identity']==identity(meta['experiment_id'],p,cost_policy=cost_policy),'CREATION_RECEIPT_MISMATCH')
     initial=_private(p/'initial-state.json',{'.json'}).read_bytes()
     require(sha(initial)==r['initial_state_sha256'],'INITIAL_STATE_MISMATCH')
     expected=ExecutionEngine(p/STATE,1_000_000,real_trading=False).state
-    expected['paper_experiment']=identity(meta['experiment_id'],p)
+    expected['paper_experiment']=identity(meta['experiment_id'],p,cost_policy=cost_policy)
     require(_json(initial.decode())==expected,'INITIAL_INVENTORY_OR_CAPITAL_NOT_EMPTY')
     if meta['last_session_id'] is not None:validate_first_use(saved,p)
     return p,r
@@ -298,6 +312,8 @@ def inspect_experiment(value):
             require(status=='READY_IDLE_AT_SNAPSHOT','EXPERIMENT_OWNER_UNVERIFIED')
             saved=validate_state(_json(_private(p/STATE,{'.json'}).read_text(encoding='utf-8')),p/STATE,1_000_000)
             result['session_state']=resumable(saved,p/STATE)
+            from trading.costs import summary
+            result.update(summary(saved))
             result['status']='READ_ONLY_NO_EXECUTION_AUTHORITY'
     except ExperimentError as exc:result['reason']=str(exc)
     except Exception:result['reason']='EXPERIMENT_UNVERIFIED_NO_INITIALIZATION'

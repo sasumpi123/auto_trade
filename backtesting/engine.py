@@ -1,6 +1,6 @@
 """Deterministic next-open simulation, isolated from live/persistent execution."""
 from dataclasses import asdict, dataclass, field
-from decimal import Decimal, DecimalException, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN
 import platform
 import re
 
@@ -11,41 +11,7 @@ from strategies.signals import Strategy, research_strategies
 from .risk import RiskOverlay
 from .data import dataset_hash, indicators, snapshot_at, validate_candles
 
-
-def decimal(value):
-    if isinstance(value, bool):
-        raise ValueError('Boolean is not a monetary value')
-    try:
-        result = Decimal(str(value))
-    except (DecimalException, ValueError, TypeError) as exc:
-        raise ValueError('Invalid decimal') from exc
-    if not result.is_finite() or result < 0:
-        raise ValueError('Expected a finite non-negative decimal')
-    return result
-
-
-@dataclass(frozen=True)
-class CostModel:
-    # Research inputs, NOT a claim about current exchange fees.
-    fee_bps: Decimal
-    slippage_bps: Decimal
-    spread_bps: Decimal = Decimal('0')
-
-    def __post_init__(self):
-        for name in ('fee_bps', 'slippage_bps', 'spread_bps'):
-            object.__setattr__(self, name, decimal(getattr(self, name)))
-        if self.fee_bps >= 10000 or self.slippage_bps + self.spread_bps / 2 >= 10000:
-            raise ValueError('Costs must leave positive execution prices')
-
-    @property
-    def fee_rate(self):
-        return self.fee_bps / 10000
-
-    def price(self, opening, side):
-        if side not in ('BUY', 'SELL'):
-            raise ValueError('Invalid execution side')
-        impact = (self.slippage_bps + self.spread_bps / 2) / 10000
-        return decimal(opening) * (1 + impact if side == 'BUY' else 1 - impact)
+from trading.costs import CostModel,decimal
 
 
 @dataclass(frozen=True)

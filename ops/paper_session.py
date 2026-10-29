@@ -96,6 +96,8 @@ def state_summary(saved, counts=None, last=None, *, marks=None, now=None,decisio
                       'state':'RECEIVED' if counts.get(t) else 'WAIT_TICK'} for t in sorted(markets)},
         'real_orders':0,'slack_messages':0,'launchd_changed':False}
     if 'paper_experiment' in saved:
+        from trading.costs import summary as cost_summary
+        result.update(cost_summary(saved))
         metrics=report_metrics(saved,1_000_000,marks or {},now=time.monotonic() if now is None else now,verified=True)
         def number(key):
             v=metrics.get(key)
