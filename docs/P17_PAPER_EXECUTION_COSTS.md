@@ -83,6 +83,7 @@ P9의 기존 절대/상대 close 허용오차를 유지하며, 대금+수수료�
   paper_dir="$HOME/paper/paper-cost-p17-01"
   if [ -e "$paper_dir" ]; then printf '%s\n' 'BLOCKED: choose a fresh account path'; exit 2; fi
   log_dir="$(mktemp -d "$HOME/paper/p17-private-logs.XXXXXX")"
+  printf 'Full private logs: %s\n' "$log_dir"
   .venv/bin/python -m ops.paper_bot init --directory "$paper_dir" \
     --fee-bps 5 --slippage-bps 5 --full-spread-bps 2 >"$log_dir/init.json" 2>"$log_dir/init.stderr"
   .venv/bin/python -m ops.paper_bot check --directory "$paper_dir" >"$log_dir/check.json" 2>"$log_dir/check.stderr"
@@ -101,7 +102,6 @@ print(json.dumps({'run_exit':int(sys.argv[2]),'report_exit':int(sys.argv[3]),
     'buys':s.get('cumulative_buys'),'sells':s.get('cumulative_sells'),
     'fees':s.get('fees'),'net_realized_pnl':s.get('net_realized_pnl')},ensure_ascii=False))
 PY
-  printf 'Full private logs: %s\n' "$log_dir"
   test "$run_code" -eq 0 && test "$report_code" -eq 0
 )
 ```
