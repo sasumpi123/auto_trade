@@ -214,6 +214,64 @@ class CostAccountTests(unittest.TestCase):
             self.assertTrue(close(a['cash'],e.cash))  # Existing P9 Decimal reconciliation tolerance.
         finally:e.close()
 
+    def test_normal_buy_net_notional_boundary_rejects_before_intent_without_halt(self):
+        from unittest.mock import Mock
+        from trading.auto_trade import AutoTrade
+        from services.paper_decisions import DecisionCounters
+        token=exp.begin(self.account)
+        bot=AutoTrade(tickers=['KRW-BTC'],state_path=self.state,real_trading=False,
+                      analyzer_factory=lambda _:Mock(),notification=None)
+        bot.engine._experiment_session=token;bot.initialize();bot.decision_observer=DecisionCounters()
+        try:
+            before=self.state.read_bytes();backup=self.parent/'minimum-cold.json';backup.write_bytes(before)
+            for budget in (D(5000),D('5002.49'),D('5002.50').next_minus()):
+                with self.subTest(budget=budget):
+                    bot.max_per_coin=budget
+                    self.assertFalse(bot.buy_coin('KRW-BTC',10000))
+                    self.assertEqual(before,self.state.read_bytes());self.assertEqual(before,backup.read_bytes())
+                    self.assertEqual(bot.engine.state['orders'],{});self.assertFalse(bot.engine.halted)
+                    self.assertTrue(bot.engine.ready)
+            self.assertEqual(bot.decision_observer.snapshot()['final_blocks']['ENGINE_REJECTED'],3)
+            bot.max_per_coin=D('5002.50');self.assertTrue(bot.buy_coin('KRW-BTC',10000))
+            order=list(bot.engine.state['orders'].values())[0]
+            self.assertEqual(D(order['funds']),5000);self.assertEqual(D(order['paid_fee']),D('2.50'))
+            self.assertEqual(D(order['funds'])+D(order['paid_fee']),D('5002.50'))
+            self.assertEqual(before,backup.read_bytes())
+        finally:bot.stop()
+    def test_averaging_net_notional_boundary_rejects_before_intent_without_halt(self):
+        from unittest.mock import Mock
+        from trading.auto_trade import AutoTrade
+        token=exp.begin(self.account)
+        bot=AutoTrade(tickers=['KRW-BTC'],state_path=self.state,real_trading=False,
+                      analyzer_factory=lambda _:Mock(),notification=None)
+        bot.engine._experiment_session=token;bot.initialize()
+        try:
+            self.assertTrue(bot.buy_coin('KRW-BTC',10000));before=self.state.read_bytes()
+            for budget in (D(5000),D('5002.50').next_minus()):
+                with self.subTest(budget=budget):
+                    self.assertFalse(bot.buy_coin('KRW-BTC',9000,reason='물타기 매수',amount=budget))
+                    self.assertEqual(before,self.state.read_bytes());self.assertFalse(bot.engine.halted)
+                    self.assertFalse(bot.engine.position('KRW-BTC')['averaging_down_used'])
+            self.assertTrue(bot.buy_coin('KRW-BTC',9000,reason='물타기 매수',amount=D('5002.50')))
+            self.assertEqual(len(bot.engine.state['orders']),2)
+            order=list(bot.engine.state['orders'].values())[-1]
+            self.assertEqual(D(order['funds']),5000);self.assertEqual(D(order['paid_fee']),D('2.50'))
+        finally:bot.stop()
+    def test_zero_fee_slip_spread_and_explicit_zero_keep_net_minimum(self):
+        from trading.costs import CostModel,policy
+        for i,args in enumerate(((0,0,0),(0,5,0),(0,0,2))):
+            p=self.parent/f'minimum-zero-fee-{i}';exp.create(p,cost_policy=policy(CostModel(*args)))
+            token=exp.begin(p);e=ExecutionEngine(p/exp.STATE,1_000_000,real_trading=False);e._experiment_session=token;e.open()
+            try:
+                before=(p/exp.STATE).read_bytes()
+                self.assertFalse(e.buy('KRW-BTC',10000,D(5000).next_minus()))
+                self.assertEqual(before,(p/exp.STATE).read_bytes());self.assertFalse(e.halted)
+                self.assertTrue(e.buy('KRW-BTC',10000,5000))
+                order=list(e.state['orders'].values())[0]
+                self.assertEqual(D(order['paid_fee']),0)
+                self.assertAlmostEqual(D(order['funds']),5000,delta=D('1e-20'))
+            finally:e.close()
+
 
 class PureCostTests(unittest.TestCase):
     def test_fee_slip_spread_and_zero_models_share_original_formulas(self):
