@@ -152,7 +152,7 @@ class ProbeBot(AutoTrade):
         return result
 
 
-def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1,strategy=None,details=False):
+def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1,strategy=None,details=False,engine_factory=None,sample_opens=False):
     """One asset, close_i features -> open_(i+1) execution, no terminal liquidation.
 
     Actual risk rules observe next open before analyzer, exactly AutoTrade priority.
@@ -165,11 +165,11 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
         'volume_blocked','cooldown_blocked','cooldown_blocked_actionable','nonfinite_skipped','duplicate_evaluations_suppressed','repeat_signal_candidates',
         'buy_attempts','sell_attempts','buy_rejected','sell_rejected','reject_position_limit','reject_cash_below_minimum',
         'reject_minimum_order','buy_while_held','sell_without_position','risk_bypassed_analyzer')})
-    conditions={};first_failed={};curve=[cash];now=[0.0];seen=set();first_open=None;exposure=[]
+    conditions={};first_failed={};curve=[cash];now=[0.0];seen=set();first_open=None;exposure=[];exposed=0
     with TemporaryDirectory(prefix='legacy-offline-') as temp:
         bot=ProbeBot(start_cash=cash,tickers=[market],state_path=Path(temp)/'paper.json',real_trading=False,
             notification=None,analyzer_factory=lambda t:ProbeAnalyzer(t,counts,lambda:now[0],strategy))
-        bot.diagnostic_counts=counts;bot.engine=CostPaperEngine(Path(temp)/'paper.json',cash,costs,lambda:now[0],capture_details=details)
+        bot.diagnostic_counts=counts;bot.engine=(engine_factory or CostPaperEngine)(Path(temp)/'paper.json',cash,costs,lambda:now[0],capture_details=details)
         bot.initialize();bot.max_per_coin=cash*Decimal('.4')
         try:
             for i,df in windows.items():
@@ -203,6 +203,8 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
                 if details:
                     exposure.append({'timestamp':now[0],'quantity':str(number(bot.engine.position(market)['quantity'])),
                         'reference_price':str(number(frame.open.iloc[i+1]))})
+                if sample_opens:exposed+=int(number(bot.engine.position(market)['quantity'])>0)
+                if sample_opens:curve.append(bot.engine.cash+number(bot.engine.position(market)['quantity'])*number(frame.open.iloc[i+1]))
                 mark=number(frame.close.iloc[i+1]);curve.append(bot.engine.cash+number(bot.engine.position(market)['quantity'])*mark)
             state=deepcopy(bot.engine.state)
             if bot.engine.store.load()!=state or bot.engine.halted:raise ValueError('RESEARCH_LEDGER_MISMATCH')
@@ -220,10 +222,15 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
                     average_net_sell_pnl=sum(closed)/len(closed) if closed else None,
                     expectancy_per_sell=sum(closed)/len(closed) if closed else None,net_realized_pnl=accounting['net_profit'],
                     unrealized_pnl=final-cash-accounting['net_profit'])
-                for fraction in (Decimal(1),Decimal('.4')):
-                    budget=cash*fraction;qty=budget/(1+costs.fee_rate)/costs.price(first_open,'BUY')
-                    metrics['buy_hold_'+('100' if fraction==1 else '40')+'_net_pct']=((cash-budget+qty*number(frame.close.iloc[-1]))/cash-1)*100
+                if engine_factory is None:
+                    for fraction in (Decimal(1),Decimal('.4')):
+                        budget=cash*fraction;qty=budget/(1+costs.fee_rate)/costs.price(first_open,'BUY')
+                        metrics['buy_hold_'+('100' if fraction==1 else '40')+'_net_pct']=((cash-budget+qty*number(frame.close.iloc[-1]))/cash-1)*100
             extra={}
+            if sample_opens:
+                extra.update(evaluation_last_open=frame.index[max(seen)].isoformat() if seen else None,
+                    execution_first_open=frame.index[min(seen)+1].isoformat() if seen else None,
+                    exposure_fraction=str(Decimal(exposed)/len(seen)) if seen else None)
             if details:
                 from .trade_attribution import attribute
                 extra['attribution']=attribute(state,bot.engine.detail_fills,cash,as_of=end,
