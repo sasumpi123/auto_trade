@@ -260,6 +260,16 @@ class RepeatSessionTests(unittest.TestCase):
             else:bad['combined']['raw_payload']='MUST_NOT_LEAK'
             with self.assertRaises(ValueError):validate_regression_evidence(bad)
 
+    def test_persisted_evidence_cannot_be_downgraded_to_p15_by_dropping_both_policy_fields(self):
+        from ops.paper_bot import read_report
+        self.phase='single';r,end=self.run_case()
+        self.assertEqual(end['status'],'STOPPED_VERIFIED')
+        self.assertEqual(r['regression_evidence']['combined']['discarded'],1)
+        m=exp.marker(self.experiment)
+        for stage in ('observation','combined'):del m['regression_checkpoint']['evidence'][stage]['policy']
+        (self.experiment/'session.json').write_text(json.dumps(m))
+        with self.assertRaises(ValueError):read_report(self.experiment)
+
 
 class RepeatOptionTests(unittest.TestCase):
     def test_missing_contradictory_or_non_network_options_fail_before_reservation(self):

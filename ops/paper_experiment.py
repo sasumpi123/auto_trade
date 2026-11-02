@@ -285,15 +285,23 @@ def session_reason(value):
     return value if isinstance(value,str) and value in known else 'SESSION_FAILED'
 
 
-def regression_checkpoint(owner,token,evidence,reason):
+def session_regression_evidence(m,evidence):
     from services.realtime_activity import validate_regression_evidence
+    value=validate_regression_evidence(evidence)
+    expected=REPEAT_POLICY.evidence() if m.get('discard_policy')==REPEAT_POLICY.identifier else None
+    require(value['combined'].get('policy')==expected and value['observation'].get('policy')==expected,
+            'DISCARD_POLICY_EVIDENCE_MISMATCH')
+    return value
+
+
+def regression_checkpoint(owner,token,evidence,reason):
     require(owner._lock is not None,'REGRESSION_OWNER_REQUIRED')
     saved=owner.load();m=marker(owner.path.parent)
     require(m['phase']=='IN_PROGRESS' and m['session_id']==token,'SESSION_OWNER_MISMATCH')
     return {'experiment_id':saved['paper_experiment']['experiment_id'],'session_id':token,
             'state_sha256':sha(owner.path.read_bytes()),'before_sha256':m['before_sha256'],
             'reason':session_reason(reason),
-            'scope':'OBSERVATION_ONLY_NOT_RESTART_AUTHORITY','evidence':validate_regression_evidence(evidence)}
+            'scope':'OBSERVATION_ONLY_NOT_RESTART_AUTHORITY','evidence':session_regression_evidence(m,evidence)}
 
 
 def checkpoint_regression(owner,token,evidence,reason):

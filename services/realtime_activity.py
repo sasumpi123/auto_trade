@@ -103,7 +103,7 @@ class Observation:
     def runtime_guard(self,selected,clock_origin,*,discard_small_regressions=False,discard_repeated_small_regressions=False):
         self.validate_start(selected)
         if self.guard.discard_enabled:
-            # P15 has fixed explicit markets: retain the SAME guard, budget and clock.
+            # P15/P18 fixed explicit markets retain the SAME guard, budget and clock.
             if (self.guard.policy!=discard_policy(discard_small_regressions,discard_repeated_small_regressions) or set(selected)!=set(self.stats)
                     or clock_origin!=(self.guard.start_wall,self.guard.start_mono)):
                 raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
