@@ -55,9 +55,12 @@ class InputTests(unittest.TestCase):
         import io
         with patch('sys.stderr',new_callable=io.StringIO),self.assertRaises(SystemExit):p.main(['--input','x','--output','y','--connect-public'])
         r={'status':'VERIFIED_PARTIAL','cases':[],'excluded':[{}],'elapsed_seconds':1}
-        with patch.object(p,'analyze',return_value=(Path('/tmp/private-new'),r)),patch('sys.stdout',new_callable=io.StringIO) as out:
-            self.assertEqual(p.main(['--input','/tmp/source','--output','/tmp/private-new']),0)
-        self.assertEqual(len(out.getvalue().splitlines()),5)
+        # macOS /tmp is a symlink; success fixtures must satisfy safe_path too.
+        with TemporaryDirectory() as temp:
+            root=Path(temp).resolve();source=root/'source';output=root/'private-new'
+            with patch.object(p,'analyze',return_value=(output,r)),patch('sys.stdout',new_callable=io.StringIO) as out:
+                self.assertEqual(p.main(['--input',str(source),'--output',str(output)]),0)
+            self.assertEqual(len(out.getvalue().splitlines()),5)
 
 
 @unittest.skipUnless(os.name=='posix','Existing P17 private-account ownership requires POSIX')
