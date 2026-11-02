@@ -81,10 +81,11 @@ class P17ResearchEngine(ExecutionEngine):
     def __init__(self,path,cash,costs,clock,*,capture_details=False):
         from ops import paper_experiment as exp
         account=(Path(path).parent/'account').resolve()
-        require(number(cash)==1000000 and not capture_details,'FIXED_CASE_REQUIRED')
+        require(number(cash)==1000000,'FIXED_CASE_REQUIRED')
         require(exp.create(account,cost_policy=policy(costs))['status']=='CREATED_NEW_INDEPENDENT_EXPERIMENT','DISPOSABLE_ACCOUNT_CREATION_FAILED')
         super().__init__(account/exp.STATE,cash,real_trading=False)
         self._experiment_session=exp.begin(account)
+        self.capture_details=capture_details;self.detail_fills=[];self.signal_at=None
         self.clock=clock;self.costs=costs;self.slippage=Decimal(0);self.spread=Decimal(0);self.trace=[]
     def _apply_fill(self,order,receipt):
         with patch('trading.execution.time',SimpleNamespace(time=self.clock)):
@@ -93,6 +94,9 @@ class P17ResearchEngine(ExecutionEngine):
             q=number(order['executed_volume']);reference=number(order['price_hint'])
             self.slippage+=q*reference*self.costs.slippage_bps/10000
             self.spread+=q*reference*self.costs.spread_bps/20000
+            if self.capture_details:
+                from .trade_attribution import fill_detail
+                self.detail_fills.append(fill_detail(order,reference,self.costs,self.signal_at))
             self.trace.append({'side':order['side'],'executed_at':self.clock(),'price':order['average_fill_price'],
                                'quantity':str(q),'fee':order['paid_fee']})
         return filled
@@ -111,10 +115,10 @@ def buy_hold(frame,result,costs):
         finally:engine.close()
 
 
-def case(frame,windows,market,cost):
+def case(frame,windows,market,cost,*,details=False):
     c=CostModel(*cost)
     r=simulate(frame,windows,market=market,bar_seconds=60,costs=c,evaluation_start=frame.index[199],
-               engine_factory=P17ResearchEngine,sample_opens=True)
+               engine_factory=P17ResearchEngine,sample_opens=True,details=details)
     r['execution_last_open']=(frame.index[frame.index.get_loc(minute.utc(r['evaluation_last_open']))+1].isoformat() if r['evaluation_last_open'] else None)
     r['source']='NEW_DEVELOPMENT_SAMPLE_NOT_INDEPENDENT_VALIDATION'
     r['metrics']['buy_hold_40_net_pct']=buy_hold(frame,r,c)
