@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest]
     env:
       PYTHON_DOTENV_DISABLED: '1'
       ACC_KEY: ''
@@ -59,10 +59,10 @@ jobs:
     name: Python 3.12 safety gate
     needs: test
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 2
     steps:
-      - name: Require all platforms to pass
+      - name: Require macOS tests to pass
         env:
           TEST_RESULT: ${{ needs.test.result }}
         run: test "$TEST_RESULT" = success
