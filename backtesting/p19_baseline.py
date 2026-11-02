@@ -46,8 +46,13 @@ def require(ok,reason):
     if not ok:raise ValueError(reason)
 
 
+def protocol_hash():
+    # Git may check out identical JSON with CRLF on Windows. Content stays pinned.
+    return hashlib.sha256(PROTOCOL.read_bytes().replace(b'\r\n',b'\n')).hexdigest()
+
+
 def protocol():
-    require(hashlib.sha256(PROTOCOL.read_bytes()).hexdigest()==PROTOCOL_SHA256,'PROTOCOL_HASH_MISMATCH')
+    require(protocol_hash()==PROTOCOL_SHA256,'PROTOCOL_HASH_MISMATCH')
     require(minute.MAX_CALLS==40 and minute.DEADLINE_SECONDS==120,'COLLECTION_LIMIT_MISMATCH')
     value=json.loads(PROTOCOL.read_text())
     require(value['days']==list(DAYS) and value['markets']==list(MARKETS) and value['cost_cases_bps']==[list(x) for x in COSTS]
@@ -137,7 +142,7 @@ def collect(output,*,connect_public=False):
 
 def _work(data,out,pipe):
     report={'status':'INCOMPLETE','protocol':protocol(),'cases':[],'excluded':[],'unfinished':[],
-            'protocol_sha256':hashlib.sha256(PROTOCOL.read_bytes()).hexdigest()}
+            'protocol_sha256':protocol_hash()}
     write_json(out/'results.json',report)
     with (out/'analysis.log').open('w') as log,redirect_stdout(log),redirect_stderr(log):
         try:
