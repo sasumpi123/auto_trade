@@ -10,7 +10,7 @@ from trading.state_store import StateStore
 from services.notification_metrics import report_metrics
 from services.public_market import MARKET, positive, PublicDataError, PUBLIC_ERROR_CODES
 from utils.process_lock import lock_handle
-from services.tick_timing import TickTiming,DISCARD_SESSION_SECONDS
+from services.tick_timing import TickTiming,DISCARD_SESSION_SECONDS,REPEAT_POLICY
 from services.paper_decisions import DecisionCounters
 from services.realtime_activity import Observation,ActivityError,ACTIVITY_ERRORS
 
@@ -241,6 +241,11 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     if observation_discard and (not discard_enabled or not tickers or experiment.get('eligible_top') is not None
             or experiment.get('select_realtime_active') or experiment.get('candidate_limit') is not None):
         raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+    repeated_discard=bool(experiment and experiment.get('discard_repeated_small_timestamp_regressions') is True)
+    if experiment and type(experiment.get('discard_repeated_small_timestamp_regressions',False)) is not bool:
+        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+    if repeated_discard and not (discard_enabled and observation_discard):
+        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
     decisions=DecisionCounters(wall=wall)
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
@@ -276,14 +281,14 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             nonlocal stream,activity
             try:
                 activity=Observation(pool,wall=wall,monotonic=monotonic,discard_small_regressions=observation_discard,
-                                     clock_origin=(wall_begun,begun) if observation_discard else None)
+                                     discard_repeated_small_regressions=repeated_discard,clock_origin=(wall_begun,begun) if observation_discard else None)
                 try:
                     stream=stream_factory(pool);stream.connect()
                 except Exception:
                     activity.end=monotonic();activity.connection_end='SUBSCRIPTION_OR_CONNECT_FAILED_CAUSE_UNKNOWN'
                     raise ActivityError('ACTIVITY_CONNECTION_FAILED') from None
                 activity=Observation(pool,wall=wall,monotonic=monotonic,discard_small_regressions=observation_discard,
-                                     clock_origin=(wall_begun,begun) if observation_discard else None)
+                                     discard_repeated_small_regressions=repeated_discard,clock_origin=(wall_begun,begun) if observation_discard else None)
                 activity.observe(stream,experiment['observe_realtime_seconds'],stopped=stopped,deadline=deadline)
                 active=[t for t in pool if activity.active(t)]
                 report['realtime_activity']=activity.report();report['wire_subscription']=pool.copy()
@@ -318,6 +323,12 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                     raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
                 from ops.paper_experiment import first_use_path
                 used=_json(_private(first_use_path(p.parent),{'.json'}).read_text(encoding='utf-8'))
+                from ops.paper_experiment import marker
+                m=marker(p.parent)
+                if repeated_discard or 'discard_policy' in used or 'discard_policy' in m:
+                    if (not repeated_discard or used.get('discard_policy')!=REPEAT_POLICY.identifier
+                            or m.get('discard_policy')!=REPEAT_POLICY.identifier):
+                        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
                 reservation=used.get('observation_discard_session')
                 if (observation_discard and reservation!=experiment['session_id']) or (discard_enabled
                         and reservation is not None and reservation!=experiment['session_id']):
@@ -362,7 +373,8 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         else:
             if activity is not None:
                 activity.validate_start(selected)
-                timing=activity.runtime_guard(selected,(wall_begun,begun),discard_small_regressions=discard_enabled)
+                timing=activity.runtime_guard(selected,(wall_begun,begun),discard_small_regressions=discard_enabled,
+                                              discard_repeated_small_regressions=repeated_discard)
             else:
                 stream=stream_factory(selected);stream.connect()
                 timing=TickTiming(selected,wall(),monotonic(),clock_origin=(wall_begun,begun))

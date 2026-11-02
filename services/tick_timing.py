@@ -1,5 +1,6 @@
 """Bounded numeric ticker diagnostics. No I/O, raw payloads, prices or credentials."""
 from collections import deque
+from dataclasses import dataclass
 import copy
 import math
 
@@ -18,6 +19,31 @@ ISSUES=('TIMESTAMP_MISSING','TIMESTAMP_TYPE_INVALID','TIMESTAMP_DELAYED','TIMEST
         'TIMESTAMP_REGRESSION','CLOCK_DISCONTINUITY','STREAM_IDLE','MARKET_IDLE','INVALID_ENVELOPE')
 
 
+@dataclass(frozen=True)
+class DiscardPolicy:
+    identifier: str
+    enabled: bool
+    max_per_market: int
+    max_per_session: int
+    max_width_ms: int = SMALL_REGRESSION_MS
+    max_session_seconds: int = DISCARD_SESSION_SECONDS
+
+    def evidence(self):
+        return {'id':self.identifier,'max_per_market':self.max_per_market,'max_per_session':self.max_per_session,
+                'max_width_ms':self.max_width_ms,'max_session_seconds':self.max_session_seconds}
+
+
+STRICT_POLICY=DiscardPolicy('STRICT',False,1,3)
+P15_POLICY=DiscardPolicy('P15_SINGLE_DISCARD',True,1,3)
+REPEAT_POLICY=DiscardPolicy('P18_BOUNDED_REPEAT_V1',True,10,30)
+
+
+def discard_policy(enabled=False,repeated=False):
+    if type(enabled) is not bool or type(repeated) is not bool or (repeated and not enabled):
+        raise ValueError('INVALID_REGRESSION_POLICY')
+    return REPEAT_POLICY if repeated else P15_POLICY if enabled else STRICT_POLICY
+
+
 def numeric(value):
     if type(value) is int:return max(-MAX_NUMBER,min(MAX_NUMBER,value))
     if type(value) is not float or not math.isfinite(value):return None
@@ -34,7 +60,8 @@ class TickTimingError(ValueError):pass
 
 
 class TickTiming:
-    def __init__(self,markets,wall,monotonic,*,clock_origin=None,discard_small_regressions=False):
+    def __init__(self,markets,wall,monotonic,*,clock_origin=None,discard_small_regressions=False,
+                 discard_repeated_small_regressions=False):
         if (not 1<=len(markets)<=MAX_MARKETS or len(set(markets))!=len(markets)
                 or any(not isinstance(t,str) or not MARKET.fullmatch(t) for t in markets)):
             raise ValueError('INVALID_TIMING_MARKETS')
@@ -43,12 +70,17 @@ class TickTiming:
         self.markets={t:{'received':0,'timing_accepted':0,'equal_timestamp':0,
                          'issues':{k:0 for k in ISSUES}} for t in markets}
         self.global_issues={k:0 for k in ISSUES};self.samples=deque(maxlen=MAX_SAMPLES)
-        if type(discard_small_regressions) is not bool:raise ValueError('INVALID_REGRESSION_POLICY')
-        self.discard_enabled=discard_small_regressions
+        self._policy=discard_policy(discard_small_regressions,discard_repeated_small_regressions)
         self.discarded=0;self.awaiting_followup=None
         self.discards={t:{'count':0,'max_regression_ms':0,'last_regression_ms':None,
                           'followup_newer_received':None} for t in markets}
         self.received=0;self.accepted=0
+
+    @property
+    def policy(self):return self._policy
+
+    @property
+    def discard_enabled(self):return self._policy.enabled
 
     def increment(self,mapping,key):mapping[key]=min(MAX_COUNTER,mapping[key]+1)
 
@@ -100,9 +132,9 @@ class TickTiming:
         if stamp>wall*1000+5000:self.fail('TIMESTAMP_FUTURE',t,**details)
         if previous is not None and stamp<previous:
             width=previous-stamp;row=self.discards[t]
-            if (self.discard_enabled and width<=SMALL_REGRESSION_MS
-                    and row['count']<MAX_DISCARDS_PER_MARKET and self.discarded<MAX_DISCARDS_PER_SESSION
-                    and self.awaiting_followup is None and 0<=mono-self.start_mono<DISCARD_SESSION_SECONDS):
+            if (self.discard_enabled and width<=self.policy.max_width_ms
+                    and row['count']<self.policy.max_per_market and self.discarded<self.policy.max_per_session
+                    and self.awaiting_followup is None and 0<=mono-self.start_mono<self.policy.max_session_seconds):
                 # Do not advance previous/progress/last_progress or return a market/price.
                 # Already-expired watchdogs take precedence over granting a discard.
                 self.idle(wall,mono)
@@ -128,11 +160,12 @@ class TickTiming:
                 'max_samples':MAX_SAMPLES,'max_report_bytes':MAX_REPORT_BYTES,'retained_log_files':0,
                 'reference_clock':'LOCAL_WALL_NOT_INDEPENDENTLY_VERIFIED_SERVER_TIME',
                 'server_relative_delay_ms':None,
-                'regression_policy':'EXPERIMENTAL_DISCARD_SMALL_REGRESSIONS' if self.discard_enabled else 'HALT_NO_TOLERANCE_OR_PRICE_FALLBACK',
-                'regression_discard':{'enabled':self.discard_enabled,'discarded_total':self.discarded,
+                'regression_policy':self.policy.identifier if self.policy==REPEAT_POLICY else
+                    'EXPERIMENTAL_DISCARD_SMALL_REGRESSIONS' if self.discard_enabled else 'HALT_NO_TOLERANCE_OR_PRICE_FALLBACK',
+                'regression_discard':{'enabled':self.discard_enabled,'policy_id':self.policy.identifier,'discarded_total':self.discarded,
                     'markets':copy.deepcopy(self.discards),'awaiting_followup':self.awaiting_followup,
-                    'max_width_ms':SMALL_REGRESSION_MS,'max_per_market':MAX_DISCARDS_PER_MARKET,
-                    'max_per_session':MAX_DISCARDS_PER_SESSION,'max_session_seconds':DISCARD_SESSION_SECONDS,
+                    'max_width_ms':self.policy.max_width_ms,'max_per_market':self.policy.max_per_market,
+                    'max_per_session':self.policy.max_per_session,'max_session_seconds':self.policy.max_session_seconds,
                     'budget_scope':'FIRST_EXECUTION_ONLY_MAX_ONE_HOUR_NO_REFILL_OR_REENABLE',
                     'prices_forwarded_from_discarded_messages':0},
                 'counter_limit':MAX_COUNTER,'numeric_limit':MAX_NUMBER}

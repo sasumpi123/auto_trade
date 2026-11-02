@@ -19,6 +19,7 @@ from ops.paper_recovery_diagnostic import SafeParser
 from ops.paper_session import ExistingPaperStore, validate_state, offline_report, public_analyzer_factory
 from services.public_market import PublicDataError, PUBLIC_ERROR_CODES
 from services.realtime_activity import ACTIVITY_ERRORS
+from services.tick_timing import REPEAT_POLICY
 from trading.execution import ExecutionEngine
 from trading.state_store import StateStore
 from utils.process_lock import lock_handle
@@ -139,6 +140,10 @@ def validate_identity(saved,state):
 def validate_first_use(saved,p):
     used=_json(_private(first_use_path(p),{'.json'}).read_text(encoding='utf-8'))
     require(used.get('experiment_id')==saved['paper_experiment']['experiment_id'],'FIRST_USE_RECEIPT_MISMATCH')
+    m=marker(p) if (p/'session.json').exists() else {}
+    if 'discard_policy' in used or 'discard_policy' in m:
+        require(used.get('discard_policy')==m.get('discard_policy')==REPEAT_POLICY.identifier
+                and used.get('observation_discard_session')==m.get('session_id'),'DISCARD_POLICY_BINDING_UNVERIFIED')
 
 
 def marker(p):return _json(_private(p/'session.json',{'.json'}).read_text(encoding='utf-8'))
@@ -171,13 +176,17 @@ def save_marker(owner,value):
     finally:writer._lock=None  # The original owner alone releases the shared handle.
 
 
-def begin(value,*,observation_discard=False):
+def begin(value,*,observation_discard=False,repeated_discard=False):
     require(sys.version_info[:2]==(3,12),'PYTHON312_REQUIRED')
     p=directory(value);owner=ExistingPaperStore(p/STATE,1_000_000)
     try:
         require(initial_cash()==1_000_000,'FIXED_EXPERIMENT_CAPITAL_REQUIRED')
         owner.acquire();saved=owner.load();resumable(saved,owner.path)
-        require(type(observation_discard) is bool,'PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+        require(type(observation_discard) is bool and type(repeated_discard) is bool
+                and (not repeated_discard or observation_discard),'PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+        if first_use_path(p).exists():
+            used=_json(_private(first_use_path(p),{'.json'}).read_text(encoding='utf-8'))
+            require('discard_policy' not in used,'PAPER_REGRESSION_EXPERIMENT_BLOCKED')
         if observation_discard:
             require(not first_use_path(p).exists() and saved['paper_experiment']['last_session_id'] is None,
                     'PAPER_REGRESSION_EXPERIMENT_BLOCKED')
@@ -185,9 +194,11 @@ def begin(value,*,observation_discard=False):
         if not first_use_path(p).exists():
             used={'experiment_id':saved['paper_experiment']['experiment_id']}
             if observation_discard:used['observation_discard_session']=token
+            if repeated_discard:used['discard_policy']=REPEAT_POLICY.identifier
             exclusive_write(first_use_path(p),encoded(used))
         m={'session_id':token,'previous_session':saved['paper_experiment']['last_session_id'],
            'phase':'IN_PROGRESS','before_sha256':sha(owner.path.read_bytes())}
+        if repeated_discard:m['discard_policy']=REPEAT_POLICY.identifier
         save_marker(owner,m)
         return token
     finally:owner.close()
@@ -406,11 +417,12 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
     parser.add_argument('--select-realtime-active',action='store_true')
     parser.add_argument('--discard-small-timestamp-regressions',action='store_true')
     parser.add_argument('--discard-small-timestamp-regressions-during-observation',action='store_true')
+    parser.add_argument('--discard-repeated-small-timestamp-regressions',action='store_true')
     args=parser.parse_args(argv)
     if emit is None:
         def emit(r):print(json.dumps({'account_scope':SCOPE,**r},ensure_ascii=False,sort_keys=True),flush=True)
     if not args.connect_public:
-        if args.discard_small_timestamp_regressions_during_observation or args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
+        if args.discard_repeated_small_timestamp_regressions or args.discard_small_timestamp_regressions_during_observation or args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
             parser.error('network options require explicit connection')
         r=create(args.directory) if args.create else inspect_experiment(args.directory)
         emit(r);return 0 if r['status']=='CREATED_NEW_INDEPENDENT_EXPERIMENT' else 2
@@ -426,6 +438,9 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
     if args.discard_small_timestamp_regressions_during_observation and (not args.discard_small_timestamp_regressions
             or args.observe_realtime_seconds is None or not args.tickers or args.select_realtime_active):
         parser.error('observation discard requires runtime discard, observation and fixed explicit tickers')
+    if args.discard_repeated_small_timestamp_regressions and not (args.discard_small_timestamp_regressions
+            and args.discard_small_timestamp_regressions_during_observation and args.observe_realtime_seconds is not None
+            and args.tickers):parser.error('repeat mode requires both discard flags, observation and explicit tickers')
     from services.public_market import MARKET
     if args.tickers is not None and (not 1<=len(args.tickers)<=MAX_CANDIDATES or len(set(args.tickers))!=len(args.tickers)
                                     or any(not MARKET.fullmatch(t) for t in args.tickers)):parser.error('invalid markets')
@@ -433,11 +448,14 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
         from ops.paper_watch import supervise,_worker
         p=directory(args.directory)
         with (control_factory(p) if control_factory is not None else nullcontext()) as control:
-            token=begin(p,observation_discard=True) if args.discard_small_timestamp_regressions_during_observation else begin(p)
+            if args.discard_repeated_small_timestamp_regressions:
+                token=begin(p,observation_discard=True,repeated_discard=True)
+            else:token=begin(p,observation_discard=True) if args.discard_small_timestamp_regressions_during_observation else begin(p)
             options={'session_id':token,'eligible_top':args.eligible_top,'candidate_limit':args.candidate_limit,
                      'observe_realtime_seconds':args.observe_realtime_seconds,'select_realtime_active':args.select_realtime_active,
                      'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions,
-                     'discard_small_timestamp_regressions_during_observation':args.discard_small_timestamp_regressions_during_observation,'record_decisions':record_summary}
+                     'discard_small_timestamp_regressions_during_observation':args.discard_small_timestamp_regressions_during_observation,
+                     'discard_repeated_small_timestamp_regressions':args.discard_repeated_small_timestamp_regressions,'record_decisions':record_summary}
             extra={'control':control} if control is not None else {}
             result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
                              worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3',**extra)

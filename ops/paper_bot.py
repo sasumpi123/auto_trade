@@ -206,6 +206,7 @@ def main(argv=None):
             print('Markets: --tickers KRW-BTC ... | --top N | --eligible-top N --candidate-limit M')
             print('Optional existing experiment flags: --observe-realtime-seconds N --select-realtime-active --discard-small-timestamp-regressions')
             print('Fixed tickers only: --discard-small-timestamp-regressions-during-observation')
+            print('Bounded repeat experiment (requires both discard flags): --discard-repeated-small-timestamp-regressions')
             print('Foreground only. Ctrl+C or paper_bot stop requests cooperative shutdown. No implicit init or restart.')
             return 0
         if '--connect-public' not in args[1:]:
