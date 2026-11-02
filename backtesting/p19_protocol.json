@@ -1,0 +1,16 @@
+{
+  "schema": "P19_FIXED_V1",
+  "markets": ["KRW-BTC", "KRW-XRP"],
+  "days": ["2026-10-30", "2026-10-31", "2026-11-01"],
+  "unit_minutes": 1,
+  "cost_cases_bps": [[0, 0, 0], [5, 5, 2], [10, 10, 2]],
+  "initial_cash": "1000000",
+  "warmup_candles": 200,
+  "max_runs": 18,
+  "collection_per_day_requests": 40,
+  "collection_per_day_seconds": 120,
+  "collection_total_requests": 120,
+  "analysis_seconds": 600,
+  "strategy": "legacy_composite",
+  "sample_type": "new_development_not_independent_validation"
+}
