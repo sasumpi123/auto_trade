@@ -115,10 +115,10 @@ def buy_hold(frame,result,costs):
         finally:engine.close()
 
 
-def case(frame,windows,market,cost,*,details=False):
+def case(frame,windows,market,cost,*,details=False,bot_factory=None):
     c=CostModel(*cost)
     r=simulate(frame,windows,market=market,bar_seconds=60,costs=c,evaluation_start=frame.index[199],
-               engine_factory=P17ResearchEngine,sample_opens=True,details=details)
+               engine_factory=P17ResearchEngine,sample_opens=True,details=details,bot_factory=bot_factory)
     r['execution_last_open']=(frame.index[frame.index.get_loc(minute.utc(r['evaluation_last_open']))+1].isoformat() if r['evaluation_last_open'] else None)
     r['source']='NEW_DEVELOPMENT_SAMPLE_NOT_INDEPENDENT_VALIDATION'
     r['metrics']['buy_hold_40_net_pct']=buy_hold(frame,r,c)

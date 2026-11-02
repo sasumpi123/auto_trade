@@ -41,7 +41,12 @@ class InputTests(unittest.TestCase):
                 with self.assertRaises(ValueError):p.inputs(root)
     def test_timeout_keeps_completed_case_and_incomplete(self):
         with TemporaryDirectory() as temp:
-            root=Path(temp).resolve();out,r=p.analyze(root/'missing',root/'out',seconds=4,worker=stall)
+            root=Path(temp).resolve();clock=time.monotonic;started=clock()
+            def expire_after_saved():
+                return started+601 if (root/'out/results.json').exists() or clock()-started>30 else started
+            # Expire after the completed snapshot, independent of spawn/import speed.
+            with patch.object(p.time,'monotonic',side_effect=expire_after_saved):
+                out,r=p.analyze(root/'missing',root/'out',seconds=4,worker=stall)
             self.assertEqual(r['status'],'INCOMPLETE');self.assertTrue((out/'INCOMPLETE').exists())
             self.assertEqual(len(r['cases']),1)
             self.assertLessEqual(len(r['unfinished']),6)
