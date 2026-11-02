@@ -1,0 +1,10 @@
+{
+  "schema": "P22_FREEZE_OBSERVATION_V1",
+  "protocol_commit": "31c24a717d6b26337e1306a3d1b4545ec0c05985",
+  "protocol_sha256": "4aa290d9077f0a134a376b01b8560f2eddaf65854f1bd329d6e73b9373266af4",
+  "remote_repository": "sasumpi123/auto_trade",
+  "remote_ref": "refs/heads/feat/p22-frozen-forward-validation",
+  "observed_remote_head": "31c24a717d6b26337e1306a3d1b4545ec0c05985",
+  "observed_at_utc": "2026-11-02T07:15:27.361850+00:00",
+  "observation_limit": "Remote ref matched via configured Git transport before start according to Cloud UTC; not an independent server push timestamp or signed attestation"
+}
