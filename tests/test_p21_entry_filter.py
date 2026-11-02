@@ -172,7 +172,7 @@ class ExecutionTests(unittest.TestCase):
             self.assertIn('NO_TRADES',(out/'REPORT.md').read_text());self.assertIn('N/A',(out/'REPORT.md').read_text())
             self.assertIn('candidate_remaining_cost',(out/'comparison.csv').read_text())
             with patch.object(p,'analyze',return_value=(out,report)),patch('sys.stdout',new_callable=io.StringIO) as stdout:
-                self.assertEqual(p.main(['--input','/tmp/p19','--output',str(out)]),0)
+                self.assertEqual(p.main(['--input',str(out/'p19-source'),'--output',str(out)]),0)
             self.assertEqual(len(stdout.getvalue().splitlines()),4);self.assertIn('N/A',stdout.getvalue())
         old['fees']='0'
         with self.assertRaisesRegex(ValueError,'P19_REPLAY_MISMATCH'):p.baseline_case(self.f.frame,windows,old)
