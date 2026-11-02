@@ -156,7 +156,7 @@ def write_report(out,report):
     (out/'REPORT.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 
 
-def analyze(source,output,*,seconds=600,worker=work):
+def analyze(source,output,*,seconds=600,worker=work,report_writer=write_report):
     base.require(type(seconds) is int and 1<=seconds<=600,'TIME_LIMIT')
     source=base.safe_path(source);out=base.fresh(output);started=time.monotonic()
     ctx=mp.get_context('spawn');reader,writer=ctx.Pipe(duplex=False)
@@ -176,7 +176,7 @@ def analyze(source,output,*,seconds=600,worker=work):
     done={(r['day'],r['market']) for r in report['cases']};excluded={(r['day'],r['market']) for r in report['excluded']}
     report['unfinished']=[{'day':d,'market':m} for d in base.DAYS for m in base.MARKETS if (d,m) not in done|excluded]
     base.write_json(path,report)
-    write_report(out,report)
+    report_writer(out,report)
     return out,report
 
 

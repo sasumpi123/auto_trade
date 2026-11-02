@@ -152,7 +152,7 @@ class ProbeBot(AutoTrade):
         return result
 
 
-def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1,strategy=None,details=False,engine_factory=None,sample_opens=False):
+def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_cash='1000000',repeat_evaluations=1,strategy=None,details=False,engine_factory=None,sample_opens=False,bot_factory=None):
     """One asset, close_i features -> open_(i+1) execution, no terminal liquidation.
 
     Actual risk rules observe next open before analyzer, exactly AutoTrade priority.
@@ -167,7 +167,7 @@ def simulate(frame,windows,*,market,bar_seconds,costs,evaluation_start,initial_c
         'reject_minimum_order','buy_while_held','sell_without_position','risk_bypassed_analyzer')})
     conditions={};first_failed={};curve=[cash];now=[0.0];seen=set();first_open=None;exposure=[];exposed=0
     with TemporaryDirectory(prefix='legacy-offline-') as temp:
-        bot=ProbeBot(start_cash=cash,tickers=[market],state_path=Path(temp)/'paper.json',real_trading=False,
+        bot=(bot_factory or ProbeBot)(start_cash=cash,tickers=[market],state_path=Path(temp)/'paper.json',real_trading=False,
             notification=None,analyzer_factory=lambda t:ProbeAnalyzer(t,counts,lambda:now[0],strategy))
         bot.diagnostic_counts=counts;bot.engine=(engine_factory or CostPaperEngine)(Path(temp)/'paper.json',cash,costs,lambda:now[0],capture_details=details)
         bot.initialize();bot.max_per_coin=cash*Decimal('.4')
