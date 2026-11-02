@@ -17,6 +17,12 @@ def stall(data,out,pipe):
     time.sleep(30)
 
 
+class EndedProgressReader:
+    def __init__(self,reader):self.reader=reader
+    def poll(self,timeout):raise BrokenPipeError('SYNTHETIC_ENDED_PROGRESS_PIPE')
+    def close(self):self.reader.close()
+
+
 class PureTests(unittest.TestCase):
     def test_fixed_scope_and_offline_collection_has_no_side_effect(self):
         self.assertEqual(p.protocol()['max_runs'],18)
@@ -48,6 +54,20 @@ class PureTests(unittest.TestCase):
             root=Path(root).resolve()
             r=p.analyze(root/'missing',root/'out',seconds=1,worker=stall)
             self.assertEqual(r['status'],'INCOMPLETE');self.assertTrue((root/'out/INCOMPLETE').exists())
+            self.assertEqual(len(json.loads((root/'out/results.json').read_text())['unfinished']),18)
+    def test_closed_progress_pipe_cannot_complete_unfinished_analysis(self):
+        from types import SimpleNamespace
+        ctx=p.mp.get_context('spawn')
+        def broken_pipe(*args,**kwargs):
+            reader,writer=ctx.Pipe(*args,**kwargs)
+            return EndedProgressReader(reader),writer
+        proxy=SimpleNamespace(Pipe=broken_pipe,Process=ctx.Process)
+        with TemporaryDirectory() as root:
+            root=Path(root).resolve()
+            with patch.object(p.mp,'get_context',return_value=proxy):
+                r=p.analyze(root/'missing',root/'out',seconds=1,worker=stall)
+            self.assertEqual(r['status'],'INCOMPLETE')
+            self.assertTrue((root/'out/INCOMPLETE').exists())
             self.assertEqual(len(json.loads((root/'out/results.json').read_text())['unfinished']),18)
     def test_invalid_daily_input_does_not_become_success(self):
         with TemporaryDirectory() as root:

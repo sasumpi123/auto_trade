@@ -285,7 +285,7 @@ class ExecutionEngine:
                     receipt = self._wait_for_terminal(order)
                 else:
                     costs=self._paper_costs
-                    if costs is None or not (costs.fee_bps or costs.slippage_bps or costs.spread_bps):
+                    if costs is None:  # Preserve legacy receipts; explicit zero uses the planned budget.
                         executed = value / price if side == 'bid' else value
                         receipt = {'uuid': identifier, 'market': ticker, 'side': side,
                                    'state': 'done', 'executed_volume': str(executed),

@@ -171,6 +171,22 @@ class CostAccountTests(unittest.TestCase):
                 saved=json.loads((account/exp.STATE).read_bytes())
                 self.assertEqual(saved['paper_experiment']['schema_version'],2)
                 self.assertNotIn('ZERO_FEE',r['fee_policy'])
+    def test_explicit_zero_preserves_net_budget_at_nonterminating_quantities(self):
+        from trading.costs import CostModel,policy
+        p=self.parent/'explicit-zero-rounding'
+        self.assertEqual(exp.create(p,cost_policy=policy(CostModel(0,0,0)))['status'],'CREATED_NEW_INDEPENDENT_EXPERIMENT')
+        token=exp.begin(p);e=ExecutionEngine(p/exp.STATE,1_000_000,real_trading=False)
+        e._experiment_session=token;e.open()
+        try:
+            for ticker,price,budget in (('KRW-XRP',1063,D(5000)),('KRW-BTC',1079,D(400000))):
+                self.assertTrue(e.buy(ticker,price,budget))
+                order=list(e.state['orders'].values())[-1]
+                self.assertEqual(D(order['funds']),budget)
+                self.assertEqual(D(order['paid_fee']),0)
+                self.assertEqual(D(order['executed_volume']),budget/D(price))
+                self.assertFalse(e.halted);self.assertTrue(e.ready)
+            self.assertEqual(e.cash,D(595000))
+        finally:e.close()
     def test_auto_trade_net_minimum_and_averaging_use_same_cost_policy(self):
         from unittest.mock import Mock
         from trading.auto_trade import AutoTrade

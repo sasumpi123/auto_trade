@@ -167,8 +167,11 @@ def _work(data,out,pipe):
             report['status']='COMPLETE' if len(report['cases'])==18 else 'PARTIAL_REAL_DATA' if report['cases'] else 'INSUFFICIENT_REAL_DATA'
             write_json(out/'results.json',report)
             if report['status']=='COMPLETE':(out/'INCOMPLETE').unlink()
-        except Exception:
-            report['status']='INCOMPLETE';write_json(out/'results.json',report)
+        except Exception as exc:
+            import traceback
+            report['status']='INCOMPLETE';report['failure_type']=type(exc).__name__
+            traceback.print_exc()  # Full diagnostics stay in the private analysis.log.
+            write_json(out/'results.json',report)
         finally:pipe.close()
 
 
@@ -206,12 +209,18 @@ def analyze(data,output,*,seconds=MAX_SECONDS,worker=work):
     data=safe_path(data);out=fresh(output);started=time.monotonic()
     ctx=mp.get_context('spawn');receive,send=ctx.Pipe(duplex=False)
     process=ctx.Process(target=worker,args=(data,out,send));process.start();send.close()
-    interrupted=False
+    interrupted=False;progress_open=True
     try:
         while process.is_alive() and time.monotonic()-started<seconds:
-            if receive.poll(.1):
-                try:print(json.dumps(receive.recv()),flush=True)
-                except EOFError:pass
+            message=None
+            if progress_open:
+                try:
+                    if receive.poll(.1):message=receive.recv()
+                except (EOFError,OSError):
+                    # Windows poll can raise BrokenPipeError after child closure.
+                    # Progress is advisory; process exit and atomic results decide success.
+                    progress_open=False
+            if message is not None:print(json.dumps(message),flush=True)
             process.join(.1)
     except KeyboardInterrupt:interrupted=True
     finally:

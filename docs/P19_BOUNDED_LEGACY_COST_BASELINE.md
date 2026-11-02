@@ -19,6 +19,8 @@ BTC/XRP 각각 독립 계좌, UTC 2026-10-30/31/11-01 반열린 하루씩, 1분�
 최대4초가 추가될 수 있다. 끝난 case마다 원자 JSON과 진행 건수를 남긴다. 중단/timeout은
 INCOMPLETE이고 완성된 결과·미완료 목록을 보존한다. 자동 재개는 없다. 상세18개 결과는
 results.json, 터미널은 진행18줄 이하와 완료/실측시간/품질·6개 primary 행/경로 요약이다.
+진행 pipe 종료는 성공 근거로 쓰지 않고 자식 종료와 원자 결과를 대조한다. Windows의
+종료된 pipe poll도 처리하며, 분석 예외 추적은 private analysis.log에만 남긴다.
 private analysis.log와 summary.json도 생성한다. 정상 완료 때만 INCOMPLETE 표시를 없앤다.
 
 기존 prepare의 causal rolling-200을 시장/일별1회(최대6회) 준비하고 비용별 재사용한다.
@@ -26,6 +28,8 @@ private analysis.log와 summary.json도 생성한다. 정상 완료 때만 INCOM
 P19ResearchEngine은 **실제 P17 ExecutionEngine**의 receipt/수수료/Decimal 보정/최소
 주문대금/총예산 cap/_apply_fill을 그대로 사용한다. 임시 신규 계좌와 정책을 생성하고
 계측용 시각·trace만 감싼다. 연구용 CostPaperEngine의 별도 수수료 공식을 사용하지 않는다.
+명시적 0/0/0도 미리 검증한 대금을 영수증에 사용한다. 수량 나눗셈 뒤 다시 대금을 곱해
+마지막 Decimal 자릿수 때문에 예산 초과로 오판하지 않는다. 비용 미지정 legacy 분기는 유지한다.
 B&H40%도 같은 P17 경로로 첫 유효 실행 시가에 매수하고 최종 종가로 평가하며 강제 매도하지 않는다. buy_rejected는 P17 순대금 제한 등 엔진 거절을 포함하며,
 기존 reject_minimum_order는 총예산 사전 검사 건수이므로 순대금 거절의 정확한 원인별 건수로 해석하지 않는다.
 
