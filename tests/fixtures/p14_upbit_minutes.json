@@ -2,8 +2,8 @@
   "schema": "P14_SYNTHETIC_UPBIT_MINUTE_FIXTURE_V1",
   "origin": "SYNTHETIC_NOT_CAPTURED_FROM_MAC_OR_UPBIT",
   "baseline_commit": "69e790ed314090c2dc4c81df6251d4ca7f2d83cf",
-  "patch_forward_fixed_commit": "25be7fd9bac14cd1ec768a0871192eba1a074bfb",
-  "patch_sha256": "8379da586a28d08690c89d764a72b9d41dbb2939815a3df9c792f07e72161e01",
+  "patch_forward_fixed_commit": "5754820c89b06fcc61dfdd31fa840119e3b86adf",
+  "patch_sha256": "251f6b47d1f203784ca52f4be05fcc81c0ae648282eb4647e96b47311f12788d",
   "baseline_source_sha256": {
     "services/public_market.py": "b99ca398ded147237441c811ce27d77ea8ec296ce9f738c9ba8bf4b7903a6206",
     "ops/paper_session.py": "3987b5edf3a3860769569144459e8e1281c7b147697ca2c4ca7aef8a3b61b200",

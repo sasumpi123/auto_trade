@@ -164,9 +164,8 @@ def read_report(directory,*,limit=20):
                     and c['experiment_id']==saved['paper_experiment']['experiment_id'] and c['session_id']==m['session_id']
                     and c['state_sha256']==digest and c['before_sha256']==m['before_sha256']
                     and c['scope']=='OBSERVATION_ONLY_NOT_RESTART_AUTHORITY','REGRESSION_EVIDENCE_UNVERIFIED')
-                from services.realtime_activity import validate_regression_evidence
                 exp.require(c['reason']==exp.session_reason(c['reason']),'REGRESSION_EVIDENCE_UNVERIFIED')
-                result['regression_evidence']=validate_regression_evidence(c['evidence'])
+                result['regression_evidence']=exp.session_regression_evidence(m,c['evidence'])
                 result['regression_evidence_scope']=c['scope'];result['session_failure_or_stop_reason']=c['reason']
             if m.get('phase')=='STOPPED_VERIFIED' and m.get('end_sha256')==digest and phase=='STOPPED_VERIFIED' and 'decision_trace' in m:
                 result['decision_trace']=validate_trace(m['decision_trace'])
@@ -206,6 +205,7 @@ def main(argv=None):
             print('Markets: --tickers KRW-BTC ... | --top N | --eligible-top N --candidate-limit M')
             print('Optional existing experiment flags: --observe-realtime-seconds N --select-realtime-active --discard-small-timestamp-regressions')
             print('Fixed tickers only: --discard-small-timestamp-regressions-during-observation')
+            print('Bounded repeat experiment (requires both discard flags): --discard-repeated-small-timestamp-regressions')
             print('Foreground only. Ctrl+C or paper_bot stop requests cooperative shutdown. No implicit init or restart.')
             return 0
         if '--connect-public' not in args[1:]:
