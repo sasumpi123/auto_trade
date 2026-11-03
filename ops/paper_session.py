@@ -252,6 +252,8 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
     p=_private(state,{'.json'})
     bot=None;stream=None;timing=None;activity=None;ignored_activity_messages=0;cleanup_error=None;counts={};last={};marks={};status='HALTED';reason='SESSION_FAILED'
     phase='PREPARATION'
+    # P23 observation-only liveness context; never passed to strategy, orders, fills or marks.
+    idle_check=None;last_message_at=None;stream_messages=0;stream_idle=None
     def regression_evidence():
         from services.realtime_activity import timing_evidence,validate_regression_evidence
         observed=timing_evidence(activity.observation_timing or activity.guard.report())
@@ -384,8 +386,10 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 try:data=stream.get()
                 except TimeoutError:
                     if stop_requested():break
-                    timing.idle(wall(),monotonic())
+                    w=wall();m=monotonic();idle_check=('RECV_TIMEOUT',m,None)
+                    timing.idle(w,m)
                     continue
+                stream_messages=min(2_147_483_647,stream_messages+1)
                 phase='MARKET_VALIDATION'
                 observed_market=data.get('code') if isinstance(data,dict) and data.get('code') in selected else None
                 decisions.record('stream_messages_received',observed_market)
@@ -397,8 +401,10 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                     if data.get('stream_type') not in ('REALTIME','SNAPSHOT'):raise ActivityError('ACTIVITY_STREAM_TYPE_UNKNOWN')
                     if data['code'] not in selected or data['stream_type']=='SNAPSHOT':
                         ignored_activity_messages=min(2_147_483_647,ignored_activity_messages+1)
-                        timing.idle(wall(),monotonic());continue
-                t=timing.observe(data,wall(),monotonic())
+                        w=wall();m=monotonic();last_message_at=m;idle_check=('RECEIVED_MESSAGE_CHECK',m,'NON_STRATEGY_OR_SNAPSHOT')
+                        timing.idle(w,m);continue
+                w=wall();m=monotonic();last_message_at=m;idle_check=('RECEIVED_MESSAGE_CHECK',m,'STRATEGY_TICKER')
+                t=timing.observe(data,w,m)
                 if t is None:continue  # No strategy, fill, mark, count, or timer refresh.
                 decisions.record('timing_accepted',t)
                 price=positive(data.get('trade_price'))
@@ -438,6 +444,15 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         # Fixed private reason; no exception, URL/body/token in terminal output.
         if status!='STOPPED' and bot is not None and bot.engine.ready:
             bot.engine.halt('PAPER_SESSION_FAILURE')
+        if str(exc)=='PAPER_STREAM_TIMEOUT' and timing is not None:
+            # P23: only after the HALT above; bounded, never overrides the original reason.
+            try:
+                from services.stream_diagnostics import diagnose
+                stream_idle=diagnose(timing=timing,stream=stream,check=idle_check,last_message_at=last_message_at,
+                    stream_messages=stream_messages,ignored_non_strategy=ignored_activity_messages,
+                    halt_confirmed=bool(bot is not None and bot.engine.halted is True and bot.engine.ready is False),
+                    cancelled=stopped)
+            except Exception:stream_idle=None
     finally:
         if stream is not None:
             try:stream.close()
@@ -453,6 +468,9 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             result['fixed_strategy_markets']=selected.copy()
             result['ignored_non_strategy_or_snapshot_messages']=ignored_activity_messages
         if cleanup_error is not None:result['cleanup_error']=cleanup_error
+        from services.stream_diagnostics import not_triggered,unavailable,validate
+        result['stream_idle_diagnostics']=(validate(stream_idle) if stream_idle is not None
+            else unavailable() if reason=='PAPER_STREAM_TIMEOUT' else not_triggered())
         if timing is not None:result['tick_timing']=timing.report()
         if experiment is not None:
             calls=getattr(client,'calls',None)
