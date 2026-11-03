@@ -20,63 +20,54 @@ CANARY='private-token-canary-p23'
 
 
 class FakeProbeStream:
-    """Fake transport with the P23 probe surface; no socket."""
-    def __init__(self,state='OPEN',pong=True,error=False,hang=False,close_during_wait=False,set_on_close=False):
-        self.state=state;self.pong=pong;self.error=error;self.hang=hang;self.pings=0
-        self.close_during_wait=close_during_wait;self.set_on_close=set_on_close;self.release=threading.Event()
+    """Fake transport exposing a ping that would block forever; P23 must never call it."""
+    def __init__(self,state='OPEN'):
+        self.state=state;self.pings=0;self.release=threading.Event()
     def connection_state(self):return self.state
     def send_ping(self):
+        self.pings+=1;self.release.wait(30);return threading.Event()
+
+
+class LockedSocket:
+    """Mimics websockets 17.4 sync: ping() and close() share protocol_mutex; sendall under it blocks."""
+    class State:
+        def __init__(self,name):self.name=name
+    def __init__(self):
+        self.protocol_mutex=threading.Lock();self.state=self.State('OPEN');self.pings=0;self.release=threading.Event()
+    def ping(self,*a,**k):
         self.pings+=1
-        if self.error:raise RuntimeError(CANARY)
-        if self.hang:self.release.wait(30);return threading.Event()
-        event=threading.Event()
-        if self.pong:event.set()
-        if self.close_during_wait:
-            self.state='CLOSED'
-            if self.set_on_close:event.set()
-        return event
+        with self.protocol_mutex:self.release.wait(30)  # Blocked sendall while holding the mutex.
+        return threading.Event()
+    def close(self):
+        with self.protocol_mutex:self.state=self.State('CLOSED')
 
 
 class ProbeUnitTests(unittest.TestCase):
-    def test_pong_received_on_open_connection_is_confirmed(self):
-        r=sd.probe(FakeProbeStream())
-        self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('CONFIRMED','PONG_RECEIVED_CONNECTION_OPEN',True))
-        self.assertEqual((r['connection_before'],r['connection_after']),('OPEN','OPEN'))
-
-    def test_no_pong_is_unconfirmed_within_budget(self):
-        started=time.monotonic();r=sd.probe(FakeProbeStream(pong=False),budget=.2)
-        self.assertLess(time.monotonic()-started,.6)
-        self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('UNCONFIRMED','NO_PONG_WITHIN_BUDGET',True))
-
-    def test_connection_close_is_never_counted_as_pong(self):
-        for set_on_close in (False,True):
-            with self.subTest(set_on_close=set_on_close):
-                r=sd.probe(FakeProbeStream(pong=False,close_during_wait=True,set_on_close=set_on_close),budget=.2)
-                self.assertEqual(r['pong'],'UNCONFIRMED');self.assertEqual(r['connection_after'],'CLOSED')
-        r=sd.probe(FakeProbeStream(state='CLOSING'))
-        self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('UNCONFIRMED','CONNECTION_NOT_OPEN',False))
-
-    def test_send_error_is_fixed_code_without_exception_text(self):
-        s=FakeProbeStream(error=True);r=sd.probe(s)
-        self.assertEqual((r['pong'],r['probe_reason']),('ERROR','PING_SEND_FAILED'))
-        self.assertNotIn(CANARY,json.dumps(r))
-
-    def test_blocking_send_is_abandoned_at_two_second_budget(self):
-        s=FakeProbeStream(hang=True);self.addCleanup(s.release.set)
+    def test_open_connection_reports_unsupported_without_sending(self):
+        s=FakeProbeStream();self.addCleanup(s.release.set)
         started=time.monotonic();r=sd.probe(s)
-        elapsed=time.monotonic()-started
-        self.assertLessEqual(elapsed,sd.BUDGET_SECONDS+.3);self.assertGreaterEqual(elapsed,sd.BUDGET_SECONDS-.05)
-        self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('UNCONFIRMED','PING_SEND_NOT_COMPLETED_WITHIN_BUDGET',None))
-        self.assertEqual(sd.BUDGET_SECONDS,2.0)
+        self.assertLess(time.monotonic()-started,.1);self.assertEqual(s.pings,0)
+        self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('UNSUPPORTED','LIVE_PING_SEND_NOT_BOUNDED',False))
+        self.assertEqual((r['connection_before'],r['connection_after']),('OPEN','OPEN'))
+        self.assertFalse(any(t.name.startswith('p23') for t in threading.enumerate()))
 
-    def test_cancel_unsupported_and_unknown_state(self):
-        r=sd.probe(FakeProbeStream(),cancelled=lambda:True)
+    def test_closed_or_closing_connection_is_never_a_pong(self):
+        for state in ('CLOSING','CLOSED','UNKNOWN'):
+            with self.subTest(state=state):
+                r=sd.probe(FakeProbeStream(state=state))
+                self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('UNCONFIRMED','CONNECTION_NOT_OPEN',False))
+
+    def test_cancel_unsupported_and_broken_state(self):
+        s=FakeProbeStream();r=sd.probe(s,cancelled=lambda:True)
         self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('CANCELLED','STOP_REQUESTED',False))
         self.assertEqual(sd.probe(object())['pong'],'UNSUPPORTED');self.assertEqual(sd.probe(None)['pong'],'UNSUPPORTED')
         class Broken(FakeProbeStream):
             def connection_state(self):raise RuntimeError(CANARY)
         r=sd.probe(Broken())
-        self.assertEqual((r['connection_before'],r['pong']),('UNKNOWN','UNCONFIRMED'))
+        self.assertEqual((r['connection_before'],r['pong']),('UNKNOWN','UNCONFIRMED'));self.assertNotIn(CANARY,json.dumps(r))
+        def boom():raise RuntimeError(CANARY)
+        r=sd.probe(FakeProbeStream(),cancelled=boom)
+        self.assertEqual((r['pong'],r['probe_reason']),('ERROR','PROBE_FAILED'));self.assertNotIn(CANARY,json.dumps(r))
 
     def test_validate_fails_closed_and_record_is_small(self):
         self.assertEqual(sd.validate({'schema':sd.SCHEMA,'status':'TRIGGERED','trade_price':1})['status'],'UNAVAILABLE')
@@ -85,8 +76,20 @@ class ProbeUnitTests(unittest.TestCase):
 
 
 class MarketStreamProbeTests(unittest.TestCase):
-    """Real websockets 17 sync client against a loopback-only server (no external network)."""
-    def test_real_library_pong_and_closed_state(self):
+    def test_locked_blocking_sender_cannot_delay_close(self):
+        """Review regression: a ping holding protocol_mutex would block close(); P23 never pings."""
+        from services.market_stream import MarketStream
+        stream=MarketStream([TICKER],timeout=1);sock=LockedSocket();stream.socket=sock
+        self.addCleanup(sock.release.set)
+        self.assertFalse(hasattr(stream,'send_ping'))
+        r=sd.probe(stream)
+        self.assertEqual((r['pong'],r['probe_reason'],sock.pings),('UNSUPPORTED','LIVE_PING_SEND_NOT_BOUNDED',0))
+        self.assertTrue(sock.protocol_mutex.acquire(blocking=False));sock.protocol_mutex.release()
+        started=time.monotonic();stream.close()
+        self.assertLess(time.monotonic()-started,.1);self.assertIsNone(stream.socket)
+
+    def test_real_websockets_close_after_probe(self):
+        """websockets 17 sync client against a loopback-only server (no external network)."""
         from websockets.sync.server import serve
         from websockets.sync.client import connect
         from services.market_stream import MarketStream
@@ -96,14 +99,17 @@ class MarketStreamProbeTests(unittest.TestCase):
             port=server.socket.getsockname()[1]
             stream=MarketStream([TICKER],timeout=1)
             stream.socket=connect(f'ws://127.0.0.1:{port}',ping_interval=None,legacy=True)
+            connection=stream.socket
             self.assertEqual(stream.connection_state(),'OPEN')
             r=sd.probe(stream)
-            self.assertEqual((r['pong'],r['connection_after']),('CONFIRMED','OPEN'))
-            stream.socket.close()
-            self.assertEqual(stream.connection_state(),'CLOSED')
+            self.assertEqual((r['pong'],r['ping_sent'],connection.pending_pings),('UNSUPPORTED',False,{}))
+            self.assertTrue(connection.protocol_mutex.acquire(blocking=False));connection.protocol_mutex.release()
+            started=time.monotonic();stream.close()
+            self.assertLess(time.monotonic()-started,1.0)
+            self.assertEqual(connection.state.name,'CLOSED');self.assertEqual(stream.connection_state(),'UNKNOWN')
+            stream.socket=connection
             r=sd.probe(stream)
             self.assertEqual((r['pong'],r['probe_reason'],r['ping_sent']),('UNCONFIRMED','CONNECTION_NOT_OPEN',False))
-            stream.socket=None;self.assertEqual(stream.connection_state(),'UNKNOWN')
         finally:
             server.shutdown();thread.join(5)
 
@@ -115,7 +121,7 @@ class SessionDiagnosticsTests(unittest.TestCase):
         self.state=Path(self.tmp.name)/'paper-state.json'
         e=ExecutionEngine(self.state,1_000_000);e.open();e.close()
         self.stop=threading.Event();self.base=time.time();self.now=0.0;self.reports=[];self.actions=[]
-        self.script=[];self.after_probe_gets=0;self.probe_seen=None
+        self.script=[];self.after_probe_gets=0;self.probe_seen=None;self.lock=threading.Lock()
         blocker=patch.object(socket.socket,'connect',side_effect=AssertionError('No network'))
         blocker.start();self.addCleanup(blocker.stop)
 
@@ -136,11 +142,18 @@ class SessionDiagnosticsTests(unittest.TestCase):
             def close(self):self.closed=True
         if probe is None:return Stream
         class ProbeStream(Stream):
-            def connection_state(self):return 'CLOSED' if self.closed else probe.state
-            def send_ping(self):
+            def connection_state(owner_stream):
                 saved=json.loads(owner.state.read_text(encoding='utf-8'))
-                owner.probe_seen={'halt_reason':saved.get('halt_reason'),'orders':len(saved['orders']),'closed':self.closed}
-                return probe.send_ping()
+                if owner.probe_seen is None:
+                    owner.probe_seen={'halt_reason':saved.get('halt_reason'),'orders':len(saved['orders']),'closed':owner_stream.closed}
+                return 'CLOSED' if owner_stream.closed else probe.state
+            def send_ping(self):
+                with owner.lock:return probe.send_ping()  # Blocked send holding the close lock.
+            def close(owner_stream):
+                # Same lock a blocked websockets sender would hold; bounded so a regression fails, not hangs.
+                acquired=owner.lock.acquire(timeout=1)
+                if acquired:owner.lock.release()
+                owner_stream.closed=acquired
         return ProbeStream
 
     def session(self,stream,seconds=30):
@@ -181,21 +194,37 @@ class SessionDiagnosticsTests(unittest.TestCase):
         self.assertEqual(d['since_last_message_ms'],0.0);self.assertAlmostEqual(d['idle_ms'],15000.0)
         self.assertEqual(d['counters']['equal_timestamp'],15);self.assertEqual(d['counters']['stream_messages'],17)
 
-    def test_pong_confirmed_unconfirmed_and_closed_after_halt(self):
-        cases=(('OPEN',True,'CONFIRMED'),('OPEN',False,'UNCONFIRMED'),('CLOSED',True,'UNCONFIRMED'))
+    def test_probe_close_and_terminal_emission_complete_without_forced_termination(self):
+        cases=(('OPEN','UNSUPPORTED','LIVE_PING_SEND_NOT_BOUNDED'),('CLOSED','UNCONFIRMED','CONNECTION_NOT_OPEN'))
         original=self.state.read_bytes()
-        for state,pong,expected in cases:
-            with self.subTest(state=state,pong=pong):
-                self.state.write_bytes(original);self.stop.clear();self.probe_seen=None;self.after_probe_gets=0
-                self.silent_gap(15.093);probe=FakeProbeStream(state=state,pong=pong)
-                with patch.object(sd,'BUDGET_SECONDS',.2),patch.object(sd.diagnose,'__kwdefaults__',{**sd.diagnose.__kwdefaults__,'budget':.2}):
-                    r=self.session(self.stream_class(probe))
+        for state,pong,reason in cases:
+            with self.subTest(state=state):
+                self.state.write_bytes(original);self.stop.clear();self.probe_seen=None;self.after_probe_gets=0;self.reports=[]
+                self.silent_gap(15.093);probe=FakeProbeStream(state=state);self.addCleanup(probe.release.set)
+                started=time.monotonic();r=self.session(self.stream_class(probe))
+                self.assertLess(time.monotonic()-started,sd.BUDGET_SECONDS)
                 d=r['stream_idle_diagnostics']
-                self.assertEqual((r['status'],r['reason'],d['pong']),('HALTED','PAPER_STREAM_TIMEOUT',expected))
-                if state=='OPEN':
-                    self.assertEqual(self.probe_seen,{'halt_reason':'PAPER_SESSION_FAILURE','orders':0,'closed':False})
-                else:self.assertIsNone(self.probe_seen)
-                self.assertEqual(self.after_probe_gets,0);self.assertTrue(self.stream.closed)
+                self.assertEqual((r['status'],r['reason'],d['pong'],d['probe_reason'],d['ping_sent']),
+                    ('HALTED','PAPER_STREAM_TIMEOUT',pong,reason,False))
+                self.assertEqual(probe.pings,0);self.assertTrue(self.stream.closed)  # close got the lock.
+                self.assertEqual(self.probe_seen,{'halt_reason':'PAPER_SESSION_FAILURE','orders':0,'closed':False})
+                self.assertEqual(self.after_probe_gets,0)
+                self.assertEqual(self.reports[-1]['stream_idle_diagnostics'],d)  # Final event was emitted.
+                self.assertNotIn('cleanup_error',r)
+
+    def test_cancellation_or_deadline_after_halt_still_closes_and_emits(self):
+        probe=FakeProbeStream();self.addCleanup(probe.release.set);flag=[False]
+        from trading.execution import ExecutionEngine as Engine
+        original=Engine.halt
+        def halt(engine,reason):original(engine,reason);flag[0]=True  # Supervisor stop/deadline right after HALT.
+        self.silent_gap(15.093)
+        with patch.object(Engine,'halt',halt):
+            r=run_session(self.state,seconds=30,stopped=lambda:flag[0],emit=self.reports.append,client=Mock(),
+                stream_factory=self.stream_class(probe),analyzer_factory=self.factory,tickers=[TICKER],
+                monotonic=lambda:self.now,wall=lambda:self.base+self.now)
+        d=r['stream_idle_diagnostics']
+        self.assertEqual((r['status'],r['reason'],d['pong'],d['probe_reason']),('HALTED','PAPER_STREAM_TIMEOUT','CANCELLED','STOP_REQUESTED'))
+        self.assertTrue(self.stream.closed);self.assertEqual(self.reports[-1]['stream_idle_diagnostics'],d);self.assertEqual(probe.pings,0)
 
     def test_halt_precedes_probe_and_no_strategy_or_order_after_halt(self):
         self.actions=['BUY'];self.silent_gap(15.093);probe=FakeProbeStream()
@@ -209,20 +238,15 @@ class SessionDiagnosticsTests(unittest.TestCase):
         self.assertTrue(all(c is None for c in calls))  # Every strategy call happened before the probe.
         self.assertEqual(r['pending_orders'],0);self.assertTrue(r['halted'])
 
-    def test_diagnostic_exception_or_timeout_keeps_original_reason(self):
+    def test_diagnostic_exception_keeps_original_reason_and_cleanup(self):
         original=self.state.read_bytes()
         with patch.object(sd,'diagnose',side_effect=RuntimeError(CANARY)):
             self.silent_gap(15.093);r=self.session(self.stream_class())
         self.assertEqual((r['status'],r['reason'],r['stream_idle_diagnostics']['status']),('HALTED','PAPER_STREAM_TIMEOUT','UNAVAILABLE'))
         self.assertNotIn(CANARY,json.dumps(self.reports))
-        self.state.write_bytes(original);self.stop.clear();self.probe_seen=None
-        probe=FakeProbeStream(hang=True);self.addCleanup(probe.release.set)
-        self.silent_gap(15.093);started=time.monotonic();r=self.session(self.stream_class(probe))
-        self.assertLessEqual(time.monotonic()-started,sd.BUDGET_SECONDS+1.5)
-        d=r['stream_idle_diagnostics']
-        self.assertEqual((r['status'],r['reason'],d['pong'],d['probe_reason']),
-            ('HALTED','PAPER_STREAM_TIMEOUT','UNCONFIRMED','PING_SEND_NOT_COMPLETED_WITHIN_BUDGET'))
+        self.assertTrue(self.stream.closed);self.assertEqual(self.reports[-1]['stream_idle_diagnostics']['status'],'UNAVAILABLE')
         self.assertEqual(json.loads(self.state.read_text(encoding='utf-8'))['halt_reason'],'PAPER_SESSION_FAILURE')
+        del original
 
     def test_normal_stop_and_other_halts_are_not_triggered(self):
         self.silent_gap(14.0);self.script=self.script[:-1]

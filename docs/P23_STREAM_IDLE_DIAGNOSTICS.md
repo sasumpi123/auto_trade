@@ -17,8 +17,8 @@
 
 | 파일 | 역할 |
 | --- | --- |
-| `services/stream_diagnostics.py` | 신규. 고정 allowlist 진단 레코드 생성·검증, 최대 2초 Pong 확인 |
-| `services/market_stream.py` | `connection_state()`(OPEN/CLOSING/CLOSED/UNKNOWN), `send_ping()`(`ack_on_close=False`) 추가 |
+| `services/stream_diagnostics.py` | 신규. 고정 allowlist 진단 레코드 생성·검증, 송신 없는 연결 상태 확인 |
+| `services/market_stream.py` | `connection_state()`(OPEN/CLOSING/CLOSED/UNKNOWN, 잠금·송신 없는 속성 읽기)만 추가 |
 | `ops/paper_session.py` | 런타임 루프에서 검사 경로/시각 기록, HALT 뒤 진단, 종료 결과에 `stream_idle_diagnostics` 추가 |
 | `ops/paper_bot.py` | `view()` allowlist에 `stream_idle_diagnostics` 추가(run.log 종료 이벤트) |
 | `tools/p23_stream_idle_summary.py` | run.log/report.json 오프라인 8줄 요약(원문 줄·가격·경로 미출력) |
@@ -42,7 +42,7 @@ TRIGGERED 필드:
 - `since_last_advance_ms`: TickTiming `last_progress` 기준(전진 전이면 guard 시작 시점, `advance_reference` 명시)
 - `counters`: 스트림 수신, timing 수신/통과/동일시각/폐기, 비전략 무시(guard 누계, `counter_scope` 명시)
 - `connection_before`/`connection_after`: OPEN/CLOSING/CLOSED/UNKNOWN
-- `pong`: CONFIRMED/UNCONFIRMED/UNSUPPORTED/CANCELLED/ERROR, `ping_sent`, `probe_reason`, `probe_elapsed_ms`, `probe_budget_ms=2000`
+- `pong`: UNSUPPORTED(OPEN 연결, `LIVE_PING_SEND_NOT_BOUNDED`) / UNCONFIRMED(OPEN 아님, `CONNECTION_NOT_OPEN`) / CANCELLED / ERROR. enum에 CONFIRMED가 있으나 현재 구현은 생성하지 않는다. `ping_sent`는 항상 false, `probe_budget_ms=2000`은 상한이며 대기하지 않는다
 - `order`: `ENGINE_HALT_CONFIRMED_BEFORE_PROBE`(HALT 미확인이면 Probe 생략)
 
 해석 예: `RECV_TIMEOUT` + `since_last_message_ms≈idle_ms`는 무수신, `RECEIVED_MESSAGE_CHECK` +
@@ -51,12 +51,15 @@ TRIGGERED 필드:
 ## 순서와 제한
 
 1. 기존 예외 처리에서 `engine.halt('PAPER_SESSION_FAILURE')`를 먼저 수행·저장한다.
-2. `engine.halted is True and ready is False`일 때만 Probe한다.
-3. Probe는 데몬 스레드에서 ping을 보내고 호출 측은 총 2초까지만 기다린다. 송신이 끝나지 않으면
-   `PING_SEND_NOT_COMPLETED_WITHIN_BUDGET`로 포기한다. 연결이 OPEN이 아니면 ping을 보내지 않는다.
-4. `ack_on_close=False`이며, 이벤트가 설정돼도 연결이 OPEN이 아니면 CONFIRMED가 아니다.
-5. 사용자/감독 stop 요청 시 `CANCELLED`. 진단 예외는 `UNAVAILABLE`로 바뀌고 원래 사유는 유지된다.
-6. 이후 기존 `stream.close()`와 사후 검증이 그대로 진행된다. 진단 값은 전략·주문·체결·평가에 전달되지 않는다.
+2. `engine.halted is True and ready is False`일 때만 연결 상태를 확인한다.
+3. **실제 연결에는 ping을 보내지 않는다.** websockets 17.4 sync의 `ping()`과 `close()`는 같은
+   `protocol_mutex`를 `send_context()`로 잡고, `sendall()`은 그 잠금을 보유한 채 수행된다. 송신이 막히면
+   호출 측 대기만 2초로 끊어도 송신 스레드가 잠금을 계속 쥐어 이후 `stream.close()`와 종료 이벤트
+   발행이 감독 강제 종료까지 밀릴 수 있다(리뷰 5745423189에서 재현). 송신의 제한 시간 내 완료·취소와
+   잠금 해제를 보장할 수 없으므로 송신 전 `UNSUPPORTED`를 반환한다. 스레드·잠금·대기가 없다.
+4. 연결이 OPEN이 아니면 `UNCONFIRMED`(연결 종료는 Pong이 아님), stop/기한 요청 시 `CANCELLED`.
+5. 진단 예외는 `UNAVAILABLE`로 바뀌고 원래 사유는 유지된다.
+6. 이후 기존 `stream.close()`와 사후 검증, 종료 이벤트 발행이 그대로 진행된다. 진단 값은 전략·주문·체결·평가에 전달되지 않는다.
 
 레코드는 고정 키·enum·숫자만 허용하고 2048바이트를 넘거나 형식이 다르면 `UNAVAILABLE`이다. 원문
 패킷, 가격, 인증정보, 예외 문자열은 기록하지 않는다. 계좌 원장/세션 마커에는 저장하지 않으며
@@ -64,15 +67,17 @@ run.log 종료 이벤트에만 나타난다.
 
 ## 검증과 한계
 
-합성 15.093초 무수신, 동일시각 반복, Pong 응답/미응답/연결 종료(Fake 및 websockets 17 loopback 서버),
-송신 차단 2초 포기, 진단 예외, HALT 선행·HALT 뒤 전략/주문 없음, 14.999초 미중단/15초 중단, P22
+합성 15.093초 무수신, 동일시각 반복, OPEN/CLOSED/UNKNOWN 연결, 잠금을 쥔 채 막히는 송신이 있어도
+ping 미호출·`close()` 즉시 완료·종료 이벤트 발행(강제 종료 없음), HALT 직후 stop/기한 요청, websockets 17
+loopback 서버에서 probe 뒤 `pending_pings` 비어 있음·잠금 해제·close 완료, 진단 예외, HALT 선행·HALT 뒤 전략/주문 없음, 14.999초 미중단/15초 중단, P22
 `frozen()`을 검사한다. 이것은 진단 누락 개선의 증거이며 실제 네트워크 장애 원인을 재현하거나
-해결했다는 증거가 아니다. Pong 미확인만으로 네트워크 장애라고 단정하지 않는다. 실제 Upbit 서버의
+해결했다는 증거가 아니다. 현재 Pong 왕복은 측정하지 않으므로 Pong 응답 여부는 알 수 없다. Pong 미확인만으로 네트워크 장애라고 단정하지 않는다. 실제 Upbit 서버의
 Pong 동작, Mac 절전/네트워크 전환, 장시간 실행은 실기기에서만 확인된다.
 
 ## Mac 실행 (병합 후, 신규 독립 계좌, 최대 55분)
 
-기존 HALTED 계좌는 그대로 두고 재시작/초기화하지 않는다. 출력은 최대 8줄이며 전체 로그는
+기존 HALTED 계좌는 그대로 두고 재시작/초기화하지 않는다. 로컬 변경이 있으면 전환하지 않고 중단하며,
+요약 출력 뒤 실행/보고서 종료 코드가 0이 아니면 셸도 실패(2)로 끝난다. 출력은 최대 8줄이며 전체 로그는
 `~/paper/p23-*` 최신 디렉터리(`ls -dt ~/paper/p23-* | head -1`)에 비공개로 남는다.
 
 ```sh
@@ -81,6 +86,7 @@ Pong 동작, Mac 절전/네트워크 전환, 장시간 실행은 실기기에서
   export PYTHON_DOTENV_DISABLED=1
   umask 077
   cd "$HOME/projects/auto_trade"
+  test -z "$(git status --porcelain)" || { echo 'BLOCKED local changes present; nothing switched'; exit 2; }
   git switch -q master && git pull -q --ff-only
   mkdir -p "$HOME/paper"
   d="$(mktemp -d "$HOME/paper/p23-idle.XXXXXX")"
@@ -99,6 +105,7 @@ Pong 동작, Mac 절전/네트워크 전환, 장시간 실행은 실기기에서
   report_code=$?
   set -e
   .venv/bin/python tools/p23_stream_idle_summary.py "$d/run.log" "$d/report.json" "$run_code" "$report_code"
+  [ "$run_code" -eq 0 ] && [ "$report_code" -eq 0 ] || exit 2
 )
 ```
 

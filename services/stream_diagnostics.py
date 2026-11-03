@@ -2,15 +2,14 @@
 
 The record is a small fixed allowlist: no raw packet, price, credential, URL or exception text.
 It runs only after the engine HALT is confirmed and never reconnects, restarts or clears a halt.
+It never sends on the live connection (see ``probe``), so the existing close/cleanup is unaffected.
 """
 import json
 import math
-import threading
 import time
 
 SCHEMA='P23_STREAM_IDLE_DIAGNOSTICS_V1'
 BUDGET_SECONDS=2.0
-POLL_SECONDS=0.05
 MAX_RECORD_BYTES=2048
 MAX_COUNTER=2_147_483_647
 MAX_MS=10**12
@@ -18,8 +17,7 @@ PATHS=('RECV_TIMEOUT','RECEIVED_MESSAGE_CHECK','OTHER')
 MESSAGE_KINDS=('STRATEGY_TICKER','NON_STRATEGY_OR_SNAPSHOT',None)
 CONNECTION_STATES=('OPEN','CLOSING','CLOSED','UNKNOWN')
 PONG_RESULTS=('CONFIRMED','UNCONFIRMED','UNSUPPORTED','CANCELLED','ERROR')
-PROBE_REASONS=('PONG_RECEIVED_CONNECTION_OPEN','PONG_EVENT_BUT_CONNECTION_NOT_OPEN','NO_PONG_WITHIN_BUDGET',
-    'PING_SEND_NOT_COMPLETED_WITHIN_BUDGET','PING_SEND_FAILED','CONNECTION_NOT_OPEN','STREAM_PROBE_UNSUPPORTED',
+PROBE_REASONS=('LIVE_PING_SEND_NOT_BOUNDED','CONNECTION_NOT_OPEN','STREAM_PROBE_UNSUPPORTED',
     'STOP_REQUESTED','ENGINE_HALT_UNCONFIRMED','PROBE_FAILED')
 COUNTERS=('stream_messages','timing_received','timing_accepted','equal_timestamp','discarded','ignored_non_strategy')
 INTERPRETATION='DIAGNOSTIC_ONLY_NOT_ROOT_CAUSE_UNCONFIRMED_PONG_IS_NOT_NETWORK_FAILURE_PROOF'
@@ -50,49 +48,29 @@ def _state(stream):
 
 
 def probe(stream,*,cancelled=lambda:False,budget=BUDGET_SECONDS,clock=time.monotonic):
-    """Bounded Pong check. The caller never waits longer than ``budget`` seconds in total.
+    """Non-blocking connection check. Never sends a ping on the live connection.
 
-    ``send_ping`` runs on a daemon thread because the transport may block while sending; if it
-    does not finish within the budget it is abandoned and reported, never awaited further.
-    Only an explicit pong event on a still-OPEN connection counts as CONFIRMED.
+    websockets 17 sync ``ping()`` and ``close()`` share ``protocol_mutex`` and ``sendall()`` runs
+    while it is held, so a ping whose send blocks cannot be bounded or cancelled without delaying
+    the existing ``stream.close()`` and terminal evidence. P23 therefore reports UNSUPPORTED
+    instead of starting an unbounded sender: no thread, no lock, no wait. ``budget`` only caps the
+    recorded elapsed time; nothing here waits for it.
     """
-    started=clock();deadline=started+budget
+    started=clock()
     result={'connection_before':'UNKNOWN','connection_after':'UNKNOWN','pong':'UNSUPPORTED',
             'ping_sent':False,'probe_reason':'STREAM_PROBE_UNSUPPORTED'}
-    def finish(pong,reason,sent):
-        result.update(pong=pong,probe_reason=reason,ping_sent=sent,connection_after=_state(stream))
-        result['probe_elapsed_ms']=_ms((clock()-started)*1000)
+    def finish(pong,reason):
+        result.update(pong=pong,probe_reason=reason,ping_sent=False,connection_after=_state(stream))
+        result['probe_elapsed_ms']=_ms(min(budget,max(0.0,clock()-started))*1000)
         return result
     try:
-        sender=getattr(stream,'send_ping',None)
-        if not callable(getattr(stream,'connection_state',None)) or not callable(sender):
-            return finish('UNSUPPORTED','STREAM_PROBE_UNSUPPORTED',False)
+        if not callable(getattr(stream,'connection_state',None)):return finish('UNSUPPORTED','STREAM_PROBE_UNSUPPORTED')
         result['connection_before']=_state(stream)
-        if cancelled():return finish('CANCELLED','STOP_REQUESTED',False)
-        if result['connection_before']!='OPEN':return finish('UNCONFIRMED','CONNECTION_NOT_OPEN',False)
-        box={}
-        def send():
-            try:box['event']=sender()
-            except BaseException:box['error']=True
-        worker=threading.Thread(target=send,name='p23-pong-probe',daemon=True)
-        worker.start()
-        while True:
-            remaining=deadline-clock()
-            if remaining<=0:break
-            if cancelled():return finish('CANCELLED','STOP_REQUESTED',None if worker.is_alive() else 'event' in box)
-            if worker.is_alive():
-                worker.join(min(POLL_SECONDS,remaining));continue
-            if box.get('error') or not callable(getattr(box.get('event'),'wait',None)):
-                return finish('ERROR','PING_SEND_FAILED',False)
-            if box['event'].wait(min(POLL_SECONDS,remaining)):
-                # A closed connection is never treated as a pong.
-                if _state(stream)=='OPEN':return finish('CONFIRMED','PONG_RECEIVED_CONNECTION_OPEN',True)
-                return finish('UNCONFIRMED','PONG_EVENT_BUT_CONNECTION_NOT_OPEN',True)
-        if worker.is_alive():return finish('UNCONFIRMED','PING_SEND_NOT_COMPLETED_WITHIN_BUDGET',None)
-        if 'event' not in box:return finish('ERROR','PING_SEND_FAILED',False)
-        return finish('UNCONFIRMED','NO_PONG_WITHIN_BUDGET',True)
+        if cancelled():return finish('CANCELLED','STOP_REQUESTED')
+        if result['connection_before']!='OPEN':return finish('UNCONFIRMED','CONNECTION_NOT_OPEN')
+        return finish('UNSUPPORTED','LIVE_PING_SEND_NOT_BOUNDED')
     except Exception:
-        return finish('ERROR','PROBE_FAILED',None)
+        return finish('ERROR','PROBE_FAILED')
 
 
 def counters(timing,*,stream_messages,ignored_non_strategy):
@@ -146,7 +124,7 @@ def validate(record):
     ok=(record['trigger_path'] in PATHS and record['message_kind'] in MESSAGE_KINDS
         and record['connection_before'] in CONNECTION_STATES and record['connection_after'] in CONNECTION_STATES
         and record['pong'] in PONG_RESULTS and record['probe_reason'] in PROBE_REASONS
-        and record['ping_sent'] in (True,False,None) and record['interpretation']==INTERPRETATION
+        and record['ping_sent'] is False and record['interpretation']==INTERPRETATION
         and record['order'] in ('ENGINE_HALT_CONFIRMED_BEFORE_PROBE','ENGINE_HALT_UNCONFIRMED_PROBE_SKIPPED')
         and record['advance_reference']=='TICK_TIMING_LAST_PROGRESS_OR_GUARD_START'
         and record['counter_scope']=='TICK_TIMING_GUARD_CUMULATIVE_AND_RUNTIME_LOOP'
