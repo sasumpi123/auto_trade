@@ -3,7 +3,7 @@
   "origin": "SYNTHETIC_NOT_CAPTURED_FROM_MAC_OR_UPBIT",
   "baseline_commit": "69e790ed314090c2dc4c81df6251d4ca7f2d83cf",
   "patch_forward_fixed_commit": "5754820c89b06fcc61dfdd31fa840119e3b86adf",
-  "patch_sha256": "251f6b47d1f203784ca52f4be05fcc81c0ae648282eb4647e96b47311f12788d",
+  "patch_sha256": "7ae5dd1704e2730c069437009d885d83e4bf86652b12d6cd21f0f1c74180b0df",
   "baseline_source_sha256": {
     "services/public_market.py": "b99ca398ded147237441c811ce27d77ea8ec296ce9f738c9ba8bf4b7903a6206",
     "ops/paper_session.py": "3987b5edf3a3860769569144459e8e1281c7b147697ca2c4ca7aef8a3b61b200",

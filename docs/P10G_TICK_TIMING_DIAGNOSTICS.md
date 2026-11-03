@@ -102,3 +102,5 @@ Fake로 정상/동일/소폭·큰 역행/지연/미래/누락·타입/수신 중
 실제 장애 원인과 공식 정의·순서 근거, Mac 실시간 재현/서버 기준 지연/절전·네트워크·전원 결과는 미확인이다. 새 관찰에서 시장/issue/수치와 프로세스 종료 정보를 얻은 뒤 다시 판단한다. 그 전에는 소폭 역행 허용·자동 재연결/복구/재초기화를 하지 않는다. REAL_TRADING=False, Slack/launchd/모델·유료 API/자동 시작 OFF, 전략/연구 holdout 불변을 유지한다.
 
 P10-H 후속: [실시간 활동성](P10H_REALTIME_ACTIVITY.md)에서 신규 격리 실험의 시작 전 관찰과 제한된 대체 후보 선정을 설명한다. 독립 공개 진단에도 종목별 첫 수신·수신 종류별 건수·무수신 ms를 추가했으며, 서버 REALTIME 라벨을 실제 거래나 API 건강성 증명으로 해석하지 않는다. 이전 PAPER_STALE_TICK의 구체적 원인은 계속 미확인이다.
+
+P23: `PAPER_STREAM_TIMEOUT` 종료 이벤트에는 15초 기준 변경 없이 HALT 뒤 송신·대기 없는 진단(`stream_idle_diagnostics`)이 추가된다. 상세는 [P23](P23_STREAM_IDLE_DIAGNOSTICS.md).

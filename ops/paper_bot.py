@@ -23,7 +23,7 @@ def view(event):
           'session_ticks','historical_ticks','markets','cumulative_buys','cumulative_sells','fees',
           'net_realized_pnl','unrealized_pnl','net_return_percent','equity','valuation_reason',
           'engine_started','post_validation','session_finalization','supervisor_reason','automatic_restart',
-          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation','regression_evidence','cost_policy','fee_policy')
+          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation','regression_evidence','cost_policy','fee_policy','stream_idle_diagnostics')
     return {k:event[k] for k in keys if k in event}
 
 
