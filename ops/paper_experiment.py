@@ -19,7 +19,7 @@ from ops.paper_recovery_diagnostic import SafeParser
 from ops.paper_session import ExistingPaperStore, validate_state, offline_report, public_analyzer_factory
 from services.public_market import PublicDataError, PUBLIC_ERROR_CODES
 from services.realtime_activity import ACTIVITY_ERRORS
-from services.tick_timing import REPEAT_POLICY,QUARANTINE_POLICY,BOUND_POLICIES
+from services.tick_timing import REPEAT_POLICY,QUARANTINE_POLICY,BOUND_POLICIES,ACCOUNT_QUARANTINE_POLICY
 from trading.execution import ExecutionEngine
 from trading.state_store import StateStore
 from utils.process_lock import lock_handle
@@ -71,26 +71,38 @@ def receipt_path(p):return p.parent/('.paper-experiment-'+location_hash(p)+'.jso
 def first_use_path(p):return p.parent/('.paper-experiment-used-'+location_hash(p)+'.json')
 
 
-def identity(identifier,p,last=None,*,cost_policy=None):
+def identity(identifier,p,last=None,*,cost_policy=None,profile=None):
     result={'schema_version':1,'scope':SCOPE,'experiment_id':identifier,
             'directory_sha256':sha(str(p).encode()),'initial_cash':'1000000','last_session_id':last}
     if cost_policy is not None:
         from trading.costs import from_policy,policy
         result.update(schema_version=2,cost_policy=policy(from_policy(cost_policy)))
+    if profile is not None:
+        # P26: the fixed continuation profile is part of the account identity and creation receipt.
+        # Schema stays 2 (the P22-pinned trading/costs.py accepts only 1/2); `profile` is verified exactly.
+        from ops import paper_continuation as cont
+        require(profile==cont.profile() and result.get('cost_policy')==cont.cost_policy(),'P26_PROFILE_INVALID')
+        result['profile']=dict(profile)
     return result
 
 
-def create(value,*,cost_policy=None):
+def create(value,*,cost_policy=None,profile=None):
     result={'status':'BLOCKED','account_scope':SCOPE,'network_calls':0,'automatic_start':False}
     try:
         require(sys.version_info[:2]==(3,12),'PYTHON312_REQUIRED')
         require(initial_cash()==1_000_000,'FIXED_EXPERIMENT_CAPITAL_REQUIRED')
+        profile_spec=None
+        if profile is not None:
+            from ops import paper_continuation as cont
+            require(profile==cont.PROFILE_ID,'P26_PROFILE_INVALID')
+            require(cost_policy is None or cost_policy==cont.cost_policy() or cost_policy==cont.COST_INPUT,'P26_FIXED_COSTS_REQUIRED')
+            cost_policy=cont.cost_policy();profile_spec=cont.profile()
         if cost_policy is not None:
             from trading.costs import from_policy
             from_policy(cost_policy)  # Validate before ANY account/path creation.
         p=directory(value);require(not p.exists(),'DIRECTORY_ALREADY_EXISTS_NO_RESET')
         state=ExecutionEngine(p/STATE,1_000_000,real_trading=False).state
-        state['paper_experiment']=identity(uuid.uuid4().hex,p,cost_policy=cost_policy)
+        state['paper_experiment']=identity(uuid.uuid4().hex,p,cost_policy=cost_policy,profile=profile_spec)
         raw=encoded(state)
         receipt={'schema_version':state['paper_experiment']['schema_version'],'identity':state['paper_experiment'],'initial_state_sha256':sha(raw)}
         # Parent reservation survives leaf loss; never removed on failure/retry.
@@ -122,16 +134,17 @@ def validate_identity(saved,state):
             'EXPERIMENT_IDENTITY_UNVERIFIED')
     require(type(meta.get('schema_version')) is int,'EXPERIMENT_IDENTITY_UNVERIFIED')
     require(type(r['schema_version']) is int and r['schema_version'] in (1,2),'CREATION_RECEIPT_MISMATCH')
-    cost_policy=r['identity'].get('cost_policy')
+    cost_policy=r['identity'].get('cost_policy');profile=r['identity'].get('profile')
     require((r['schema_version']==2)==(cost_policy is not None),'CREATION_RECEIPT_MISMATCH')
-    require(meta==identity(meta['experiment_id'],p,meta.get('last_session_id'),cost_policy=cost_policy),'EXPERIMENT_IDENTITY_UNVERIFIED')
+    require(profile is None or r['schema_version']==2,'CREATION_RECEIPT_MISMATCH')
+    require(meta==identity(meta['experiment_id'],p,meta.get('last_session_id'),cost_policy=cost_policy,profile=profile),'EXPERIMENT_IDENTITY_UNVERIFIED')
     require(meta['last_session_id'] is None or (isinstance(meta['last_session_id'],str) and ID.fullmatch(meta['last_session_id'])),
             'EXPERIMENT_SESSION_INVALID')
-    require(r['identity']==identity(meta['experiment_id'],p,cost_policy=cost_policy),'CREATION_RECEIPT_MISMATCH')
+    require(r['identity']==identity(meta['experiment_id'],p,cost_policy=cost_policy,profile=profile),'CREATION_RECEIPT_MISMATCH')
     initial=_private(p/'initial-state.json',{'.json'}).read_bytes()
     require(sha(initial)==r['initial_state_sha256'],'INITIAL_STATE_MISMATCH')
     expected=ExecutionEngine(p/STATE,1_000_000,real_trading=False).state
-    expected['paper_experiment']=identity(meta['experiment_id'],p,cost_policy=cost_policy)
+    expected['paper_experiment']=identity(meta['experiment_id'],p,cost_policy=cost_policy,profile=profile)
     require(_json(initial.decode())==expected,'INITIAL_INVENTORY_OR_CAPITAL_NOT_EMPTY')
     if meta['last_session_id'] is not None:validate_first_use(saved,p)
     return p,r
@@ -142,8 +155,19 @@ def validate_first_use(saved,p):
     require(used.get('experiment_id')==saved['paper_experiment']['experiment_id'],'FIRST_USE_RECEIPT_MISMATCH')
     m=marker(p) if (p/'session.json').exists() else {}
     if 'discard_policy' in used or 'discard_policy' in m:
-        require(used.get('discard_policy') in BOUND_POLICIES and used.get('discard_policy')==m.get('discard_policy')
-                and used.get('observation_discard_session')==m.get('session_id'),'DISCARD_POLICY_BINDING_UNVERIFIED')
+        require(used.get('discard_policy') in BOUND_POLICIES and used.get('discard_policy')==m.get('discard_policy'),
+                'DISCARD_POLICY_BINDING_UNVERIFIED')
+        if used.get('discard_policy')==ACCOUNT_QUARANTINE_POLICY.identifier:
+            # P26: the first-use receipt binds run 1; a resume marker must chain to exactly that session.
+            from ops import paper_continuation as cont
+            require('profile' in saved['paper_experiment'],'DISCARD_POLICY_BINDING_UNVERIFIED')
+            block=cont.validate_block(m.get('p26'))
+            require(used.get('observation_discard_session')==(m.get('session_id') if block['run_index']==1 else m.get('previous_session')),
+                    'DISCARD_POLICY_BINDING_UNVERIFIED')
+        else:
+            require(used.get('observation_discard_session')==m.get('session_id'),'DISCARD_POLICY_BINDING_UNVERIFIED')
+    else:
+        require('profile' not in saved['paper_experiment'] or not m,'DISCARD_POLICY_BINDING_UNVERIFIED')
 
 
 def marker(p):return _json(_private(p/'session.json',{'.json'}).read_text(encoding='utf-8'))
@@ -176,12 +200,14 @@ def save_marker(owner,value):
     finally:writer._lock=None  # The original owner alone releases the shared handle.
 
 
-def begin(value,*,observation_discard=False,repeated_discard=False,quarantine=False):
+def begin(value,*,observation_discard=False,repeated_discard=False,quarantine=False,p26=None,seconds=None):
     require(sys.version_info[:2]==(3,12),'PYTHON312_REQUIRED')
     p=directory(value);owner=ExistingPaperStore(p/STATE,1_000_000)
     try:
         require(initial_cash()==1_000_000,'FIXED_EXPERIMENT_CAPITAL_REQUIRED')
-        owner.acquire();saved=owner.load();resumable(saved,owner.path)
+        owner.acquire();saved=owner.load();phase=resumable(saved,owner.path)
+        if 'profile' in saved['paper_experiment'] or p26 is not None:
+            return _begin_p26(p,owner,saved,phase,p26,seconds,(observation_discard,repeated_discard,quarantine))
         require(type(observation_discard) is bool and type(repeated_discard) is bool and type(quarantine) is bool
                 and (not repeated_discard or observation_discard)
                 and (not quarantine or (observation_discard and not repeated_discard)),'PAPER_REGRESSION_EXPERIMENT_BLOCKED')
@@ -204,6 +230,37 @@ def begin(value,*,observation_discard=False,repeated_discard=False,quarantine=Fa
         save_marker(owner,m)
         return token
     finally:owner.close()
+
+
+def _begin_p26(p,owner,saved,phase,mode,seconds,other_flags):
+    """P26 only: explicit first run or one manual resume of a verified stop. Reserve before network."""
+    from ops import paper_continuation as cont
+    require('profile' in saved['paper_experiment'] and saved['paper_experiment']['profile']==cont.profile(),
+            'P26_PROFILE_REQUIRED')  # A legacy/P15/P18/P25 account can never be promoted.
+    require(mode in cont.MODES and other_flags==(False,False,False),'P26_EXPLICIT_MODE_REQUIRED')  # No mixing.
+    require(type(seconds) is int and 1<=seconds<=cont.MAX_SESSION_SECONDS,'P26_SESSION_SECONDS_INVALID')
+    current=sha(owner.path.read_bytes())
+    if mode=='first':
+        require(phase=='NEVER_STARTED' and not first_use_path(p).exists()
+                and saved['paper_experiment']['last_session_id'] is None,'P26_FIRST_RUN_ALREADY_USED')
+        block=cont.reserve('first',seconds)
+    else:
+        require(phase=='STOPPED_VERIFIED','P26_RESUME_REQUIRES_STOPPED_VERIFIED')
+        previous=marker(p)
+        require(previous.get('session_id')==saved['paper_experiment']['last_session_id']
+                and previous.get('end_sha256')==current,'P26_LEDGER_CHECKPOINT_MISMATCH')
+        require(not any(o['status']!='settled' for o in saved['orders'].values()) and not saved.get('halt_reason'),
+                'PAPER_RECOVERY_REQUIRED')
+        block=cont.reserve('resume',seconds,previous,current)
+    token=uuid.uuid4().hex
+    if mode=='first':
+        exclusive_write(first_use_path(p),encoded({'experiment_id':saved['paper_experiment']['experiment_id'],
+            'observation_discard_session':token,'discard_policy':cont.POLICY_ID}))
+    m={'session_id':token,'previous_session':saved['paper_experiment']['last_session_id'],'phase':'IN_PROGRESS',
+       'before_sha256':current,'discard_policy':cont.POLICY_ID,'p26':block}
+    save_marker(owner,m)  # Run count, seconds and REST share are consumed here, before any network.
+    validate_first_use(saved,p)
+    return token
 
 
 def validate_start(saved,state,token):
@@ -237,6 +294,10 @@ def finish(value,token,result,*,record_summary=False):
         else:raise ExperimentError('UNCONFIRMED_SESSION_NO_RESTART')
         m['end_sha256']=sha(owner.path.read_bytes())
         if m['phase']=='PREPARATION_FAILED':m['preparation_failure_reason']=session_reason(leaf.get('reason'))
+        if m['phase']=='STOPPED_VERIFIED' and 'p26' in m:
+            # P26: carry ONLY a checkpoint bound to this session and its exact end ledger hash.
+            from ops import paper_continuation as cont
+            m['p26_checkpoint']=cont.checkpoint_from_report(leaf.get('tick_timing'),token,m['end_sha256'],m['p26'])
         if record_summary and m['phase']=='STOPPED_VERIFIED':
             from ops.paper_session import state_summary
             markets=leaf.get('markets',{})
@@ -333,6 +394,9 @@ def inspect_experiment(value):
             require(status=='READY_IDLE_AT_SNAPSHOT','EXPERIMENT_OWNER_UNVERIFIED')
             saved=validate_state(_json(_private(p/STATE,{'.json'}).read_text(encoding='utf-8')),p/STATE,1_000_000)
             result['session_state']=resumable(saved,p/STATE)
+            if 'profile' in saved['paper_experiment']:
+                from ops import paper_continuation as cont
+                result['p26_account']=cont.status(marker(p) if (p/'session.json').exists() else None)
             from trading.costs import summary
             result.update(summary(saved))
             result['status']='READ_ONLY_NO_EXECUTION_AUTHORITY'
@@ -429,11 +493,13 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
     parser.add_argument('--discard-small-timestamp-regressions-during-observation',action='store_true')
     parser.add_argument('--discard-repeated-small-timestamp-regressions',action='store_true')
     parser.add_argument('--quarantine-timestamp-regressions',action='store_true')
+    p26_mode=parser.add_mutually_exclusive_group()
+    p26_mode.add_argument('--p26-first-run',action='store_true');p26_mode.add_argument('--p26-resume',action='store_true')
     args=parser.parse_args(argv)
     if emit is None:
         def emit(r):print(json.dumps({'account_scope':SCOPE,**r},ensure_ascii=False,sort_keys=True),flush=True)
     if not args.connect_public:
-        if args.quarantine_timestamp_regressions or args.discard_repeated_small_timestamp_regressions or args.discard_small_timestamp_regressions_during_observation or args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
+        if args.p26_first_run or args.p26_resume or args.quarantine_timestamp_regressions or args.discard_repeated_small_timestamp_regressions or args.discard_small_timestamp_regressions_during_observation or args.discard_small_timestamp_regressions or args.select_realtime_active or any(v is not None for v in (args.seconds,args.top,args.tickers,args.eligible_top,args.candidate_limit,args.observe_realtime_seconds)):
             parser.error('network options require explicit connection')
         r=create(args.directory) if args.create else inspect_experiment(args.directory)
         emit(r);return 0 if r['status']=='CREATED_NEW_INDEPENDENT_EXPERIMENT' else 2
@@ -456,6 +522,11 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
             or args.discard_small_timestamp_regressions_during_observation or args.discard_repeated_small_timestamp_regressions
             or args.observe_realtime_seconds is None or not args.tickers or args.select_realtime_active):
         parser.error('P25 quarantine is exclusive and requires observation and explicit tickers')
+    p26=('first' if args.p26_first_run else 'resume') if (args.p26_first_run or args.p26_resume) else None
+    if p26 and (args.quarantine_timestamp_regressions or args.discard_small_timestamp_regressions
+            or args.discard_small_timestamp_regressions_during_observation or args.discard_repeated_small_timestamp_regressions
+            or args.observe_realtime_seconds is None or args.tickers!=['KRW-BTC'] or args.select_realtime_active):
+        parser.error('P26 requires fixed KRW-BTC, observation and no other regression flags')
     from services.public_market import MARKET
     if args.tickers is not None and (not 1<=len(args.tickers)<=MAX_CANDIDATES or len(set(args.tickers))!=len(args.tickers)
                                     or any(not MARKET.fullmatch(t) for t in args.tickers)):parser.error('invalid markets')
@@ -463,7 +534,9 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
         from ops.paper_watch import supervise,_worker
         p=directory(args.directory)
         with (control_factory(p) if control_factory is not None else nullcontext()) as control:
-            if args.quarantine_timestamp_regressions:
+            if p26:
+                token=begin(p,p26=p26,seconds=args.seconds)
+            elif args.quarantine_timestamp_regressions:
                 token=begin(p,observation_discard=True,quarantine=True)
             elif args.discard_repeated_small_timestamp_regressions:
                 token=begin(p,observation_discard=True,repeated_discard=True)
@@ -473,7 +546,8 @@ def main(argv=None,*,emit=None,control_factory=None,record_summary=False):
                      'discard_small_timestamp_regressions':args.discard_small_timestamp_regressions,
                      'discard_small_timestamp_regressions_during_observation':args.discard_small_timestamp_regressions_during_observation,
                      'discard_repeated_small_timestamp_regressions':args.discard_repeated_small_timestamp_regressions,
-                     'quarantine_timestamp_regressions':args.quarantine_timestamp_regressions,'record_decisions':record_summary}
+                     'quarantine_timestamp_regressions':args.quarantine_timestamp_regressions,'p26_continuation':p26,
+                     'record_decisions':record_summary}
             extra={'control':control} if control is not None else {}
             result=supervise(p/STATE,args.seconds,args.top or 10,args.tickers,emit=emit,
                              worker=partial(_worker,experiment=options),outbox=p/'notifications/outbox.sqlite3',**extra)

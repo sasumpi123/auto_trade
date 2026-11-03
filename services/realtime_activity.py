@@ -20,14 +20,14 @@ class ActivityError(ValueError):pass
 class Observation:
     def __init__(self,markets,*,wall=time.time,monotonic=time.monotonic,
                  discard_small_regressions=False,clock_origin=None,discard_repeated_small_regressions=False,
-                 quarantine_regressions=False):
+                 quarantine_regressions=False,account_prior=None):
         if not 1<=len(markets)<=MAX_MARKETS:raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
         self.wall,self.monotonic=wall,monotonic
         self.start=monotonic();self.started_wall=wall();self.end=None
         self.guard=TickTiming(markets,self.started_wall,self.start,clock_origin=clock_origin,
                               discard_small_regressions=discard_small_regressions,
                               discard_repeated_small_regressions=discard_repeated_small_regressions,
-                              quarantine_regressions=quarantine_regressions)
+                              quarantine_regressions=quarantine_regressions,account_prior=account_prior)
         self.stats={t:{'realtime':0,'snapshot':0,'unknown_type':0,'first_receive_ms':None,
                        'first_realtime_ms':None,'last_realtime_receive':None} for t in markets}
         self.observation_timing=None;self.observation_progress=None
@@ -103,16 +103,16 @@ class Observation:
             raise ActivityError('ACTIVITY_START_EVIDENCE_EXPIRED')
 
     def runtime_guard(self,selected,clock_origin,*,discard_small_regressions=False,discard_repeated_small_regressions=False,
-                      quarantine_regressions=False):
+                      quarantine_regressions=False,account=False):
         self.validate_start(selected)
         if self.guard.discard_enabled:
             # P15/P18/P25 fixed explicit markets retain the SAME guard, budget, high-water, quarantine and clock.
-            if (self.guard.policy!=discard_policy(discard_small_regressions,discard_repeated_small_regressions,quarantine_regressions)
+            if (self.guard.policy!=discard_policy(discard_small_regressions,discard_repeated_small_regressions,quarantine_regressions,account)
                     or set(selected)!=set(self.stats)
                     or clock_origin!=(self.guard.start_wall,self.guard.start_mono)):
                 raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
             return self.guard
-        if discard_repeated_small_regressions or quarantine_regressions:raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
+        if discard_repeated_small_regressions or quarantine_regressions or account:raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
         g=TickTiming(selected,self.wall(),self.monotonic(),clock_origin=clock_origin,discard_small_regressions=discard_small_regressions)
         g.previous={t:self.guard.previous[t] for t in selected}
         g.progress={t:self.guard.progress[t] for t in selected};g.last_progress=max(g.progress.values())
