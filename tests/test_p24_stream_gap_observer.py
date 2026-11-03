@@ -215,6 +215,8 @@ class ContinuityAndWindowTests(unittest.TestCase):
         r=self.observe(clock,lambda _:FakeStream(clock,[(0,tick(1000))]+steady(17,80,stamp0=5000)),budget=60)
         self.assertEqual((r['status'],r['reason'],r['capture']),('INCOMPLETE','OBSERVATION_CONTINUITY_LOST',None))
         self.assertGreaterEqual(r['max_local_poll_interval_ms'],19000)
+        # Wall and monotonic advanced together across the pause: drift alone cannot flag it.
+        self.assertEqual(r['max_abs_wall_minus_monotonic_ms'],0.0)
         self.assertEqual(r['continuity_limit_ms'],1000)
         for name in ('C1','C2'):
             c=r['connections'][name]
