@@ -273,8 +273,11 @@ class SessionDiagnosticsTests(unittest.TestCase):
         self.assertEqual(inspect.signature(supervise).parameters['grace'].default,15)
 
     def test_p22_frozen_sources_unchanged(self):
-        from backtesting.p22_forward import frozen
-        self.assertEqual(frozen()['schema'],'P22_FROZEN_FORWARD_V1')
+        # P25: P22 runs only from the isolated registered tree; the working-tree drift is exactly that one pin.
+        import tempfile
+        from tools import p22_isolated as iso
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(iso.build(Path(d).resolve()/'source'),['ops/paper_experiment.py'])
 
 
 class SummaryToolTests(unittest.TestCase):

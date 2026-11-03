@@ -25,22 +25,32 @@ class DiscardPolicy:
     enabled: bool
     max_per_market: int
     max_per_session: int
-    max_width_ms: int = SMALL_REGRESSION_MS
+    max_width_ms: int | None = SMALL_REGRESSION_MS
     max_session_seconds: int = DISCARD_SESSION_SECONDS
+    quarantine: bool = False  # P25: any validated regression is quarantined until a same-market advance.
 
     def evidence(self):
-        return {'id':self.identifier,'max_per_market':self.max_per_market,'max_per_session':self.max_per_session,
+        result={'id':self.identifier,'max_per_market':self.max_per_market,'max_per_session':self.max_per_session,
                 'max_width_ms':self.max_width_ms,'max_session_seconds':self.max_session_seconds}
+        if self.quarantine:result['release']=QUARANTINE_RELEASE  # Absent for every pre-P25 policy (unchanged evidence).
+        return result
 
 
 STRICT_POLICY=DiscardPolicy('STRICT',False,1,3)
 P15_POLICY=DiscardPolicy('P15_SINGLE_DISCARD',True,1,3)
 REPEAT_POLICY=DiscardPolicy('P18_BOUNDED_REPEAT_V1',True,10,30)
+QUARANTINE_RELEASE='SAME_MARKET_TIMESTAMP_ABOVE_HIGH_WATER'
+# P25: no width limit (the width is not re-decided by an arbitrary ms value). Budgets are the
+# same fixed P18 caps; they are operating limits, not statistically proven safe values.
+QUARANTINE_POLICY=DiscardPolicy('P25_QUARANTINE_UNTIL_ADVANCE_V1',True,10,30,max_width_ms=None,quarantine=True)
+BOUND_POLICIES={REPEAT_POLICY.identifier:REPEAT_POLICY,QUARANTINE_POLICY.identifier:QUARANTINE_POLICY}
 
 
-def discard_policy(enabled=False,repeated=False):
-    if type(enabled) is not bool or type(repeated) is not bool or (repeated and not enabled):
-        raise ValueError('INVALID_REGRESSION_POLICY')
+def discard_policy(enabled=False,repeated=False,quarantine=False):
+    if (type(enabled) is not bool or type(repeated) is not bool or type(quarantine) is not bool
+            or (repeated and not enabled) or (quarantine and (enabled or repeated))):
+        raise ValueError('INVALID_REGRESSION_POLICY')  # P25 is exclusive: never mixed with P15/P18 flags.
+    if quarantine:return QUARANTINE_POLICY
     return REPEAT_POLICY if repeated else P15_POLICY if enabled else STRICT_POLICY
 
 
@@ -61,7 +71,7 @@ class TickTimingError(ValueError):pass
 
 class TickTiming:
     def __init__(self,markets,wall,monotonic,*,clock_origin=None,discard_small_regressions=False,
-                 discard_repeated_small_regressions=False):
+                 discard_repeated_small_regressions=False,quarantine_regressions=False):
         if (not 1<=len(markets)<=MAX_MARKETS or len(set(markets))!=len(markets)
                 or any(not isinstance(t,str) or not MARKET.fullmatch(t) for t in markets)):
             raise ValueError('INVALID_TIMING_MARKETS')
@@ -70,8 +80,8 @@ class TickTiming:
         self.markets={t:{'received':0,'timing_accepted':0,'equal_timestamp':0,
                          'issues':{k:0 for k in ISSUES}} for t in markets}
         self.global_issues={k:0 for k in ISSUES};self.samples=deque(maxlen=MAX_SAMPLES)
-        self._policy=discard_policy(discard_small_regressions,discard_repeated_small_regressions)
-        self.discarded=0;self.awaiting_followup=None
+        self._policy=discard_policy(discard_small_regressions,discard_repeated_small_regressions,quarantine_regressions)
+        self.discarded=0;self.awaiting_followup=None;self.quarantined=set();self.held=0
         self.discards={t:{'count':0,'max_regression_ms':0,'last_regression_ms':None,
                           'followup_newer_received':None} for t in markets}
         self.received=0;self.accepted=0
@@ -132,6 +142,18 @@ class TickTiming:
         if stamp>wall*1000+5000:self.fail('TIMESTAMP_FUTURE',t,**details)
         if previous is not None and stamp<previous:
             width=previous-stamp;row=self.discards[t]
+            if self.policy.quarantine:
+                # Validated (market/type/int/delay/future/clock above) but below the same-market
+                # high-water mark: drop at input. No price, high-water, progress or accepted update.
+                if (row['count']<self.policy.max_per_market and self.discarded<self.policy.max_per_session
+                        and 0<=mono-self.start_mono<self.policy.max_session_seconds):
+                    self.idle(wall,mono)  # An already-expired watchdog wins over a discard.
+                    row.update(count=row['count']+1,max_regression_ms=max(row['max_regression_ms'],width),
+                               last_regression_ms=width,followup_newer_received=False)
+                    self.discarded+=1;self.quarantined.add(t);self.awaiting_followup=min(self.quarantined)
+                    self.samples.append({'issue':'REGRESSION_QUARANTINED','market':t,**details})
+                    return None
+                self.fail('TIMESTAMP_REGRESSION',t,**details)
             if (self.discard_enabled and width<=self.policy.max_width_ms
                     and row['count']<self.policy.max_per_market and self.discarded<self.policy.max_per_session
                     and self.awaiting_followup is None and 0<=mono-self.start_mono<self.policy.max_session_seconds):
@@ -144,23 +166,45 @@ class TickTiming:
                 self.samples.append({'issue':'SMALL_REGRESSION_DISCARDED','market':t,**details})
                 return None
             self.fail('TIMESTAMP_REGRESSION',t,**details)
-        if previous==stamp:self.increment(m,'equal_timestamp')
+        if self.policy.quarantine and check_liveness and t in self.quarantined and stamp>previous:
+            # P25 runtime release: check the PRE-update 15 s/60 s watchdogs before any high-water,
+            # progress, release or price forwarding, so a delayed follow-up cannot erase an expired deadline.
+            # (Legacy modes and the pre-trade observation's measurement contract keep their old order.)
+            self.idle(wall,mono)
+        if previous==stamp:
+            self.increment(m,'equal_timestamp')
+            if t in self.quarantined:
+                # Non-advancing price while quarantined: never forwarded and never a release.
+                if check_liveness:self.idle(wall,mono)
+                self.held=min(MAX_COUNTER,self.held+1)
+                return None
         else:self.progress[t]=mono;self.last_progress=mono
         self.previous[t]=stamp
         # Equal timestamps keep the legacy acceptance rule, but cannot extend liveness.
         if check_liveness:self.idle(wall,mono)
-        if self.awaiting_followup==t and previous is not None and stamp>previous:
+        if t in self.quarantined and stamp>previous:
+            # Release only by a valid same-market timestamp above the high-water mark.
+            self.discards[t]['followup_newer_received']=True;self.quarantined.discard(t)
+            self.awaiting_followup=min(self.quarantined) if self.quarantined else None
+        elif self.awaiting_followup==t and previous is not None and stamp>previous:
             self.discards[t]['followup_newer_received']=True;self.awaiting_followup=None
         self.increment(m,'timing_accepted');self.accepted=min(MAX_COUNTER,self.accepted+1)
         return t
 
     def report(self):
+        result=self._report()
+        if self.policy.quarantine:
+            result['regression_discard'].update(quarantined_markets=sorted(self.quarantined),quarantine_held=self.held,
+                release=QUARANTINE_RELEASE)
+        return result
+
+    def _report(self):
         return {'received_total':self.received,'timing_accepted_total':self.accepted,
                 'markets':copy.deepcopy(self.markets),'global_issues':dict(self.global_issues),'samples':list(self.samples),
                 'max_samples':MAX_SAMPLES,'max_report_bytes':MAX_REPORT_BYTES,'retained_log_files':0,
                 'reference_clock':'LOCAL_WALL_NOT_INDEPENDENTLY_VERIFIED_SERVER_TIME',
                 'server_relative_delay_ms':None,
-                'regression_policy':self.policy.identifier if self.policy==REPEAT_POLICY else
+                'regression_policy':self.policy.identifier if self.policy in (REPEAT_POLICY,QUARANTINE_POLICY) else
                     'EXPERIMENTAL_DISCARD_SMALL_REGRESSIONS' if self.discard_enabled else 'HALT_NO_TOLERANCE_OR_PRICE_FALLBACK',
                 'regression_discard':{'enabled':self.discard_enabled,'policy_id':self.policy.identifier,'discarded_total':self.discarded,
                     'markets':copy.deepcopy(self.discards),'awaiting_followup':self.awaiting_followup,

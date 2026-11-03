@@ -80,6 +80,15 @@ private `results.json`, `comparison.csv`, `REPORT.md`, `analysis.log`에 일별�
 
 ## 리뷰·병합 뒤 11월 6일 09:00 KST 이후 Mac 명령 한 블록
 
+**P25 이후 변경:** P25가 P22 고정 소스인 `ops/paper_experiment.py`를 수정했으므로, 작업 트리에서
+`python -m backtesting.p22_forward`를 직접 실행하면 변경되지 않은 `frozen()`이 `P22_FROZEN_CODE_CHANGED`로
+fail-closed 한다(의도된 동작). P22는 `tools/p22_isolated.py`로만 실행한다. 이 도구는 추적 파일을 임시
+디렉터리로 복사하고, 고정 파일 중 작업 트리와 다른 것(현재 `ops/paper_experiment.py` 1개)만
+`backtesting/p22_pinned/`의 **등록된 정확한 바이트**로 교체한 뒤, 프로토콜·등록·러너(`p22_forward.py`)·고정
+소스 20개 해시를 모두 검증하고, 그 안에서 변경되지 않은 `python -m backtesting.p22_forward ...`를 실행한다.
+그 실행의 `frozen()`이 다시 전부 검증한다. 해시 재등록·검사 완화·monkeypatch·환경변수 정책 전환은 없다.
+P25 입력 정책은 P22 실행 경로에 들어가지 않는다(P22는 P25 옵션을 쓰지 않고, 등록된 `paper_experiment.py`로 실행).
+
 검토된 P22 코드가 있는 checkout에서 실행한다. 아래 명령은 자동 예약이 아니다.
 첫 기본 OFF 점검에서 조기 `NOT_READY`/오류이면 즉시 끝나며 기다리지 않는다.
 그 뒤 명시적 수집 한 번, 오프라인 분석 한 번만 수행한다. 수집 오류 뒤에도 분석은
@@ -92,15 +101,15 @@ private `results.json`, `comparison.csv`, `REPORT.md`, `analysis.log`에 일별�
   umask 077
   cd "$HOME/projects/auto_trade"
   .venv/bin/python tools/check_safety.py >/dev/null
-  .venv/bin/python -m backtesting.p22_forward collect \
+  .venv/bin/python tools/p22_isolated.py collect \
     --output "$HOME/research/p22-offline-plan-unused"
   mkdir -p "$HOME/research"
   p22_dir="$(mktemp -d "$HOME/research/p22-private.XXXXXX")"
   set +e
-  .venv/bin/python -m backtesting.p22_forward collect --connect-public \
+  .venv/bin/python tools/p22_isolated.py collect --connect-public \
     --output "$p22_dir/sample" >"$p22_dir/collection-command.log" 2>&1
   p22_collection_code=$?
-  .venv/bin/python -m backtesting.p22_forward analyze \
+  .venv/bin/python tools/p22_isolated.py analyze \
     --input "$p22_dir/sample" --output "$p22_dir/analysis"
   p22_analysis_code=$?
   set -e

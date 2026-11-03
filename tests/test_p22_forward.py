@@ -207,3 +207,45 @@ class PipelineTests(unittest.TestCase):
                 out=p.base.fresh(root/'failed-collection');p.work(source,out,Mock());r=p.p20.read_results(out/'results.json')
                 self.assertEqual(r['status'],'INCOMPLETE');self.assertEqual(len(r['completed_policies']),12)
                 self.assertIn({'reason':'COLLECTION_NOT_COMPLETED'},r['input_issues'])
+
+
+class IsolatedP22Suite(unittest.TestCase):
+    """P25 changed the P22-pinned ops/paper_experiment.py, so frozen() fails closed in the working tree.
+
+    No P22 test is skipped: all 11 unchanged P22 tests run inside the isolated tree that
+    tools/p22_isolated.py builds from the exact registered bytes (verified by the unchanged frozen()).
+    """
+    def test_working_tree_fails_closed_only_on_registered_drift(self):
+        from tools import p22_isolated as iso
+        with self.assertRaisesRegex(ValueError,'P22_FROZEN_CODE_CHANGED'):p.frozen()
+        self.assertEqual(iso.working_tree_drift(),['ops/paper_experiment.py'])
+        spec=json.loads(Path(p.PROTOCOL).read_text())
+        self.assertEqual(iso.sha(iso.ROOT/iso.PINNED_COPIES['ops/paper_experiment.py']),spec['code_sha256']['ops/paper_experiment.py'])
+        self.assertEqual((iso.PROTOCOL_SHA,iso.REGISTRATION_SHA,iso.RUNNER_SHA),(p.PROTOCOL_SHA,p.REGISTRATION_SHA,p.runner_sha()))
+
+    def test_full_p22_suite_passes_in_isolated_registered_tree(self):
+        import subprocess,sys
+        from tools import p22_isolated as iso
+        expected=sum(unittest.defaultTestLoader.loadTestsFromTestCase(c).countTestCases() for c in ORIGINAL_P22_CASES)
+        self.assertEqual(expected,11)  # Every pre-P25 P22 test: 7 frozen + 2 limit + 2 pipeline.
+        with TemporaryDirectory() as d:
+            tree=Path(d).resolve()/'source'
+            self.assertEqual(iso.build(tree),['ops/paper_experiment.py'])
+            self.assertEqual(iso.verify(tree),json.loads(Path(p.PROTOCOL).read_text())['code_sha256'])
+            env={k:v for k,v in os.environ.items() if k!='PYTHONPATH'}
+            env.update(PYTHON_DOTENV_DISABLED='1',P22_ISOLATED_TREE='1')
+            out=subprocess.run([sys.executable,'-m','unittest','-v','tests.test_p22_forward'],cwd=tree,env=env,
+                               capture_output=True,text=True,timeout=600)
+        tail=out.stderr.strip().splitlines()
+        self.assertEqual(out.returncode,0,out.stderr[-3000:])
+        self.assertIn(f'Ran {expected} tests',out.stderr);self.assertEqual(tail[-1],'OK')  # No skips, failures or errors.
+
+
+ORIGINAL_P22_CASES=(FrozenTests,LimitTests,PipelineTests)
+
+
+def load_tests(loader,tests,pattern):
+    if os.environ.get('P22_ISOLATED_TREE')=='1':
+        # The complete original P22 suite, inside the registered tree.
+        return unittest.TestSuite(loader.loadTestsFromTestCase(c) for c in ORIGINAL_P22_CASES)
+    return loader.loadTestsFromTestCase(IsolatedP22Suite)

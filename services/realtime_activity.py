@@ -2,7 +2,7 @@
 import time
 
 from services.public_market import positive
-from services.tick_timing import TickTiming,numeric,discard_policy,REPEAT_POLICY
+from services.tick_timing import TickTiming,numeric,discard_policy,REPEAT_POLICY,BOUND_POLICIES,QUARANTINE_POLICY
 
 MAX_MARKETS=30
 MAX_MESSAGES=100_000
@@ -19,13 +19,15 @@ class ActivityError(ValueError):pass
 
 class Observation:
     def __init__(self,markets,*,wall=time.time,monotonic=time.monotonic,
-                 discard_small_regressions=False,clock_origin=None,discard_repeated_small_regressions=False):
+                 discard_small_regressions=False,clock_origin=None,discard_repeated_small_regressions=False,
+                 quarantine_regressions=False):
         if not 1<=len(markets)<=MAX_MARKETS:raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
         self.wall,self.monotonic=wall,monotonic
         self.start=monotonic();self.started_wall=wall();self.end=None
         self.guard=TickTiming(markets,self.started_wall,self.start,clock_origin=clock_origin,
                               discard_small_regressions=discard_small_regressions,
-                              discard_repeated_small_regressions=discard_repeated_small_regressions)
+                              discard_repeated_small_regressions=discard_repeated_small_regressions,
+                              quarantine_regressions=quarantine_regressions)
         self.stats={t:{'realtime':0,'snapshot':0,'unknown_type':0,'first_receive_ms':None,
                        'first_realtime_ms':None,'last_realtime_receive':None} for t in markets}
         self.observation_timing=None;self.observation_progress=None
@@ -100,15 +102,17 @@ class Observation:
                 or any(self.stats[t]['realtime']==0 or not 0<=now-self.guard.progress[t]<15 for t in selected)):
             raise ActivityError('ACTIVITY_START_EVIDENCE_EXPIRED')
 
-    def runtime_guard(self,selected,clock_origin,*,discard_small_regressions=False,discard_repeated_small_regressions=False):
+    def runtime_guard(self,selected,clock_origin,*,discard_small_regressions=False,discard_repeated_small_regressions=False,
+                      quarantine_regressions=False):
         self.validate_start(selected)
         if self.guard.discard_enabled:
-            # P15/P18 fixed explicit markets retain the SAME guard, budget and clock.
-            if (self.guard.policy!=discard_policy(discard_small_regressions,discard_repeated_small_regressions) or set(selected)!=set(self.stats)
+            # P15/P18/P25 fixed explicit markets retain the SAME guard, budget, high-water, quarantine and clock.
+            if (self.guard.policy!=discard_policy(discard_small_regressions,discard_repeated_small_regressions,quarantine_regressions)
+                    or set(selected)!=set(self.stats)
                     or clock_origin!=(self.guard.start_wall,self.guard.start_mono)):
                 raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
             return self.guard
-        if discard_repeated_small_regressions:raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
+        if discard_repeated_small_regressions or quarantine_regressions:raise ActivityError('ACTIVITY_OBSERVATION_FAILED')
         g=TickTiming(selected,self.wall(),self.monotonic(),clock_origin=clock_origin,discard_small_regressions=discard_small_regressions)
         g.previous={t:self.guard.previous[t] for t in selected}
         g.progress={t:self.guard.progress[t] for t in selected};g.last_progress=max(g.progress.values())
@@ -149,7 +153,7 @@ def timing_evidence(report):
             'samples':[{k:s.get(k) for k in ('issue','market','received_timestamp_ms','previous_timestamp_ms',
                 'timestamp_minus_previous_ms','local_receive_minus_timestamp_ms','wall_minus_monotonic_ms','idle_ms')}
                 for s in report['samples']]}
-    if d.get('policy_id')==REPEAT_POLICY.identifier:result['policy']=REPEAT_POLICY.evidence()
+    if d.get('policy_id') in BOUND_POLICIES:result['policy']=BOUND_POLICIES[d['policy_id']].evidence()
     return result
 
 
@@ -163,12 +167,14 @@ def validate_regression_evidence(value):
     require(type(value) is dict and set(value)=={'observation','combined','runtime_started','runtime_enabled','runtime_discarded'})
     require(type(value['runtime_started']) is bool and type(value['runtime_enabled']) is bool)
     policy=value['combined'].get('policy') if type(value['combined']) is dict else None
-    require(policy is None or (type(policy) is dict and policy==REPEAT_POLICY.evidence()
-            and type(policy.get('id')) is str and all(type(policy[k]) is int for k in
-                ('max_per_market','max_per_session','max_width_ms','max_session_seconds'))))
+    bound=BOUND_POLICIES.get(policy.get('id')) if type(policy) is dict and type(policy.get('id')) is str else None
+    require(policy is None or (bound is not None and policy==bound.evidence() and all(type(policy[k]) is int for k in
+                ('max_per_market','max_per_session','max_session_seconds'))
+            and (type(policy['max_width_ms']) is int if not bound.quarantine else policy['max_width_ms'] is None)))
     require(type(value['observation']) is dict and value['observation'].get('policy')==policy)
-    max_session=REPEAT_POLICY.max_per_session if policy is not None else 3
-    max_market=REPEAT_POLICY.max_per_market if policy is not None else 1
+    max_session=bound.max_per_session if bound is not None else 3
+    max_market=bound.max_per_market if bound is not None else 1
+    max_width=MAX_NUMBER if bound is not None and bound.quarantine else 5
     require(type(value['runtime_discarded']) is int and 0<=value['runtime_discarded']<=max_session)
     for stage in ('observation','combined'):
         row=value[stage]
@@ -181,7 +187,7 @@ def validate_regression_evidence(value):
             require(type(t) is str and MARKET.fullmatch(t) is not None)
             require(type(r) is dict and set(r)=={'count','width_ms','followup_newer_received'})
             require(type(r['count']) is int and 0<=r['count']<=max_market)
-            require(type(r['width_ms']) is int and 0<=r['width_ms']<=5)
+            require(type(r['width_ms']) is int and 0<=r['width_ms']<=max_width)
             require(r['followup_newer_received'] is None or type(r['followup_newer_received']) is bool)
         require(sum(r['count'] for r in row['markets'].values())==row['discarded'])
         require(row['awaiting_followup'] is None or row['awaiting_followup'] in row['markets'])
@@ -189,7 +195,7 @@ def validate_regression_evidence(value):
         for s in row['samples']:
             require(type(s) is dict and set(s)=={'issue','market','received_timestamp_ms','previous_timestamp_ms',
                 'timestamp_minus_previous_ms','local_receive_minus_timestamp_ms','wall_minus_monotonic_ms','idle_ms'})
-            require(s['issue'] in (*ISSUES,'SMALL_REGRESSION_DISCARDED'))
+            require(s['issue'] in (*ISSUES,'SMALL_REGRESSION_DISCARDED')+(('REGRESSION_QUARANTINED',) if max_width>5 else ()))
             require(s['market'] in row['markets'] or s['market']=='ALL_OR_UNKNOWN')
             for k,n in s.items():
                 if k not in ('issue','market'):require(n is None or (type(n) in (int,float) and -MAX_NUMBER<=n<=MAX_NUMBER))
