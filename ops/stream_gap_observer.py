@@ -24,6 +24,7 @@ MAX_SECONDS=3300          # 55 minutes.
 STARTUP_MARGIN_SECONDS=5  # Worker budget ends before the supervisor deadline.
 GRACE_SECONDS=15          # Same cleanup grace as the PAPER supervisor; then kill => INCOMPLETE.
 POLL_SECONDS=0.05
+CONTINUITY_SECONDS=1.0   # Max local interval between clock readings; longer => INCOMPLETE.
 MAX_DRAIN=1000
 MAX_MESSAGES=1_000_000
 MAX_RECORD_BYTES=65_536
@@ -61,6 +62,7 @@ class Connection:
         self.max_receive_gap=0.0;self.max_advance_gap=0.0
         self.close_rcvd_code=None;self.close_sent_code=None;self.keepalive_timeout_close=False
         self.first_receive_after=None;self.first_advance_after=None;self.gap_during_window=False
+        self.unrecorded=0
         self.settings=None
 
     def ref_receive(self):return self.last_receive if self.last_receive is not None else self.connected_at
@@ -115,7 +117,8 @@ class Connection:
             'regressed':self.regressed,'invalid':self.invalid,'realtime':self.realtime,'snapshot':self.snapshot,
             'other_stream_type':self.other_type,'max_receive_gap_ms':_ms(self.max_receive_gap*1000),
             'max_advance_gap_ms':_ms(self.max_advance_gap*1000),'close_rcvd_code':self.close_rcvd_code,
-            'close_sent_code':self.close_sent_code,'keepalive_timeout_close':self.keepalive_timeout_close}
+            'close_sent_code':self.close_sent_code,'keepalive_timeout_close':self.keepalive_timeout_close,
+            'unrecorded_after_stop':self.unrecorded}
 
 
 def applied_settings(stream):
@@ -131,8 +134,36 @@ def observe(budget,*,stream_factory,stopped=lambda:False,monotonic=time.monotoni
     """Bounded observation. Returns one allowlisted record; on_capture gets the first-gap snapshot at once."""
     from websockets.exceptions import ConnectionClosed
     start=monotonic();start_wall=wall();deadline=start+budget
-    conns=[];capture=None;capture_at=None;recovery_end=None;reason=None;max_drift=0.0;capture_persisted=None
+    conns=[];capture=None;capture_at=None;reason=None;max_drift=0.0;capture_persisted=None
+    last_check=None;max_interval=0.0;observed_until=None
     def drift(now):return ((wall()-start_wall)-(now-start))*1000
+    def continuous(t):
+        """Every local clock reading must follow the previous one within CONTINUITY_SECONDS.
+
+        A longer local pause (scheduler, sleep, slow drain) means messages read afterwards may have been
+        buffered for an unknown time, so the observation is not certified (INCOMPLETE) and nothing read
+        after the pause is recorded. Queued message timestamps are never used as arrival times.
+        """
+        nonlocal last_check,max_interval,observed_until
+        interval=t-last_check;max_interval=max(max_interval,interval);last_check=t
+        if interval>CONTINUITY_SECONDS or interval<0:return False
+        observed_until=t;return True
+    def window_end():return min(capture_at+recovery,deadline) if capture_at is not None else deadline
+    def evaluate(t):
+        """Gap accounting and first-gap capture at t, BEFORE any message read at t overwrites references."""
+        nonlocal capture,capture_at,capture_persisted
+        for c in conns:
+            if c.state!='RUNNING':continue
+            since_r,since_a,kind=c.gaps(t,gap)
+            c.max_receive_gap=max(c.max_receive_gap,since_r or 0.0);c.max_advance_gap=max(c.max_advance_gap,since_a or 0.0)
+            if capture is not None and kind!='NONE' and capture['connections'][c.name]['gap_kind']=='NONE':c.gap_during_window=True
+        if capture is None and any(c.state=='RUNNING' and c.gaps(t,gap)[2]!='NONE' for c in conns):
+            capture_at=t
+            capture={'schema':SCHEMA,'kind':'GAP_CAPTURED','at_elapsed_ms':_ms((t-start)*1000),
+                'wall_minus_monotonic_ms':_ms(drift(t)),'threshold_ms':int(gap*1000),
+                'connections':{c.name:c.view(t,gap) for c in conns}}
+            try:on_capture(json.loads(json.dumps(capture)));capture_persisted=True  # Saved before recovery watch.
+            except Exception:capture_persisted=False
     try:
         for name in CONNECTIONS:
             conn=Connection(name,None);conns.append(conn)
@@ -140,37 +171,34 @@ def observe(budget,*,stream_factory,stopped=lambda:False,monotonic=time.monotoni
                 conn.stream=stream_factory(list(MARKETS));conn.stream.connect()
             except Exception:
                 conn.end('CONNECT_FAILED');reason='CONNECT_FAILED';break
-            conn.connected_at=monotonic();conn.state='RUNNING';conn.settings=applied_settings(conn.stream)
+            conn.state='RUNNING';conn.settings=applied_settings(conn.stream)
+        observation_start=monotonic();last_check=observation_start;observed_until=observation_start
+        for conn in conns:conn.connected_at=observation_start  # Same origin: nothing is read while connecting.
         while reason is None:
             now=monotonic()
+            if not continuous(now):reason='OBSERVATION_CONTINUITY_LOST';break
             if stopped():reason='STOP_REQUESTED';break
+            if capture is not None and now>=capture_at+recovery:reason='RECOVERY_WINDOW_COMPLETE';break
             if now>=deadline:
                 reason='NOT_REPRODUCED_DEADLINE' if capture is None else 'RECOVERY_WINDOW_TRUNCATED';break
+            max_drift=max(max_drift,abs(drift(now)))
+            evaluate(now)
             for conn in conns:
-                if conn.state!='RUNNING':continue
+                if conn.state!='RUNNING' or reason is not None:continue
                 for _ in range(MAX_DRAIN):
                     try:data=conn.stream.get()
                     except TimeoutError:break
                     except ConnectionClosed as exc:conn.end('CONNECTION_CLOSED',exc);break
                     except Exception:conn.end('READ_OR_DECODE_ERROR');break
-                    conn.record(data,monotonic(),capture_at)
+                    t=monotonic()
+                    if not continuous(t):reason='OBSERVATION_CONTINUITY_LOST';conn.unrecorded+=1;break
+                    if t>=window_end():conn.unrecorded+=1;break  # Read at/after the window: never in-window recovery.
+                    evaluate(t)
+                    conn.record(data,t,capture_at)
                     if conn.received>=MAX_MESSAGES:conn.end('MESSAGE_LIMIT');break
-            now=monotonic();max_drift=max(max_drift,abs(drift(now)))
+            if reason is not None:break
             if any(c.state=='ENDED' for c in conns) and (capture is None or all(c.state=='ENDED' for c in conns)):
                 reason='CONNECTION_ENDED_BEFORE_GAP' if capture is None else 'ALL_CONNECTIONS_ENDED_DURING_RECOVERY';break
-            for c in conns:
-                if c.state=='RUNNING':
-                    since_r,since_a,kind=c.gaps(now,gap)
-                    c.max_receive_gap=max(c.max_receive_gap,since_r or 0.0);c.max_advance_gap=max(c.max_advance_gap,since_a or 0.0)
-                    if capture is not None and kind!='NONE' and capture['connections'][c.name]['gap_kind']=='NONE':c.gap_during_window=True
-            if capture is None and any(c.state=='RUNNING' and c.gaps(now,gap)[2]!='NONE' for c in conns):
-                capture_at=now;recovery_end=min(now+recovery,deadline)
-                capture={'schema':SCHEMA,'kind':'GAP_CAPTURED','at_elapsed_ms':_ms((now-start)*1000),
-                    'wall_minus_monotonic_ms':_ms(drift(now)),'threshold_ms':int(gap*1000),
-                    'connections':{c.name:c.view(now,gap) for c in conns}}
-                try:on_capture(json.loads(json.dumps(capture)));capture_persisted=True  # Saved before recovery watch.
-                except Exception:capture_persisted=False
-            if capture is not None and now>=capture_at+recovery:reason='RECOVERY_WINDOW_COMPLETE';break
             sleep(poll)
     except Exception:
         reason=reason or 'OBSERVER_FAILED'
@@ -198,7 +226,8 @@ def observe(budget,*,stream_factory,stopped=lambda:False,monotonic=time.monotoni
     record={'schema':SCHEMA,'kind':'FINAL','status':status,'reason':reason,'cleanup_error':cleanup_error,
         'elapsed_ms':_ms((end-start)*1000),'budget_ms':_ms(budget*1000),'threshold_ms':int(gap*1000),
         'recovery_window_ms':int(recovery*1000),
-        'recovery_window_observed_ms':_ms((min(end,recovery_end)-capture_at)*1000) if capture_at is not None else None,
+        'recovery_window_observed_ms':_ms((min(observed_until,capture_at+recovery)-capture_at)*1000) if capture_at is not None else None,
+        'continuity_limit_ms':int(CONTINUITY_SECONDS*1000),'max_local_poll_interval_ms':_ms(max_interval*1000),
         'capture':capture,'capture_persisted':capture_persisted,
         'connections':{c.name:{**c.view(end,gap),'recovery':recovery_view(c),'applied_settings':c.settings} for c in conns},
         'max_abs_wall_minus_monotonic_ms':_ms(max_drift),'pong':dict(PONG),'library':'websockets','library_version':library_version(),
@@ -318,7 +347,7 @@ def summarize(result):
         if d is None or type(d) in (bool,int,float):return d
         return ''.join(ch for ch in str(d) if ch.isalnum() or ch in '_.-')[:48]
     cap=result.get('capture') if isinstance(result.get('capture'),dict) else {}
-    lines=[f"1 P24 status={g(result,'status')} reason={g(result,'reason')} elapsed_ms={g(result,'elapsed_ms')} forced={g(result,'forced_termination')} cleanup={g(result,'cleanup_error')}",
+    lines=[f"1 P24 status={g(result,'status')} reason={g(result,'reason')} elapsed_ms={g(result,'elapsed_ms')} forced={g(result,'forced_termination')} cleanup={g(result,'cleanup_error')} max_poll_ms={g(result,'max_local_poll_interval_ms')}/{g(result,'continuity_limit_ms')}",
            f"2 capture at_ms={g(cap,'at_elapsed_ms')} drift_ms={g(cap,'wall_minus_monotonic_ms')} window_ms={g(result,'recovery_window_observed_ms')}/{g(result,'recovery_window_ms')} persisted={g(result,'capture_persisted')}"]
     for i,name in enumerate(CONNECTIONS):
         c=cap['connections'].get(name,{}) if isinstance(cap.get('connections'),dict) else {}

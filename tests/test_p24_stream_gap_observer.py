@@ -162,6 +162,78 @@ class ObserveTests(unittest.TestCase):
         self.assertEqual((r['status'],r['capture_persisted']),('INCOMPLETE',False))
 
 
+class StallClock(Clock):
+    """Clock whose sleep() jumps once from `at` to `to` (a CPU/scheduler pause)."""
+    def __init__(self,at,to):super().__init__();self.at=at;self.to=to;self.done=False
+    def sleep(self,s):
+        super().sleep(s)
+        if not self.done and self.t>=self.at:self.t=self.to;self.done=True
+
+
+class SlowReadStream(FakeStream):
+    """Each successful get() after `from_t` costs `cost` seconds (a slow drain)."""
+    def __init__(self,clock,script,from_t,cost):super().__init__(clock,script);self.from_t=from_t;self.cost=cost
+    def get(self):
+        item=super().get()
+        if self.clock.t>=self.from_t:self.clock.t=round(self.clock.t+self.cost,6)
+        return item
+
+
+class ContinuityAndWindowTests(unittest.TestCase):
+    """Review 5746686450 regressions: late reads are not in-window recovery; local stalls are not certified."""
+    def observe(self,clock,factory,budget=120):
+        return obs.observe(budget,stream_factory=factory,monotonic=clock.mono,wall=clock.wall,sleep=clock.sleep,on_capture=lambda c:None)
+
+    def test_read_after_recovery_boundary_is_not_recovery(self):
+        clock=StallClock(44.95,45.2)
+        r=self.observe(clock,lambda _:FakeStream(clock,[(0,tick(1000)),(45.1,tick(2000))]))
+        self.assertAlmostEqual(r['capture']['at_elapsed_ms'],15000.0,delta=1)
+        for name in ('C1','C2'):
+            rec=r['connections'][name]['recovery']
+            self.assertEqual(rec['classification'],'NOT_RECOVERED_WITHIN_WINDOW')
+            self.assertIsNone(rec['first_receive_after_capture_ms']);self.assertIsNone(rec['first_advance_after_capture_ms'])
+        self.assertEqual(r['recovery_window_observed_ms'],30000.0)
+        self.assertEqual((r['status'],r['reason']),('REPRODUCED','RECOVERY_WINDOW_COMPLETE'))
+
+    def test_exact_recovery_boundary_read_is_not_counted(self):
+        clock=Clock()
+        r=self.observe(clock,lambda _:FakeStream(clock,[(0,tick(1000)),(45.0,tick(2000))]))
+        self.assertEqual(r['connections']['C1']['recovery']['classification'],'NOT_RECOVERED_WITHIN_WINDOW')
+
+    def test_slow_drain_across_boundary_is_not_counted(self):
+        clock=Clock()
+        script=[(0,tick(1000))]+[(round(44.9+i*.01,6),tick(2000+i)) for i in range(5)]
+        r=self.observe(clock,lambda _:SlowReadStream(clock,script,44.9,.3))
+        for name in ('C1','C2'):
+            rec=r['connections'][name]['recovery']
+            self.assertLess(rec['first_receive_after_capture_ms'] or 0,30000)
+            if rec['first_receive_after_capture_ms'] is not None:self.assertEqual(rec['classification'],'RECEIVE_AND_ADVANCE_RESUMED')
+        self.assertLessEqual(r['connections']['C1']['received']+r['connections']['C2']['received'],2+3)
+
+    def test_scheduler_pause_is_continuity_loss_not_no_gap(self):
+        clock=StallClock(.45,20.0)
+        r=self.observe(clock,lambda _:FakeStream(clock,[(0,tick(1000))]+steady(17,80,stamp0=5000)),budget=60)
+        self.assertEqual((r['status'],r['reason'],r['capture']),('INCOMPLETE','OBSERVATION_CONTINUITY_LOST',None))
+        self.assertGreaterEqual(r['max_local_poll_interval_ms'],19000)
+        self.assertEqual(r['continuity_limit_ms'],1000)
+        for name in ('C1','C2'):
+            c=r['connections'][name]
+            self.assertEqual(c['received'],1)  # Buffered ticks after the pause are not recorded as live receipts.
+            self.assertLess(c['max_receive_gap_ms'],1000)
+
+    def test_slow_drain_stall_is_continuity_loss(self):
+        clock=Clock()
+        r=self.observe(clock,lambda _:SlowReadStream(clock,steady(0,80),3,2.0),budget=60)
+        self.assertEqual((r['status'],r['reason']),('INCOMPLETE','OBSERVATION_CONTINUITY_LOST'))
+
+    def test_stall_after_capture_keeps_capture_but_is_incomplete(self):
+        clock=StallClock(20,25)
+        r=self.observe(clock,lambda _:FakeStream(clock,[(0,tick(1000))]+steady(22,80,stamp0=5000)))
+        self.assertIsNotNone(r['capture'])
+        self.assertEqual((r['status'],r['reason']),('INCOMPLETE','OBSERVATION_CONTINUITY_LOST'))
+        self.assertIsNone(r['connections']['C1']['recovery']['first_receive_after_capture_ms'])
+
+
 def _worker_ok(seconds,stop,pipe):
     pipe.send({'schema':obs.SCHEMA,'kind':'GAP_CAPTURED','at_elapsed_ms':1.0,'connections':{}})
     pipe.send({'schema':obs.SCHEMA,'kind':'FINAL','status':'REPRODUCED','reason':'RECOVERY_WINDOW_COMPLETE','capture':None})
