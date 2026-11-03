@@ -276,13 +276,13 @@ class IsolationAndCliTests(unittest.TestCase):
 
     def test_output_directory_must_be_private_empty_and_outside_project(self):
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d)/'out';p.mkdir(mode=0o700)
+            p=Path(d).resolve()/'out';p.mkdir(mode=0o700)  # macOS /var -> /private/var
             self.assertEqual(obs.private_directory(p),p.resolve())
             (p/'x').write_text('x')
             with self.assertRaisesRegex(ValueError,'OUTPUT_NOT_EMPTY'):obs.private_directory(p)
-            q=Path(d)/'open';q.mkdir();q.chmod(0o755)
+            q=Path(d).resolve()/'open';q.mkdir();q.chmod(0o755)
             with self.assertRaisesRegex(ValueError,'OUTPUT_NOT_PRIVATE'):obs.private_directory(q)
-            link=Path(d)/'link';link.symlink_to(p)
+            link=Path(d).resolve()/'link';link.symlink_to(p)
             with self.assertRaisesRegex(ValueError,'SYMLINK'):obs.private_directory(link)
         with self.assertRaisesRegex(ValueError,'PROJECT'):obs.private_directory(ROOT/'docs')
 
@@ -291,7 +291,7 @@ class IsolationAndCliTests(unittest.TestCase):
               'connections':{'C1':{'received':3},'C2':{'received':3}},'pong':obs.PONG}
         def supervise(seconds,*,write):write(fake);return dict(fake)
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d)/'out';p.mkdir(mode=0o700);out=io.StringIO()
+            p=Path(d).resolve()/'out';p.mkdir(mode=0o700);out=io.StringIO()  # macOS /var -> /private/var
             with patch.object(obs,'supervise',supervise),contextlib.redirect_stdout(out):
                 code=obs.main(['--connect-public','--seconds','60','--output-dir',str(p)])
             lines=out.getvalue().splitlines()
@@ -302,7 +302,7 @@ class IsolationAndCliTests(unittest.TestCase):
             self.assertNotIn(d,out.getvalue())
         incomplete=dict(fake,status='INCOMPLETE',reason='FORCED_TERMINATION')
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d)/'out';p.mkdir(mode=0o700)
+            p=Path(d).resolve()/'out';p.mkdir(mode=0o700)  # macOS /var -> /private/var
             with patch.object(obs,'supervise',lambda s,*,write:dict(incomplete)),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(obs.main(['--connect-public','--seconds','60','--output-dir',str(p)]),2)
 
