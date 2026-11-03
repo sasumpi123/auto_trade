@@ -166,6 +166,11 @@ class TickTiming:
                 self.samples.append({'issue':'SMALL_REGRESSION_DISCARDED','market':t,**details})
                 return None
             self.fail('TIMESTAMP_REGRESSION',t,**details)
+        if self.policy.quarantine and check_liveness and t in self.quarantined and stamp>previous:
+            # P25 runtime release: check the PRE-update 15 s/60 s watchdogs before any high-water,
+            # progress, release or price forwarding, so a delayed follow-up cannot erase an expired deadline.
+            # (Legacy modes and the pre-trade observation's measurement contract keep their old order.)
+            self.idle(wall,mono)
         if previous==stamp:
             self.increment(m,'equal_timestamp')
             if t in self.quarantined:

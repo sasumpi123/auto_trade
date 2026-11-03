@@ -90,6 +90,36 @@ class QuarantineTimingTests(unittest.TestCase):
         for n in range(1,61):self.send(g,n*1000,n,'KRW-ETH')
         with self.assertRaisesRegex(TickTimingError,'PAPER_MARKET_STALE'):self.send(g,61_000,61,'KRW-ETH')
 
+    def test_release_tick_cannot_erase_expired_15s_watchdog(self):
+        """Review 5748275358: a delayed advancing follow-up must not reset an already-expired deadline."""
+        for at,ok in ((15.099,True),(15.1,False),(15.101,False)):
+            with self.subTest(at=at):
+                g=self.guard();self.send(g,100,.1);self.assertIsNone(self.send(g,69,.2))
+                if ok:
+                    self.assertEqual(self.send(g,101,at),'KRW-BTC');self.assertIsNone(g.awaiting_followup)
+                else:
+                    before=(dict(g.previous),dict(g.progress),g.last_progress,g.accepted)
+                    with self.assertRaisesRegex(TickTimingError,'PAPER_STREAM_TIMEOUT'):self.send(g,101,at)
+                    self.assertEqual(before,(g.previous,g.progress,g.last_progress,g.accepted))  # Nothing refreshed/forwarded.
+                    self.assertEqual(g.awaiting_followup,'KRW-BTC')
+
+    def test_release_tick_cannot_erase_expired_60s_market_watchdog_with_other_market_active(self):
+        for at,ok in ((60.099,True),(60.1,False),(60.101,False)):
+            with self.subTest(at=at):
+                g=self.guard(('KRW-BTC','KRW-ETH'));self.send(g,100,.1);self.assertIsNone(self.send(g,69,.2))
+                for n in range(1,61):self.assertEqual(self.send(g,n*1000,n-.5,'KRW-ETH'),'KRW-ETH')  # Global healthy.
+                if ok:self.assertEqual(self.send(g,60_000,at),'KRW-BTC')
+                else:
+                    with self.assertRaisesRegex(TickTimingError,'PAPER_MARKET_STALE'):self.send(g,60_000,at)
+                    self.assertEqual(g.awaiting_followup,'KRW-BTC');self.assertEqual(g.progress['KRW-BTC'],.1)
+
+    def test_observation_measurement_contract_and_old_modes_keep_legacy_ordering(self):
+        g=self.guard();self.send(g,100,.1);g.observe(frame(69),WALL+.2,.2,check_liveness=False)
+        self.assertEqual(g.observe(frame(101),WALL+20,20,check_liveness=False),'KRW-BTC')  # Observation disables liveness.
+        for kw in ({},{'discard_small_regressions':True},{'discard_small_regressions':True,'discard_repeated_small_regressions':True}):
+            g=TickTiming(['KRW-BTC'],WALL,0,**kw);self.send(g,100,.1)
+            self.assertEqual(self.send(g,101,15.1),'KRW-BTC')  # Unchanged legacy order: refresh, then check.
+
     def test_policy_is_exclusive_immutable_and_old_evidence_unchanged(self):
         from dataclasses import FrozenInstanceError
         for args in ((True,False,True),(True,True,True),(False,True,True),(False,False,1)):
@@ -185,7 +215,8 @@ class QuarantineSessionTests(unittest.TestCase):
                     self.run+=1;i=self.run
                     events=[(1.1,1100,10000)]
                     if owner.phase=='split':events+=[(1.2,1100-owner.width,POISON),(1.25,1100,POISON)]
-                    if not owner.missing_followup:events+=[(1.3,1300,10010),(1.4,1400,10010)]
+                    if owner.phase=='late_followup':events+=[(1.2,1100-owner.width,POISON),(16.1,1300,10010)]
+                    if not owner.missing_followup and owner.phase!='late_followup':events+=[(1.3,1300,10010),(1.4,1400,10010)]
                     if i>len(events):owner.now=1.5;owner.stop.set();raise TimeoutError()
                     at,stamp,price=events[i-1]
                 owner.now=at
@@ -249,6 +280,14 @@ class QuarantineSessionTests(unittest.TestCase):
                        'discarded obs/runtime/total=1/1/2','followup=True','buys/sells=1/1','fee/slip/spread_bps=5/5/2'):
             self.assertIn(needle,text)
         self.assertNotIn(POISON,text);self.assertNotIn(str(self.parent),text)
+
+    def test_delayed_get_returning_followup_after_15s_halts_without_forwarding(self):
+        self.phase='late_followup';r,end=self.run_case()
+        self.assertEqual((r['status'],r['reason'],end['status']),('HALTED','PAPER_STREAM_TIMEOUT','HALTED'))
+        self.assertEqual(r['orders'],1)  # Only the earlier BUY; the late follow-up never reached strategy/orders.
+        self.assertNotIn(10010,self.prices);self.assertNotIn(POISON,self.prices)
+        self.assertEqual(r['markets']['KRW-BTC']['last_price'],'10000')
+        self.assertEqual(r['tick_timing']['regression_discard']['quarantined_markets'],['KRW-BTC'])
 
     def test_same_minus_31ms_still_halts_existing_p18_mode(self):
         self.bound='P18_BOUNDED_REPEAT_V1'

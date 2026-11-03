@@ -32,7 +32,11 @@
    (가격 파싱/전략/위험관리/주문/체결/평가로 가지 않음). 예산 초과는 `TIMESTAMP_REGRESSION` → `PAPER_STALE_TICK`.
 3. 격리 중 같은 종목의 동일 timestamp(비전진)는 거래 경로로 보내지 않고(`quarantine_held`) 해제 증거도 아니다.
    다른 종목 메시지는 정상 처리하되 해제 증거가 아니다.
-4. high-water보다 큰 유효 후속 → 격리 해제(`followup_newer_received=true`), 정상 승인.
+4. high-water보다 큰 유효 후속 → **런타임에서는 갱신 전에 15초/60초 watchdog을 먼저 검사**한다(리뷰 5748275358).
+   지연된 `get()`이 경계 뒤에 후속을 돌려줘도 만료된 기한을 지우지 못하고 기존 사유(`PAPER_STREAM_TIMEOUT`/
+   `PAPER_MARKET_STALE`)로 HALT하며, 가격·high-water·진행 시각·해제는 반영되지 않는다. 통과하면 격리 해제
+   (`followup_newer_received=true`), 정상 승인. 사전 관측 단계(liveness 측정 비활성 계약)와 기존 strict/P15/P18의
+   순서는 바꾸지 않았다.
 5. 관측 종료·런타임 시작 검사·세션 종료 시 미해제 격리가 남으면 `TIMESTAMP_REGRESSION`으로 실패(기존 P18 경로).
    자동 재접속·재시작·HALT 해제·자동 청산 없음.
 
