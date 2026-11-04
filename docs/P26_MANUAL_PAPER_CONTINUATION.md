@@ -38,6 +38,9 @@ STOPPED_VERIFIED(run 1, 체크포인트 有) --begin(resume)--> IN_PROGRESS(run 
   - 하나라도 어긋나면 네트워크·엔진 전에 차단한다.
 - **체크포인트:** 정상 종료(`finish`) 때 `p26_checkpoint`를 기록한다(세션 ID, 종료 원장 SHA, high-water, 계좌 누적 폐기 수, 미해소 격리 없음).
   - 재개 시 같은 세션의 `regression_checkpoint` 증거와 대조한다. 누적 수 = 이전 누적 + 이 세션 폐기 수이며, 단일 필드를 낮춘 변조는 거부된다.
+  - 내용 digest가 체크포인트 전체(high-water 포함)를 marker의 세션 ID·종료 원장 SHA·같은 세션 회귀 증거와 결속한다.
+    high-water 한 값만 낮추거나 종목 키를 지우면 거부된다. 이 세션에 승인된 틱이 있으면 high-water 키가 있어야 하고,
+    이전 이월값보다 낮을 수 없다(리뷰 5761233853).
   - 오래된 체크포인트 재사용은 세션 ID·SHA 불일치로 막힌다.
   - 동시 재개는 락과 IN_PROGRESS로 막힌다.
   - 여러 파일을 일관되게 함께 되돌리는 롤백까지 탐지한다고 주장하지 않는다.
@@ -104,7 +107,7 @@ STOPPED_VERIFIED(run 1, 체크포인트 有) --begin(resume)--> IN_PROGRESS(run 
   .venv/bin/python -m ops.paper_bot report --directory "$d/account" --limit 20 >"$d/report-1.json" 2>"$d/report-1.stderr"
   report_code=$?
   set -e
-  .venv/bin/python tools/p26_paper_summary.py "$d/run-1.log" "$d/report-1.json" "$run_code" "$report_code"
+  .venv/bin/python -m tools.p26_paper_summary "$d/run-1.log" "$d/report-1.json" "$run_code" "$report_code"
   [ "$run_code" -eq 0 ] && [ "$report_code" -eq 0 ] || exit 2
 )
 ```
@@ -131,7 +134,7 @@ STOPPED_VERIFIED(run 1, 체크포인트 有) --begin(resume)--> IN_PROGRESS(run 
   .venv/bin/python -m ops.paper_bot report --directory "$d/account" --limit 20 >"$d/report-2.json" 2>"$d/report-2.stderr"
   report_code=$?
   set -e
-  .venv/bin/python tools/p26_paper_summary.py "$d/run-2.log" "$d/report-2.json" "$run_code" "$report_code"
+  .venv/bin/python -m tools.p26_paper_summary "$d/run-2.log" "$d/report-2.json" "$run_code" "$report_code"
   [ "$run_code" -eq 0 ] && [ "$report_code" -eq 0 ] || exit 2
 )
 ```

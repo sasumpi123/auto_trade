@@ -298,6 +298,7 @@ def finish(value,token,result,*,record_summary=False):
             # P26: carry ONLY a checkpoint bound to this session and its exact end ledger hash.
             from ops import paper_continuation as cont
             m['p26_checkpoint']=cont.checkpoint_from_report(leaf.get('tick_timing'),token,m['end_sha256'],m['p26'])
+            m['p26_checkpoint']['digest']=cont.checkpoint_digest(m['p26_checkpoint'],m)
         if record_summary and m['phase']=='STOPPED_VERIFIED':
             from ops.paper_session import state_summary
             markets=leaf.get('markets',{})

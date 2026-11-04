@@ -1,5 +1,6 @@
 """P26 offline summary of one private run.log/report.json pair: at most 8 short lines.
 
+Run from the repository root as `python -m tools.p26_paper_summary`.
 Read-only; no network, account write, raw line, price, path or credential output.
 """
 import sys
@@ -36,7 +37,7 @@ def summarize(rows,report,run_exit=None,report_exit=None):
 def main(argv=None):
     args=list(sys.argv[1:] if argv is None else argv)
     if len(args) not in (2,4):
-        print('Usage: python tools/p26_paper_summary.py RUN_LOG REPORT_JSON [RUN_EXIT REPORT_EXIT]');return 2
+        print('Usage: python -m tools.p26_paper_summary RUN_LOG REPORT_JSON [RUN_EXIT REPORT_EXIT]');return 2
     try:rows=_rows(args[0])
     except (OSError,ValueError):
         print('1 run.log unreadable or too large; nothing else read');return 2

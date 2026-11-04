@@ -94,6 +94,11 @@ def reserve(mode,seconds,previous=None,current_sha=None):
     for t in set(checkpoint['counts'])|set(session_counts)|set(old['prior']['counts']):
         require(checkpoint['counts'].get(t,0)==old['prior']['counts'].get(t,0)+session_counts.get(t,0),'P26_CHECKPOINT_EVIDENCE_MISMATCH')
     require(checkpoint['total']==old['prior']['total']+combined.get('discarded',-1),'P26_CHECKPOINT_EVIDENCE_MISMATCH')
+    # High-water: a market that accepted ticks this session must keep its key; never below the prior carry.
+    accepted=combined.get('accepted')
+    require(type(accepted) is int and accepted>=0,'P26_CHECKPOINT_EVIDENCE_MISSING')
+    if accepted>0:require(set(MARKETS)<=set(checkpoint['high_water_ms']),'P26_HIGH_WATER_MISSING')
+    require(all(checkpoint['high_water_ms'].get(t,0)>=v for t,v in old['prior']['high_water_ms'].items()),'P26_HIGH_WATER_REGRESSED')
     total=old['reserved_seconds_total']+seconds
     require(total<=MAX_TOTAL_SECONDS,'P26_TOTAL_SECONDS_EXHAUSTED')
     # An exhausted discard budget blocks the resume BEFORE start (no refill, no silent zero-tolerance run).
@@ -127,9 +132,22 @@ def checkpoint_from_report(timing_report,session_id,state_sha,block):
     return checkpoint
 
 
+def checkpoint_digest(checkpoint,previous):
+    """Content digest binding every checkpoint field (incl. high-water) to the marker's session, end ledger
+    SHA and the same session's regression evidence. Detects a single lowered/deleted value; a deliberate,
+    coordinated rewrite of the same file (recomputing this digest) is outside what this can prove."""
+    import hashlib,json
+    body={k:v for k,v in checkpoint.items() if k!='digest'}
+    rc=previous.get('regression_checkpoint')
+    payload={'checkpoint':body,'session_id':previous.get('session_id'),'end_sha256':previous.get('end_sha256'),
+             'regression_evidence':rc.get('evidence') if isinstance(rc,dict) else None}
+    return hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+
 def validate_checkpoint(checkpoint,previous,current_sha=None):
     require(type(checkpoint) is dict and set(checkpoint)=={'session_id','state_sha256','policy','run_index',
-            'high_water_ms','counts','total','quarantined'},'P26_CHECKPOINT_MISSING_OR_INVALID')
+            'high_water_ms','counts','total','quarantined','digest'},'P26_CHECKPOINT_MISSING_OR_INVALID')
+    require(checkpoint['digest']==checkpoint_digest(checkpoint,previous),'P26_CHECKPOINT_DIGEST_MISMATCH')
     require(checkpoint['policy']==POLICY_ID and checkpoint['quarantined']==[],'P26_UNRESOLVED_QUARANTINE')
     require(checkpoint['session_id']==previous.get('session_id') and checkpoint['state_sha256']==previous.get('end_sha256')
             and checkpoint['run_index']==(previous.get('p26') or {}).get('run_index'),'P26_CHECKPOINT_NOT_BOUND')

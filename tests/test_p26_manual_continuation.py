@@ -60,8 +60,12 @@ class ReservationTests(unittest.TestCase):
         m={'session_id':'a'*32,'previous_session':None,'phase':'STOPPED_VERIFIED','end_sha256':'f'*64,'p26':block,
            'p26_checkpoint':{'session_id':'a'*32,'state_sha256':'f'*64,'policy':cont.POLICY_ID,'run_index':1,
                              'high_water_ms':{'KRW-BTC':5},'counts':{'KRW-BTC':2},'total':2,'quarantined':[]},
-           'regression_checkpoint':{'evidence':{'combined':{'discarded':2,'markets':{'KRW-BTC':{'count':2}}}}}}
-        m.update(over);return m
+           'regression_checkpoint':{'evidence':{'combined':{'discarded':2,'accepted':3,'markets':{'KRW-BTC':{'count':2}}}}}}
+        m.update(over)
+        if isinstance(m.get('p26_checkpoint'),dict) and 'digest' not in over.get('p26_checkpoint',{}):
+            m['p26_checkpoint']=dict(m['p26_checkpoint']);m['p26_checkpoint'].pop('digest',None)
+            m['p26_checkpoint']['digest']=cont.checkpoint_digest(m['p26_checkpoint'],m)
+        return m
 
     def test_exact_second_and_run_limits(self):
         self.assertEqual(cont.reserve('resume',3600,self.marker(),'f'*64)['reserved_seconds_total'],7200)  # Exact cap.
@@ -81,7 +85,7 @@ class ReservationTests(unittest.TestCase):
                'unresolved':('f'*64,{'p26_checkpoint':dict(self.marker()['p26_checkpoint'],quarantined=['KRW-BTC'])}),
                'missing':('f'*64,{'p26_checkpoint':None}),'not_stopped':('f'*64,{'phase':'PREPARATION_FAILED'}),
                'exhausted':('f'*64,{'p26_checkpoint':dict(self.marker()['p26_checkpoint'],counts={'KRW-BTC':10},total=10),
-                    'regression_checkpoint':{'evidence':{'combined':{'discarded':10,'markets':{'KRW-BTC':{'count':10}}}}}}),
+                    'regression_checkpoint':{'evidence':{'combined':{'discarded':10,'accepted':3,'markets':{'KRW-BTC':{'count':10}}}}}}),
                'no_evidence':('f'*64,{'regression_checkpoint':None})}
         for name,(current,over) in cases.items():
             with self.subTest(case=name),self.assertRaises(ValueError):cont.reserve('resume',10,self.marker(**over),current)
@@ -299,6 +303,39 @@ class ContinuationSessionTests(unittest.TestCase):
                        'buys/sells=1/1','costs=5/5/2','resume_allowed=False','public SELL settled=YES'):
             self.assertIn(needle,text)
         self.assertNotIn(POISON,text);self.assertNotIn(str(self.parent),text)
+
+    def test_tampered_high_water_in_real_stopped_marker_is_rejected_before_reservation(self):
+        """Review 5761233853: lowering or deleting the carried high-water must not pass resume."""
+        r1,e1,t1=self.session('first',self.RUN1,['BUY']);self.assertEqual(e1['status'],'STOPPED_VERIFIED')
+        path=self.experiment/'session.json';good=path.read_bytes()
+        hw=json.loads(good)['p26_checkpoint']['high_water_ms']['KRW-BTC']
+        for name,value in (('lowered',{'KRW-BTC':hw-1}),('tiny',{'KRW-BTC':1}),('deleted',{})):
+            with self.subTest(case=name):
+                bad=json.loads(good);bad['p26_checkpoint']['high_water_ms']=value;path.write_text(json.dumps(bad))
+                before=(path.read_bytes(),self.state.read_bytes(),exp.first_use_path(self.experiment).read_bytes())
+                with self.assertRaises(ValueError):exp.begin(self.experiment,p26='resume',seconds=30)
+                self.assertEqual(before,(path.read_bytes(),self.state.read_bytes(),exp.first_use_path(self.experiment).read_bytes()))
+        path.write_bytes(good)
+        # The untampered checkpoint still carries normally: below/equal/advance behave as before.
+        self.wall+=2;r2,e2,_=self.session('resume',self.run2(),['SELL']);self.assertEqual(e2['status'],'STOPPED_VERIFIED')
+        self.assertEqual(r2['p26_account']['session_discards'],1)
+
+    def test_documented_summary_command_runs_without_pythonpath(self):
+        import subprocess,sys,tempfile
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[1]
+        doc=(root/'docs/P26_MANUAL_PAPER_CONTINUATION.md').read_text(encoding='utf-8')
+        self.assertNotIn('tools/p26_paper_summary.py',doc)
+        self.assertEqual(doc.count('.venv/bin/python -m tools.p26_paper_summary '),2)
+        with tempfile.TemporaryDirectory() as d:
+            log=Path(d)/'run.log';rep=Path(d)/'report.json'
+            log.write_text(json.dumps({'status':'STOPPED','p26_account':{'run_index':1,'max_runs':2}})+'\n',encoding='utf-8')
+            rep.write_text(json.dumps({'session_state':'STOPPED_VERIFIED','summary':{'cumulative_sells':0}}),encoding='utf-8')
+            env={k:v for k,v in os.environ.items() if k not in ('PYTHONPATH','PYTHONHOME')}
+            out=subprocess.run([sys.executable,'-m','tools.p26_paper_summary',str(log),str(rep),'0','0'],cwd=root,env=env,
+                               capture_output=True,text=True,timeout=60)
+        self.assertEqual(out.returncode,0,out.stderr);self.assertEqual(len(out.stdout.splitlines()),8)
+        self.assertIn('public SELL settled=NO_NOT_VERIFIED',out.stdout)
 
     def test_rest_and_session_limits_reuse_existing_per_session_client_cap(self):
         import inspect
