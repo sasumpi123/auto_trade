@@ -10,7 +10,7 @@ from trading.state_store import StateStore
 from services.notification_metrics import report_metrics
 from services.public_market import MARKET, positive, PublicDataError, PUBLIC_ERROR_CODES
 from utils.process_lock import lock_handle
-from services.tick_timing import TickTiming,DISCARD_SESSION_SECONDS,REPEAT_POLICY,QUARANTINE_POLICY
+from services.tick_timing import TickTiming,DISCARD_SESSION_SECONDS,REPEAT_POLICY,QUARANTINE_POLICY,ACCOUNT_QUARANTINE_POLICY
 from services.paper_decisions import DecisionCounters
 from services.realtime_activity import Observation,ActivityError,ACTIVITY_ERRORS
 
@@ -258,6 +258,16 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
     bound_policy=QUARANTINE_POLICY if quarantine else REPEAT_POLICY if repeated_discard else None
     shared_guard=observation_discard or quarantine
+    # P26: explicit manual continuation profile (first run or one resume). Fixed KRW-BTC, exclusive.
+    p26_mode=experiment.get('p26_continuation') if experiment else None
+    p26=p26_mode is not None
+    if p26 and (p26_mode not in ('first','resume') or quarantine or discard_enabled or observation_discard or repeated_discard
+            or experiment.get('observe_realtime_seconds') is None or list(tickers or [])!=['KRW-BTC']
+            or experiment.get('eligible_top') is not None or experiment.get('select_realtime_active')
+            or experiment.get('candidate_limit') is not None or type(seconds) is not int or not 1<=seconds<=DISCARD_SESSION_SECONDS):
+        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+    if p26:bound_policy=ACCOUNT_QUARANTINE_POLICY;shared_guard=True
+    p26_prior=None;p26_block=None
     decisions=DecisionCounters(wall=wall)
     begun=monotonic();wall_begun=wall()
     deadline=begun+seconds;wall_deadline=wall_begun+seconds
@@ -272,10 +282,24 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         combined=timing_evidence(timing.report()) if timing is not None else observed
         # Legacy runtime-only mode has separate timing counters, but no observation discards.
         return validate_regression_evidence({'observation':observed,'combined':combined,
-            'runtime_enabled':discard_enabled or quarantine,'runtime_started':timing is not None,
+            'runtime_enabled':discard_enabled or quarantine or p26,'runtime_started':timing is not None,
             'runtime_discarded':combined['discarded']-observed['discarded']})
+    def p26_view():
+        """Session values vs account totals (reservations and carried discards), for run/status output."""
+        from ops import paper_continuation as cont
+        b=p26_block;guard=timing or (activity.guard if activity is not None else None)
+        d=guard.report()['regression_discard'] if guard is not None else {}
+        total=d.get('account_discarded_total',b['prior']['total'])
+        return {'profile':cont.PROFILE_ID,'run_index':b['run_index'],'max_runs':cont.MAX_RUNS,
+            'session_seconds':b['session_seconds'],'reserved_seconds_total':b['reserved_seconds_total'],
+            'remaining_seconds':cont.MAX_TOTAL_SECONDS-b['reserved_seconds_total'],
+            'rest_session_limit':b['rest_session_limit'],'rest_reserved_total':b['rest_reserved_total'],
+            'max_rest_total':cont.MAX_REST_TOTAL,'account_discards_prior':b['prior']['total'],
+            'session_discards':d.get('discarded_total',0),'account_discards_total':total,
+            'discards_remaining':ACCOUNT_QUARANTINE_POLICY.max_per_session-total}
     def publish(report):
         if activity is not None:report['regression_evidence']=regression_evidence()
+        if p26_block is not None:report['p26_account']=p26_view()
         if bot is not None and bot._initialized:
             report['candle_evaluation']={t:a.candle_report() for t,a in bot.analyzers.items() if callable(getattr(a,'candle_report',None)) and not a.df.empty}
         emit(report)
@@ -295,16 +319,16 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             nonlocal stream,activity
             try:
                 activity=Observation(pool,wall=wall,monotonic=monotonic,discard_small_regressions=observation_discard,
-                                     discard_repeated_small_regressions=repeated_discard,quarantine_regressions=quarantine,
-                                     clock_origin=(wall_begun,begun) if shared_guard else None)
+                                     discard_repeated_small_regressions=repeated_discard,quarantine_regressions=quarantine or p26,
+                                     account_prior=p26_prior,clock_origin=(wall_begun,begun) if shared_guard else None)
                 try:
                     stream=stream_factory(pool);stream.connect()
                 except Exception:
                     activity.end=monotonic();activity.connection_end='SUBSCRIPTION_OR_CONNECT_FAILED_CAUSE_UNKNOWN'
                     raise ActivityError('ACTIVITY_CONNECTION_FAILED') from None
                 activity=Observation(pool,wall=wall,monotonic=monotonic,discard_small_regressions=observation_discard,
-                                     discard_repeated_small_regressions=repeated_discard,quarantine_regressions=quarantine,
-                                     clock_origin=(wall_begun,begun) if shared_guard else None)
+                                     discard_repeated_small_regressions=repeated_discard,quarantine_regressions=quarantine or p26,
+                                     account_prior=p26_prior,clock_origin=(wall_begun,begun) if shared_guard else None)
                 activity.observe(stream,experiment['observe_realtime_seconds'],stopped=stopped,deadline=deadline)
                 active=[t for t in pool if activity.active(t)]
                 report['realtime_activity']=activity.report();report['wire_subscription']=pool.copy()
@@ -330,6 +354,7 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                 activity.validate_start(selected)
                 if stopped() or monotonic()>=deadline:raise ActivityError('ACTIVITY_OBSERVATION_INTERRUPTED')
         def prepare(saved):
+            nonlocal p26_prior,p26_block
             if 'paper_experiment' in saved:
                 from ops.paper_experiment import validate_start, prepare_markets
                 validate_start(saved,p,experiment.get('session_id') if experiment else None)
@@ -346,8 +371,22 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
                     if (bound_policy is None or used.get('discard_policy')!=bound_policy.identifier
                             or m.get('discard_policy')!=bound_policy.identifier):
                         raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
-                reservation=used.get('observation_discard_session')
-                if (shared_guard and reservation!=experiment['session_id']) or ((discard_enabled or quarantine)
+                reservation=used.get('observation_discard_session');expected_reservation=experiment['session_id']
+                if p26:
+                    # Runtime limits and the carried guard come ONLY from the reserved, validated marker block.
+                    from ops import paper_continuation as cont
+                    try:block=cont.validate_block(m.get('p26'))
+                    except ValueError:raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED') from None
+                    run=1 if p26_mode=='first' else 2
+                    last=saved['paper_experiment']['last_session_id']
+                    if (saved['paper_experiment'].get('profile')!=cont.profile() or block['run_index']!=run
+                            or block['session_seconds']!=seconds or m.get('session_id')!=experiment['session_id']
+                            or (run==1 and last is not None)
+                            or (run==2 and (last!=block['prior']['session_id'] or m.get('previous_session')!=last))):
+                        raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
+                    if run==2:expected_reservation=m['previous_session']  # Receipt binds run 1; resume chains to it.
+                    p26_prior=cont.guard_prior(block);p26_block=block
+                if (shared_guard and reservation!=expected_reservation) or ((discard_enabled or quarantine)
                         and reservation is not None and reservation!=experiment['session_id']):
                     raise ValueError('PAPER_REGRESSION_EXPERIMENT_BLOCKED')
                 if shared_guard:
@@ -391,7 +430,8 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
             if activity is not None:
                 activity.validate_start(selected)
                 timing=activity.runtime_guard(selected,(wall_begun,begun),discard_small_regressions=discard_enabled,
-                                              discard_repeated_small_regressions=repeated_discard,quarantine_regressions=quarantine)
+                                              discard_repeated_small_regressions=repeated_discard,quarantine_regressions=quarantine or p26,
+                                              account=p26)
             else:
                 stream=stream_factory(selected);stream.connect()
                 timing=TickTiming(selected,wall(),monotonic(),clock_origin=(wall_begun,begun))
@@ -487,6 +527,8 @@ def run_session(state, *, seconds, stopped, emit, client, stream_factory,
         result['stream_idle_diagnostics']=(validate(stream_idle) if stream_idle is not None
             else unavailable() if reason=='PAPER_STREAM_TIMEOUT' else not_triggered())
         if timing is not None:result['tick_timing']=timing.report()
+        elif p26 and activity is not None:result['tick_timing']=activity.guard.report()  # P26 checkpoint source.
+        if p26_block is not None:result['p26_account']=p26_view()
         if experiment is not None:
             calls=getattr(client,'calls',None)
             result['public_rest_requests']=calls if type(calls) is int else 'FAKE_NOT_RECORDED'

@@ -23,7 +23,7 @@ def view(event):
           'session_ticks','historical_ticks','markets','cumulative_buys','cumulative_sells','fees',
           'net_realized_pnl','unrealized_pnl','net_return_percent','equity','valuation_reason',
           'engine_started','post_validation','session_finalization','supervisor_reason','automatic_restart',
-          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation','regression_evidence','cost_policy','fee_policy','stream_idle_diagnostics')
+          'forced_termination','public_rest_requests','public_rest_budget','selection','tick_timing','decision_trace','price_age_seconds','decision_checkpoint','candle_evaluation','regression_evidence','cost_policy','fee_policy','stream_idle_diagnostics','p26_account')
     return {k:event[k] for k in keys if k in event}
 
 
@@ -92,7 +92,7 @@ def query(directory,command):
         return _json(raw.decode())
 
 
-def initialize(directory,*,cost_policy=None):
+def initialize(directory,*,cost_policy=None,profile=None):
     """Explicit init may create one new private parent; never chmod/reset existing paths."""
     if os.name!='posix':return exp.create(directory,cost_policy=cost_policy)  # Existing fail-closed Windows contract.
     exp.require(sys.version_info[:2]==(3,12),'PYTHON312_REQUIRED')
@@ -109,7 +109,7 @@ def initialize(directory,*,cost_policy=None):
     exp.require(not any((q/'.git').is_file() or (q/'.git/HEAD').is_file() for q in p.parents),'GIT_CHECKOUT_PATH_FORBIDDEN')
     exp.require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',p.name),'INVALID_EXPERIMENT_NAME')
     if not p.parent.exists():p.parent.mkdir(mode=0o700)  # Immediate existing ancestor required; no recursive setup.
-    return exp.create(p,cost_policy=cost_policy)
+    return exp.create(p,cost_policy=cost_policy,profile=profile) if profile is not None else exp.create(p,cost_policy=cost_policy)
 
 
 def read_report(directory,*,limit=20):
@@ -150,6 +150,9 @@ def read_report(directory,*,limit=20):
             'trade_history_shown':len(trades),'account_scope':exp.SCOPE,'network_calls':0,'state_writes':0,
             'execution_authorized':False,'automatic_restart':False,'decision_trace':'N/A_NOT_RECORDED'}
         result.update(costs)
+        if 'profile' in saved['paper_experiment']:
+            from ops import paper_continuation as cont
+            result['p26_account']=cont.status(exp.marker(p) if (p/'session.json').exists() else None)
         if (p/'session.json').exists():
             m=exp.marker(p)
             from services.paper_decisions import validate_trace
@@ -207,6 +210,7 @@ def main(argv=None):
             print('Fixed tickers only: --discard-small-timestamp-regressions-during-observation')
             print('Bounded repeat experiment (requires both discard flags): --discard-repeated-small-timestamp-regressions')
             print('P25 exclusive input policy (fixed tickers + observation, new account first run only): --quarantine-timestamp-regressions')
+            print('P26 profile accounts only (init --profile p26): --p26-first-run | --p26-resume (KRW-BTC, observation)')
             print('Foreground only. Ctrl+C or paper_bot stop requests cooperative shutdown. No implicit init or restart.')
             return 0
         if '--connect-public' not in args[1:]:
@@ -222,6 +226,7 @@ def main(argv=None):
     parser.add_argument('--fee-bps')
     parser.add_argument('--slippage-bps')
     parser.add_argument('--full-spread-bps')
+    parser.add_argument('--profile',choices=('p26',))
     options=parser.parse_args(args)
     values=(options.fee_bps,options.slippage_bps,options.full_spread_bps)
     cost_policy=None
@@ -231,15 +236,20 @@ def main(argv=None):
         try:cost_policy=policy(CostModel(*values))
         except ValueError:parser.error('invalid costs')
     if options.command=='run':parser.error('run must be the first subcommand; explicit connection required')
+    if options.profile is not None and options.command!='init':parser.error('profile is selected at init only')
     try:
-        if options.command=='init':r=initialize(options.directory,cost_policy=cost_policy)
+        if options.command=='init' and options.profile=='p26':
+            from ops import paper_continuation as cont
+            r=initialize(options.directory,cost_policy=cost_policy,profile=cont.PROFILE_ID)
+        elif options.command=='init':r=initialize(options.directory,cost_policy=cost_policy)
         elif options.command=='check':
             exp.require(not os.path.lexists(exp.directory(options.directory)/CONTROL),'CONTROL_PRESENT_NO_RUN_AUTHORITY')
             r=exp.inspect_experiment(options.directory)
             if r['status']=='READ_ONLY_NO_EXECUTION_AUTHORITY':
                 r={'status':'READY_FOR_EXPLICIT_RUN','session_state':r['session_state'],
                     'summary':r['diagnostic']['summary'],'execution_authorized':False,'network_calls':0,
-                    'cost_policy':r['cost_policy'],'fee_policy':r['fee_policy']}
+                    'cost_policy':r['cost_policy'],'fee_policy':r['fee_policy'],
+                    **({'p26_account':r['p26_account']} if 'p26_account' in r else {})}
         elif options.command=='stop':r=query(options.directory,'STOP')
         elif options.command=='status' and os.path.lexists(exp.directory(options.directory)/CONTROL):r=query(options.directory,'STATUS')
         else:r=read_report(options.directory,limit=options.limit)

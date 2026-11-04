@@ -43,13 +43,18 @@ QUARANTINE_RELEASE='SAME_MARKET_TIMESTAMP_ABOVE_HIGH_WATER'
 # P25: no width limit (the width is not re-decided by an arbitrary ms value). Budgets are the
 # same fixed P18 caps; they are operating limits, not statistically proven safe values.
 QUARANTINE_POLICY=DiscardPolicy('P25_QUARANTINE_UNTIL_ADVANCE_V1',True,10,30,max_width_ms=None,quarantine=True)
-BOUND_POLICIES={REPEAT_POLICY.identifier:REPEAT_POLICY,QUARANTINE_POLICY.identifier:QUARANTINE_POLICY}
+# P26: the same quarantine rules, but the 10/market and 30 caps are ACCOUNT-wide across the two
+# allowed P26 sessions (carried, never refilled). The per-session 3600 s discard window is unchanged.
+ACCOUNT_QUARANTINE_POLICY=DiscardPolicy('P26_ACCOUNT_QUARANTINE_V1',True,10,30,max_width_ms=None,quarantine=True)
+BOUND_POLICIES={REPEAT_POLICY.identifier:REPEAT_POLICY,QUARANTINE_POLICY.identifier:QUARANTINE_POLICY,
+                ACCOUNT_QUARANTINE_POLICY.identifier:ACCOUNT_QUARANTINE_POLICY}
 
 
-def discard_policy(enabled=False,repeated=False,quarantine=False):
-    if (type(enabled) is not bool or type(repeated) is not bool or type(quarantine) is not bool
-            or (repeated and not enabled) or (quarantine and (enabled or repeated))):
-        raise ValueError('INVALID_REGRESSION_POLICY')  # P25 is exclusive: never mixed with P15/P18 flags.
+def discard_policy(enabled=False,repeated=False,quarantine=False,account=False):
+    if (type(enabled) is not bool or type(repeated) is not bool or type(quarantine) is not bool or type(account) is not bool
+            or (repeated and not enabled) or (quarantine and (enabled or repeated)) or (account and not quarantine)):
+        raise ValueError('INVALID_REGRESSION_POLICY')  # P25/P26 are exclusive: never mixed with P15/P18 flags.
+    if account:return ACCOUNT_QUARANTINE_POLICY
     if quarantine:return QUARANTINE_POLICY
     return REPEAT_POLICY if repeated else P15_POLICY if enabled else STRICT_POLICY
 
@@ -71,7 +76,7 @@ class TickTimingError(ValueError):pass
 
 class TickTiming:
     def __init__(self,markets,wall,monotonic,*,clock_origin=None,discard_small_regressions=False,
-                 discard_repeated_small_regressions=False,quarantine_regressions=False):
+                 discard_repeated_small_regressions=False,quarantine_regressions=False,account_prior=None):
         if (not 1<=len(markets)<=MAX_MARKETS or len(set(markets))!=len(markets)
                 or any(not isinstance(t,str) or not MARKET.fullmatch(t) for t in markets)):
             raise ValueError('INVALID_TIMING_MARKETS')
@@ -80,8 +85,22 @@ class TickTiming:
         self.markets={t:{'received':0,'timing_accepted':0,'equal_timestamp':0,
                          'issues':{k:0 for k in ISSUES}} for t in markets}
         self.global_issues={k:0 for k in ISSUES};self.samples=deque(maxlen=MAX_SAMPLES)
-        self._policy=discard_policy(discard_small_regressions,discard_repeated_small_regressions,quarantine_regressions)
+        self._policy=discard_policy(discard_small_regressions,discard_repeated_small_regressions,quarantine_regressions,
+                                    account_prior is not None)
         self.discarded=0;self.awaiting_followup=None;self.quarantined=set();self.held=0
+        self.prior_counts={};self.prior_total=0
+        if account_prior is not None:
+            # P26: carried, already-validated account checkpoint. Only budget and high-water carry over;
+            # an unresolved quarantine can never be carried (a checkpoint with one is rejected upstream).
+            if (type(account_prior) is not dict or set(account_prior)!={'high_water_ms','counts','total'}
+                    or any(t not in self.markets for t in (*account_prior['high_water_ms'],*account_prior['counts']))
+                    or any(type(v) is not int for v in (*account_prior['high_water_ms'].values(),*account_prior['counts'].values()))
+                    or type(account_prior['total']) is not int or account_prior['total']!=sum(account_prior['counts'].values())
+                    or any(not 0<=v<=self._policy.max_per_market for v in account_prior['counts'].values())
+                    or not 0<=account_prior['total']<=self._policy.max_per_session):
+                raise ValueError('INVALID_ACCOUNT_PRIOR')
+            self.prior_counts=dict(account_prior['counts']);self.prior_total=account_prior['total']
+            self.previous.update(account_prior['high_water_ms'])
         self.discards={t:{'count':0,'max_regression_ms':0,'last_regression_ms':None,
                           'followup_newer_received':None} for t in markets}
         self.received=0;self.accepted=0
@@ -145,7 +164,8 @@ class TickTiming:
             if self.policy.quarantine:
                 # Validated (market/type/int/delay/future/clock above) but below the same-market
                 # high-water mark: drop at input. No price, high-water, progress or accepted update.
-                if (row['count']<self.policy.max_per_market and self.discarded<self.policy.max_per_session
+                if (self.prior_counts.get(t,0)+row['count']<self.policy.max_per_market
+                        and self.prior_total+self.discarded<self.policy.max_per_session
                         and 0<=mono-self.start_mono<self.policy.max_session_seconds):
                     self.idle(wall,mono)  # An already-expired watchdog wins over a discard.
                     row.update(count=row['count']+1,max_regression_ms=max(row['max_regression_ms'],width),
@@ -196,6 +216,11 @@ class TickTiming:
         if self.policy.quarantine:
             result['regression_discard'].update(quarantined_markets=sorted(self.quarantined),quarantine_held=self.held,
                 release=QUARANTINE_RELEASE)
+        if self.policy is ACCOUNT_QUARANTINE_POLICY:
+            counts={t:self.prior_counts.get(t,0)+r['count'] for t,r in self.discards.items()}
+            result['regression_discard'].update(account_prior_total=self.prior_total,
+                account_discarded_total=self.prior_total+self.discarded,account_counts=counts,
+                high_water_ms={t:v for t,v in self.previous.items() if t in self.markets})
         return result
 
     def _report(self):
@@ -204,7 +229,7 @@ class TickTiming:
                 'max_samples':MAX_SAMPLES,'max_report_bytes':MAX_REPORT_BYTES,'retained_log_files':0,
                 'reference_clock':'LOCAL_WALL_NOT_INDEPENDENTLY_VERIFIED_SERVER_TIME',
                 'server_relative_delay_ms':None,
-                'regression_policy':self.policy.identifier if self.policy in (REPEAT_POLICY,QUARANTINE_POLICY) else
+                'regression_policy':self.policy.identifier if self.policy in BOUND_POLICIES.values() else
                     'EXPERIMENTAL_DISCARD_SMALL_REGRESSIONS' if self.discard_enabled else 'HALT_NO_TOLERANCE_OR_PRICE_FALLBACK',
                 'regression_discard':{'enabled':self.discard_enabled,'policy_id':self.policy.identifier,'discarded_total':self.discarded,
                     'markets':copy.deepcopy(self.discards),'awaiting_followup':self.awaiting_followup,

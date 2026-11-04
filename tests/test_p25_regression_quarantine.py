@@ -130,7 +130,7 @@ class QuarantineTimingTests(unittest.TestCase):
             'max_width_ms':5,'max_session_seconds':3600})
         self.assertEqual(QUARANTINE_POLICY.evidence(),{'id':'P25_QUARANTINE_UNTIL_ADVANCE_V1','max_per_market':10,
             'max_per_session':30,'max_width_ms':None,'max_session_seconds':3600,'release':'SAME_MARKET_TIMESTAMP_ABOVE_HIGH_WATER'})
-        self.assertEqual(set(BOUND_POLICIES),{'P18_BOUNDED_REPEAT_V1','P25_QUARANTINE_UNTIL_ADVANCE_V1'})
+        self.assertEqual(set(BOUND_POLICIES),{'P18_BOUNDED_REPEAT_V1','P25_QUARANTINE_UNTIL_ADVANCE_V1','P26_ACCOUNT_QUARANTINE_V1'})
         self.assertEqual((discard_policy(),discard_policy(True),discard_policy(True,True)),(STRICT_POLICY,P15_POLICY,REPEAT_POLICY))
 
     def test_unselected_modes_behave_exactly_as_before(self):
