@@ -126,12 +126,21 @@ class ObservationJournal:
                 or db.execute('PRAGMA foreign_key_check').fetchone()
                 or db.execute("SELECT value FROM meta WHERE key='schema'").fetchone()[0] != schema_hash(db)):
             raise VerificationPending('observation_integrity')
-        for seq, metadata, sha in db.execute('SELECT seq,metadata,sha FROM observations WHERE metadata IS NOT NULL'):
+        for seq, target, status, metadata, sha in db.execute(
+                'SELECT seq,target,status,metadata,sha FROM observations WHERE metadata IS NOT NULL'):
             if hashlib.sha256(metadata.encode()).hexdigest() != sha:
                 raise VerificationPending('observation_integrity')
-            Snapshot(**json.loads(metadata))
-        for status, metadata in db.execute('SELECT status,metadata FROM observations'):
-            if status not in ('PENDING', 'UNVERIFIED', 'VERIFIED', NOT_APPLICABLE) or (status == 'VERIFIED') != (metadata is not None):
+            if status == 'VERIFIED':
+                Snapshot(**json.loads(metadata))
+            elif status != NOT_APPLICABLE or target != 'run' or _run_alias(metadata) is None:
+                raise VerificationPending('observation_integrity')
+        for target, status, metadata in db.execute('SELECT target,status,metadata FROM observations'):
+            if status not in ('PENDING', 'UNVERIFIED', 'VERIFIED', NOT_APPLICABLE):
+                raise VerificationPending('observation_integrity')
+            # VERIFIED needs a Snapshot; a NOT_APPLICABLE run carries only its API-verified PR alias.
+            allowed = status == 'VERIFIED' or (status == NOT_APPLICABLE and target == 'run')
+            if (status == 'VERIFIED' and metadata is None) or (metadata is not None and not allowed) \
+                    or (status == NOT_APPLICABLE and target == 'run' and metadata is None):
                 raise VerificationPending('observation_integrity')
         for target, resource, seq, version in db.execute('SELECT target,resource,seq,version FROM current'):
             row = db.execute('SELECT target,resource,status FROM observations WHERE seq=?', (seq,)).fetchone()
@@ -160,10 +169,10 @@ class ObservationJournal:
                                 (delivery, hint.target, hint.resource, hint.kind, hint.action, 'PENDING'))
             return cursor.lastrowid
 
-    def complete(self, seq, snapshot=None, *, scope=None):
+    def complete(self, seq, snapshot=None, *, scope=None, pr=None):
         if snapshot is not None and type(snapshot) is not Snapshot:
             raise VerificationPending('snapshot_required')
-        if scope not in (None, NOT_APPLICABLE) or (scope is not None and snapshot is not None):
+        if scope not in (None, NOT_APPLICABLE) or (scope is not None and snapshot is not None) or (pr is not None and scope is None):
             raise VerificationPending('snapshot_required')
         with self._transaction() as db:
             row = db.execute('SELECT target,resource,status FROM observations WHERE seq=?', (seq,)).fetchone()
@@ -171,8 +180,16 @@ class ObservationJournal:
                 raise VerificationPending('observation_not_pending')
             target, resource, _ = row
             if scope == NOT_APPLICABLE:
-                # No metadata, no current row: this later non-VERIFIED observation also fences any older candidate.
-                db.execute("UPDATE observations SET status=? WHERE seq=?", (NOT_APPLICABLE, seq))
+                # Never a Snapshot or current row. A pr row fences that PR directly; a run row records ONLY the
+                # API-verified linked PR so current() fences that PR's older candidates (by this row's seq).
+                if target == 'run':
+                    alias = canonical({'pr': positive(pr), 'scope': NOT_APPLICABLE})
+                    db.execute('UPDATE observations SET status=?,metadata=?,sha=? WHERE seq=?',
+                               (NOT_APPLICABLE, alias, hashlib.sha256(alias.encode()).hexdigest(), seq))
+                else:
+                    if pr not in (None, resource):
+                        raise VerificationPending('snapshot_target_mismatch')
+                    db.execute("UPDATE observations SET status=? WHERE seq=?", (NOT_APPLICABLE, seq))
                 return NOT_APPLICABLE
             if snapshot is None:
                 db.execute("UPDATE observations SET status='UNVERIFIED' WHERE seq=?", (seq,))
@@ -216,8 +233,8 @@ class ObservationJournal:
             related = [(target, resource)]
             if target == 'pr':
                 related.extend(('run', run) for run, metadata in db.execute(
-                    "SELECT resource,metadata FROM observations WHERE target='run' AND status='VERIFIED'")
-                    if json.loads(metadata)['pr'] == resource)
+                    "SELECT resource,metadata FROM observations WHERE target='run' AND status IN ('VERIFIED',?) AND metadata IS NOT NULL",
+                    (NOT_APPLICABLE,)) if json.loads(metadata)['pr'] == resource)
             latest = max(db.execute('SELECT COALESCE(MAX(seq),0) FROM observations WHERE target=? AND resource=?',
                                     (kind, number)).fetchone()[0] for kind, number in related)
             uncertain = any(db.execute(
@@ -247,7 +264,7 @@ def observe(verifier, journal, delivery, hint):
             if scope == NOT_APPLICABLE:
                 if run['head_sha'] != facts['sha']:
                     raise VerificationPending('stale_run_event')
-                return _not_applicable(journal, seq)
+                return _not_applicable(journal, seq, pr=number)
             snapshot = verifier.verify(pr=number)
             if snapshot.head != run['head_sha']:
                 raise VerificationPending('stale_run_event')
@@ -265,9 +282,21 @@ def observe(verifier, journal, delivery, hint):
         return {'decision': 'PENDING', 'reason': 'github_state_unverified', 'diagnostic': diagnostic(error), 'execution_enabled': False}
 
 
-def _not_applicable(journal, seq):
+def _run_alias(metadata):
+    """The only metadata a NOT_APPLICABLE row may carry: {'pr': N, 'scope': 'NOT_APPLICABLE'}."""
+    try:
+        value = json.loads(metadata)
+        if type(value) is dict and set(value) == {'pr', 'scope'} and value['scope'] == NOT_APPLICABLE \
+                and canonical(value) == metadata:
+            return positive(value['pr'])
+    except Exception:
+        pass
+    return None
+
+
+def _not_applicable(journal, seq, pr=None):
     """Verified manual PR: outside autodev observation. Not approval, CI evidence or execution."""
-    if journal.complete(seq, scope=NOT_APPLICABLE) != NOT_APPLICABLE:
+    if journal.complete(seq, scope=NOT_APPLICABLE, pr=pr) != NOT_APPLICABLE:
         raise VerificationPending('observation_not_pending')
     return {'decision': NOT_APPLICABLE, 'reason': NOT_APPLICABLE_REASON, 'scope': SCOPE_NOTE, 'execution_enabled': False}
 

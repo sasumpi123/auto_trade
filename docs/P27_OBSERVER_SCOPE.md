@@ -25,8 +25,11 @@ autodev 계약 자체(`GitHubVerifier.verify()`)는 바꾸지 않았다.
 - 결과: `decision=NOT_APPLICABLE`, `reason=manual_pr_outside_autodev`, `scope=observation_scope_only_not_approval_or_ci_evidence`,
   `execution_enabled=false`, `read_only=true`, `model_calls=0`.
 - Snapshot·`ISSUE_CANDIDATE`·`REVIEW_CI_VERIFIED`·`MERGE_ELIGIBLE`·실행 권한으로 변환하지 않는다(`Snapshot` decision 목록에도 없음).
-- 관찰 journal에는 `NOT_APPLICABLE` 상태로 metadata 없이 기록한다. `current` 행은 갱신하지 않으며, 이 이후 관찰이 VERIFIED가 아니므로
-  같은 PR의 이전 autodev 후보는 더 이상 current로 반환되지 않는다. delivery 중복 억제와 seq 순서는 그대로다.
+- 관찰 journal에는 `NOT_APPLICABLE` 상태로 기록하고 `current` 행은 갱신하지 않는다. delivery 중복 억제와 seq 순서는 그대로다.
+  - PR 대상 행은 metadata가 없다. 이 이후 관찰이 VERIFIED가 아니므로 같은 PR의 이전 autodev 후보는 current로 반환되지 않는다.
+  - workflow_run 대상 행은 API로 확인한 연결 PR만 `{"pr": N, "scope": "NOT_APPLICABLE"}`(sha 검증)로 남긴다. `current('pr', N)`은
+    이 run을 관련 관찰로 포함하므로, 이 run의 seq보다 오래된 후보와 늦게 완료되는 오래된 PR/run 관찰은 current가 되지 못한다.
+    이후의 새 VERIFIED 관찰은 막지 않고, 다른 PR은 영향받지 않는다. DB를 다시 열 때 이 형식만 허용한다(리뷰 5778063916).
 - PR 본문·토큰·예외 원문은 출력하거나 저장하지 않는다.
 - `NOT_APPLICABLE`/exit 0은 관찰 범위 밖이라는 뜻일 뿐이다. 제품 코드가 맞거나 CI가 통과했다는 뜻이 아니며,
   macOS 전체 테스트·Safety gate 결과와 무관하다.

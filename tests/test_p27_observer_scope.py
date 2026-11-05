@@ -171,6 +171,56 @@ class JournalTests(Base):
         self.assertEqual(rows[-1], ('NOT_APPLICABLE', None))
         self.assertNotIn(b'private-manual-body', self.journal.path.read_bytes())
 
+    def add_run(self, run_id, pr=7):
+        run = copy.deepcopy(self.data['/actions/runs/30']); run['id'] = run_id
+        run['pull_requests'] = [dict(run['pull_requests'][0], number=pr)]
+        self.data[f'/actions/runs/{run_id}'] = run
+
+    def test_not_applicable_run_fences_pr_candidate_from_pr_or_run_origin(self):
+        """Review 5778063916: a new non-target run must also fence the linked PR's old candidate."""
+        for origin in ('pr', 'run'):
+            with self.subTest(origin=origin):
+                self.setUp()
+                first = Hint('pull_request_target', 'opened', 7, 'pr') if origin == 'pr' else Hint('workflow_run', 'completed', 30, 'run')
+                self.assertEqual(self.run_hint(first)['decision'], 'REVIEW_CI_VERIFIED')
+                self.assertIsNotNone(self.journal.current('pr', 7))
+                manualize(self.data); self.add_run(31)
+                self.assertEqual(self.run_hint(Hint('workflow_run', 'completed', 31, 'run'))['decision'], 'NOT_APPLICABLE')
+                self.assertIsNone(self.journal.current('pr', 7))
+                self.assertIsNone(ObservationJournal(self.journal.path).current('pr', 7))  # DB reopen keeps the fence.
+
+    def test_late_older_completion_cannot_revive_and_unrelated_pr_is_kept(self):
+        from automation.github_verify import Snapshot
+        # PR 8: an unrelated verified candidate that must survive.
+        pr8 = copy.deepcopy(self.data['/pulls/7']); pr8['number'] = 8
+        self.data['/pulls/8'] = pr8
+        for suffix in ('/files', '/reviews'):self.data['/pulls/8' + suffix] = copy.deepcopy(self.data['/pulls/7' + suffix])
+        snap7 = self.verifier.verify(pr=7)
+        late = self.journal.begin(str(uuid4()), Hint('pull_request_target', 'opened', 7, 'pr'))  # In flight, older.
+        late_run = self.journal.begin(str(uuid4()), Hint('workflow_run', 'completed', 30, 'run'))
+        self.journal.complete(self.journal.begin(str(uuid4()), Hint('pull_request_target', 'opened', 8, 'pr')),
+                              Snapshot(**{**snap7.metadata(), 'pr': 8}))
+        manualize(self.data); self.add_run(31)
+        self.assertEqual(self.run_hint(Hint('workflow_run', 'completed', 31, 'run'))['decision'], 'NOT_APPLICABLE')
+        self.journal.complete(late, snap7);self.journal.complete(late_run, snap7)  # Late completions of older reads.
+        self.assertIsNone(self.journal.current('pr', 7))
+        self.assertIsNone(ObservationJournal(self.journal.path).current('pr', 7))
+        self.assertIsNotNone(self.journal.current('pr', 8))  # Unrelated PR not fenced.
+        # A NEWER genuine verified read is not over-fenced.
+        self.data['/pulls/7'] = fixture()[1]['/pulls/7']
+        self.assertEqual(self.run_hint(Hint('pull_request_target', 'edited', 7, 'pr'))['decision'], 'REVIEW_CI_VERIFIED')
+        self.assertIsNotNone(self.journal.current('pr', 7))
+
+    def test_run_alias_metadata_is_minimal_and_validated_on_reopen(self):
+        manualize(self.data); self.add_run(31)
+        self.run_hint(Hint('workflow_run', 'completed', 31, 'run'))
+        with sqlite3.connect(self.journal.path) as db:
+            row = db.execute("SELECT target,status,metadata FROM observations ORDER BY seq DESC LIMIT 1").fetchone()
+        self.assertEqual((row[0], row[1], json.loads(row[2])), ('run', 'NOT_APPLICABLE', {'pr': 7, 'scope': 'NOT_APPLICABLE'}))
+        with sqlite3.connect(self.journal.path) as db:  # Tampered alias (sha no longer matches) fails closed on reopen.
+            db.execute("UPDATE observations SET metadata=? WHERE status='NOT_APPLICABLE'", (json.dumps({'pr': 8, 'scope': 'NOT_APPLICABLE'}),))
+        with self.assertRaises(VerificationPending):ObservationJournal(self.journal.path)
+
     def test_complete_rejects_scope_mixing_and_duplicates_need_fresh_poll(self):
         seq = self.journal.begin(str(uuid4()), Hint('pull_request_target', 'opened', 7, 'pr'))
         from automation.github_verify import Snapshot
