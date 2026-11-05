@@ -13,6 +13,7 @@ from .events import canonical
 from .github_read import VerificationPending, positive
 from .github_verify import Snapshot
 from .observer_diagnostics import diagnostic
+from .observer_scope import NOT_APPLICABLE, REASON as NOT_APPLICABLE_REASON, SCOPE_NOTE, classify
 
 ACTIONS = {
     'issues': {'opened', 'edited', 'labeled', 'unlabeled', 'reopened', 'closed'},
@@ -130,7 +131,7 @@ class ObservationJournal:
                 raise VerificationPending('observation_integrity')
             Snapshot(**json.loads(metadata))
         for status, metadata in db.execute('SELECT status,metadata FROM observations'):
-            if status not in ('PENDING', 'UNVERIFIED', 'VERIFIED') or (status == 'VERIFIED') != (metadata is not None):
+            if status not in ('PENDING', 'UNVERIFIED', 'VERIFIED', NOT_APPLICABLE) or (status == 'VERIFIED') != (metadata is not None):
                 raise VerificationPending('observation_integrity')
         for target, resource, seq, version in db.execute('SELECT target,resource,seq,version FROM current'):
             row = db.execute('SELECT target,resource,status FROM observations WHERE seq=?', (seq,)).fetchone()
@@ -159,14 +160,20 @@ class ObservationJournal:
                                 (delivery, hint.target, hint.resource, hint.kind, hint.action, 'PENDING'))
             return cursor.lastrowid
 
-    def complete(self, seq, snapshot=None):
+    def complete(self, seq, snapshot=None, *, scope=None):
         if snapshot is not None and type(snapshot) is not Snapshot:
+            raise VerificationPending('snapshot_required')
+        if scope not in (None, NOT_APPLICABLE) or (scope is not None and snapshot is not None):
             raise VerificationPending('snapshot_required')
         with self._transaction() as db:
             row = db.execute('SELECT target,resource,status FROM observations WHERE seq=?', (seq,)).fetchone()
             if not row or row[2] != 'PENDING':
                 raise VerificationPending('observation_not_pending')
             target, resource, _ = row
+            if scope == NOT_APPLICABLE:
+                # No metadata, no current row: this later non-VERIFIED observation also fences any older candidate.
+                db.execute("UPDATE observations SET status=? WHERE seq=?", (NOT_APPLICABLE, seq))
+                return NOT_APPLICABLE
             if snapshot is None:
                 db.execute("UPDATE observations SET status='UNVERIFIED' WHERE seq=?", (seq,))
                 return 'UNVERIFIED'
@@ -235,9 +242,20 @@ def observe(verifier, journal, delivery, hint):
             prs = run['pull_requests']
             if len(prs) != 1:
                 raise VerificationPending('run_pr_ambiguous')
-            snapshot = verifier.verify(pr=positive(prs[0]['number']))
+            number = positive(prs[0]['number'])
+            scope, facts = classify(verifier, number)
+            if scope == NOT_APPLICABLE:
+                if run['head_sha'] != facts['sha']:
+                    raise VerificationPending('stale_run_event')
+                return _not_applicable(journal, seq)
+            snapshot = verifier.verify(pr=number)
             if snapshot.head != run['head_sha']:
                 raise VerificationPending('stale_run_event')
+        elif hint.target == 'pr':
+            scope, _ = classify(verifier, hint.resource)
+            if scope == NOT_APPLICABLE:
+                return _not_applicable(journal, seq)
+            snapshot = verifier.verify(pr=hint.resource)
         else:
             snapshot = verifier.verify(**{hint.target: hint.resource})
         outcome = journal.complete(seq, snapshot)
@@ -245,6 +263,13 @@ def observe(verifier, journal, delivery, hint):
     except Exception as error:
         journal.complete(seq)
         return {'decision': 'PENDING', 'reason': 'github_state_unverified', 'diagnostic': diagnostic(error), 'execution_enabled': False}
+
+
+def _not_applicable(journal, seq):
+    """Verified manual PR: outside autodev observation. Not approval, CI evidence or execution."""
+    if journal.complete(seq, scope=NOT_APPLICABLE) != NOT_APPLICABLE:
+        raise VerificationPending('observation_not_pending')
+    return {'decision': NOT_APPLICABLE, 'reason': NOT_APPLICABLE_REASON, 'scope': SCOPE_NOTE, 'execution_enabled': False}
 
 
 def p1_reference(snapshot, ledger):
