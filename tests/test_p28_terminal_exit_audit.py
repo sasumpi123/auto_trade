@@ -14,6 +14,27 @@ from trading.costs import CostModel
 ROOT=Path(__file__).resolve().parents[1]
 I=D('1000000')
 DOC_COMMAND='python -m backtesting.terminal_exit_audit --input "$P21_RESULTS" --output "$P28_OUT"'
+BEGIN,END='<!-- P28_COMMAND_BEGIN -->','<!-- P28_COMMAND_END -->'
+
+
+def doc_block():
+    """The whole documented bash block, exactly as a user copies it."""
+    doc=(ROOT/'docs/P28_TERMINAL_EXIT_AUDIT.md').read_text(encoding='utf-8')
+    body=doc.split(BEGIN,1)[1].split(END,1)[0].strip()
+    assert body.startswith('```bash\n') and body.endswith('\n```'),body
+    return body[len('```bash\n'):-len('\n```')]
+
+
+class Recorder:
+    """Wraps a real binary file; records every requested and returned read size."""
+    def __init__(self,path,log,on_read=None):self.f=open(path,'rb');self.log=log;self.on_read=on_read
+    def __enter__(self):return self
+    def __exit__(self,*a):self.f.close()
+    def read(self,n=-1):
+        assert type(n) is int and n>0,'unbounded read request'
+        data=self.f.read(n);self.log.append((n,len(data)))
+        if self.on_read:self.on_read()
+        return data
 
 
 def policy(*,cash,q='0',mark='100',remaining='0',buys=1,sells=1,filtered=False,costs=None):
@@ -287,7 +308,82 @@ class ReportTests(unittest.TestCase):
             self.assertIn('MARKED_POSITIVE_EXIT_NONPOSITIVE',lines[1]);self.assertTrue(lines[0].startswith('P28 AUDITED pairs=6'))
 
 
+class BoundedReadTests(unittest.TestCase):
+    def setUp(self):
+        self.w=Workspace().__enter__();self.raw=json.dumps(report()).encode()
+    def tearDown(self):self.w.__exit__()
+    def rec(self,logs,grow=None):
+        def opener(path):
+            log=[];logs.append(log);return Recorder(path,log,grow)
+        return patch.object(t,'_open',side_effect=opener)
+
+    def test_exact_limit_accepted_and_reads_never_exceed_limit_plus_one(self):
+        logs=[]
+        with patch.object(t,'MAX_INPUT_BYTES',len(self.raw)),patch.object(t,'CHUNK_BYTES',4096),self.rec(logs):
+            _,r=self.w.run(None,'exact',raw=self.raw)
+        self.assertEqual(r['status'],'AUDITED');self.assertEqual(len(logs),2)  # Initial load and re-hash.
+        for log in logs:
+            self.assertLessEqual(sum(n for _,n in log),len(self.raw)+1)
+            self.assertLessEqual(max(n for n,_ in log),len(self.raw)+1)
+
+    def test_large_file_is_rejected_after_at_most_limit_plus_one_bytes(self):
+        logs=[]
+        with patch.object(t,'MAX_INPUT_BYTES',64),patch.object(t,'CHUNK_BYTES',16),self.rec(logs):
+            out,r=self.w.run(None,'large',raw=b' '*100000)
+        self.assertEqual(r['failure_reason'],'P28_INPUT_SIZE');self.assertTrue((out/'INCOMPLETE').exists())
+        # Early stat rejection reads nothing; any read that happens is still bounded.
+        self.assertLessEqual(sum(n for log in logs for _,n in log),65);self.assertLessEqual(sum(n for log in logs for n,_ in log),65)
+        with patch.object(t,'MAX_INPUT_BYTES',64),patch.object(t,'CHUNK_BYTES',16),self.rec(logs):
+            path=self.w.write(None,'direct',raw=b' '*100000)
+            with self.assertRaisesRegex(ValueError,'P28_INPUT_SIZE'):t.read_bounded(path)  # Without the stat shortcut.
+        self.assertEqual(sum(n for _,n in logs[-1]),65);self.assertLessEqual(max(n for n,_ in logs[-1]),16)
+
+    def test_growth_during_read_stays_bounded(self):
+        path=self.w.write(None,'growing',raw=b'{'+b' '*40);logs=[]
+        def grow():
+            with open(path,'ab') as f:f.write(b' '*100000)
+        with patch.object(t,'MAX_INPUT_BYTES',64),patch.object(t,'CHUNK_BYTES',16),self.rec(logs,grow):
+            _,r=t.audit(path,self.w.root/'growing-out')
+        self.assertEqual(r['failure_reason'],'P28_INPUT_SIZE')
+        self.assertLessEqual(sum(n for _,n in logs[0]),65)
+
+    def test_growth_before_rehash_is_change_and_bounded(self):
+        path=self.w.write(None,'regrow',raw=self.raw);real=t.check_report;logs=[]
+        def tamper(*a):
+            value=real(*a)
+            with open(path,'ab') as f:f.write(b' '*1000000)
+            return value
+        with patch.object(t,'MAX_INPUT_BYTES',len(self.raw)),patch.object(t,'CHUNK_BYTES',4096),\
+                patch.object(t,'check_report',side_effect=tamper),self.rec(logs):
+            out,r=t.audit(path,self.w.root/'regrow-out')
+        self.assertEqual(r['failure_reason'],'P28_INPUT_CHANGED');self.assertTrue((out/'INCOMPLETE').exists())
+        self.assertEqual(len(logs),2);self.assertLessEqual(sum(n for _,n in logs[1]),len(self.raw)+1)
+
+
 class CommandTests(unittest.TestCase):
+    def run_block(self,root,stale):
+        """Run the full documented block with bash; only the interpreter path is substituted."""
+        home=root/'home';source=home/'research'/'p21-output';source.mkdir(parents=True)
+        (source/'results.json').write_text(json.dumps(report(excluded=[(base.DAYS[0],'KRW-BTC')])))
+        block=doc_block();self.assertIn('.venv/bin/python -m backtesting.terminal_exit_audit',block)
+        script=block.replace('.venv/bin/python',f'"{sys.executable}"')
+        env={k:v for k,v in os.environ.items() if k not in ('PYTHONPATH','PYTHONHOME','P21_RESULTS','P28_OUT')}
+        env['HOME']=str(home)
+        if stale:env.update(P21_RESULTS=str(root/'stale.json'),P28_OUT=str(root/'stale-out'))
+        done=subprocess.run(['bash','-c',script],cwd=ROOT,env=env,capture_output=True,text=True,timeout=60)
+        return home,done
+
+    def test_full_documented_block_passes_real_paths_unset_and_stale(self):
+        for stale in (False,True):
+            with self.subTest(stale=stale),TemporaryDirectory() as temp:
+                root=Path(temp).resolve();home,done=self.run_block(root,stale);lines=done.stdout.splitlines()
+                self.assertEqual(done.returncode,0,done.stdout+done.stderr);self.assertLessEqual(len(lines),8)
+                self.assertTrue(lines[0].startswith('P28 AUDITED_PARTIAL pairs=5 excluded=1 exit=0'),lines)
+                outs=list((home/'research').glob('p28-*'))
+                self.assertEqual(len(outs),1);self.assertTrue((outs[0]/'results.json').is_file())
+                self.assertFalse((root/'stale-out').exists())
+                self.assertNotIn(str(root),done.stdout);self.assertNotIn('Traceback',done.stdout+done.stderr)
+
     def test_documented_command_in_clean_environment(self):
         doc=(ROOT/'docs/P28_TERMINAL_EXIT_AUDIT.md').read_text(encoding='utf-8')
         self.assertIn(DOC_COMMAND,doc)

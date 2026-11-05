@@ -17,14 +17,25 @@ P21 결과의 보유 포지션은 마지막 종가로 평가됩니다
 
 ## 실행 명령 (저장소 루트에서)
 
-```bash
-P21_RESULTS=~/research/p21-output/results.json P28_OUT=~/research/p28-$(date +%Y%m%d-%H%M%S) PYTHON_DOTENV_DISABLED=1 python -m backtesting.terminal_exit_audit --input "$P21_RESULTS" --output "$P28_OUT"
-```
+경로 두 줄을 실제 위치로 바꿉니다. 아래 블록 전체를 그대로 복사해 실행합니다.
 
+<!-- P28_COMMAND_BEGIN -->
+```bash
+P21_RESULTS="$HOME/research/p21-output/results.json"
+P28_OUT="$HOME/research/p28-$(date +%Y%m%d-%H%M%S)"
+PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.terminal_exit_audit --input "$P21_RESULTS" --output "$P28_OUT"
+```
+<!-- P28_COMMAND_END -->
+
+- 변수 대입은 실행 줄과 **분리**해야 합니다.
+  - `A=x B=y cmd --input "$A"`처럼 한 줄에 쓰면 bash가 `"$A"`를 대입 전의 기존 값으로 확장합니다.
+  - 그 결과 기존 값이 없으면 인자가 빈 문자열이 되고, 이전 값이 있으면 이전 경로가 사용됩니다.
+  - `~`는 따옴표 안에서 확장되지 않으므로 `$HOME`을 씁니다.
+  - 테스트(`CommandTests`)는 이 블록 전체를 bash로 실행합니다. 두 변수가 없는 환경과 이전 값이 남은 환경을 모두 사용하며, 바꾸는 것은 인터프리터 경로뿐입니다.
 - 고정 명령: `python -m backtesting.terminal_exit_audit --input "$P21_RESULTS" --output "$P28_OUT"`.
 - 입력은 checkout 밖 기존 P21 출력의 `results.json`이고, 출력은 아직 존재하지 않는 새 비공개 디렉터리입니다.
 - 출력 파일은 `results.json`(Decimal 전체 값·입력 SHA·환경), `terminal_exit.csv`, `REPORT.md` 세 개입니다.
-- 종료코드는 `AUDITED`/`AUDITED_PARTIAL`이면 0, 그 밖에는 2입니다.
+- 종료코드는 `AUDITED`/`AUDITED_PARTIAL`이면 0, 그 밖에는 2입니다. 요약 1행에도 `exit=N`으로 표시합니다.
 - 표준출력은 최대 8줄이며 경로·오류 원문·인증정보를 출력하지 않습니다.
   - 1행: 상태/짝 수/제외 수/종료코드(실패 시 고정 reason).
   - 다음 최대 6행: 짝마다 Legacy→44bps의 종가평가 수익률, 가상청산 후 수익률, 추가 비용.
@@ -82,6 +93,10 @@ P21_RESULTS=~/research/p21-output/results.json P28_OUT=~/research/p28-$(date +%Y
   - symlink, checkout 내부, 계정/holdout/runtime 경로, 기존 출력은 거절합니다.
   - 실패 시 `results.json`에 `INCOMPLETE` 상태와 reason을 남깁니다.
   - `INCOMPLETE` 표지는 남기고, 성공용 CSV/MD는 남기지 않습니다.
+- **읽기 상한:** 최초 로드와 재해시 읽기는 모두 `read_bounded`를 사용합니다.
+  - `CHUNK_BYTES`(1 MiB) 단위로 남은 한도+1바이트만 요청합니다. 따라서 파일이 읽는 도중 커져도 누적 읽기는 최대 `MAX_INPUT_BYTES+1`(16 MiB+1)입니다.
+  - 초과 시 최초 로드는 `P28_INPUT_SIZE`, 재해시는 `P28_INPUT_CHANGED`로 끝납니다.
+  - 사전 `stat` 검사는 빠른 거절용일 뿐이며, 상한은 이 읽기 함수가 보장합니다.
 - **시간:** 최대 30초입니다. 단계 사이(읽기 후, 짝마다, 출력 후)에 deadline을 검사합니다(`P28_TIME_LIMIT`).
   - subprocess/감시 프로세스는 없습니다.
   - 한 단계 내부(예: 대형 JSON 파싱)는 중간에 끊지 못하며, 16 MiB 입력 한도로 이를 제한합니다.

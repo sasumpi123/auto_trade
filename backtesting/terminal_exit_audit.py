@@ -33,6 +33,7 @@ VALUATION='LAST_CANDLE_CLOSE_NO_HYPOTHETICAL_EXIT_COST'
 MAX_PAIRS=6
 MAX_POLICIES=12
 MAX_INPUT_BYTES=16*1024*1024
+CHUNK_BYTES=1024*1024
 MAX_SECONDS=30
 MAX_DECIMAL_CHARS=80
 _DECIMAL=re.compile(r'-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?')
@@ -66,13 +67,30 @@ def count(value):
 def _reject_constant(name):raise ValueError('P28_INVALID_JSON')
 
 
+def _open(path):return open(path,'rb')
+
+
+def read_bounded(path,limit=None):
+    """Read at most limit+1 bytes in bounded chunks, even if the file grows while being read."""
+    limit=MAX_INPUT_BYTES if limit is None else limit
+    chunks=[];total=0
+    with _open(path) as f:
+        while True:
+            part=f.read(min(CHUNK_BYTES,limit+1-total))
+            if not part:break
+            total+=len(part);chunks.append(part)
+            base.require(total<=limit,'P28_INPUT_SIZE')
+    return b''.join(chunks)
+
+
 def load(path):
     """Bounded strict read; returns (report, sha256, size). Duplicate JSON keys are rejected."""
     path=base.safe_path(path)
     base.require(path.is_file() and not path.is_symlink(),'P28_INPUT_UNREADABLE')
     base.require(not (path.parent/'INCOMPLETE').exists(),'P28_INPUT_INCOMPLETE')
-    data=path.read_bytes()
-    base.require(0<len(data)<=MAX_INPUT_BYTES,'P28_INPUT_SIZE')
+    base.require(path.stat().st_size<=MAX_INPUT_BYTES,'P28_INPUT_SIZE')  # Early reject; read_bounded enforces.
+    data=read_bounded(path)
+    base.require(len(data)>0,'P28_INPUT_SIZE')
     def pairs(items):
         keys=[k for k,_ in items];base.require(len(keys)==len(set(keys)),'P28_DUPLICATE_KEY')
         return dict(items)
@@ -241,7 +259,9 @@ def audit(source,output,*,seconds=MAX_SECONDS,clock=time.monotonic):
             'p19_results_sha256':source_report.get('p19_results_sha256'),'protocol_sha256':source_report.get('protocol_sha256'),
             'self_reported_flags_not_exchange_provenance':True}
         cases,excluded=check_report(source_report,deadline);deadline.check()
-        base.require(hashlib.sha256(path.read_bytes()).hexdigest()==digest,'P28_INPUT_CHANGED')
+        try:again=read_bounded(path)
+        except ValueError:raise ValueError('P28_INPUT_CHANGED') from None  # Grew past the bound after load.
+        base.require(hashlib.sha256(again).hexdigest()==digest,'P28_INPUT_CHANGED')
         report.update(cases=cases,excluded=excluded,
             status='AUDITED_PARTIAL' if source_report['status']=='VERIFIED_PARTIAL' else 'AUDITED')
         write_outputs(out,report);deadline.check()
