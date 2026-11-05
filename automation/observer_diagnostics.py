@@ -20,6 +20,8 @@ CODES = {
     'run_pr_ambiguous': 'RUN_PR_RELATION_UNVERIFIED',
     'stale_run_event': 'STALE_RUN_EVENT',
     'observation_database_unverified': 'OBSERVATION_STORAGE_UNVERIFIED',
+    'pr_mismatch': 'PR_IDENTITY_UNVERIFIED',
+    'pr_head_identity_unverified': 'PR_HEAD_IDENTITY_UNVERIFIED',
 }
 
 

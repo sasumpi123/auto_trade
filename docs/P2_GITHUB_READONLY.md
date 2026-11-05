@@ -88,3 +88,5 @@ concurrency는 완전 영속 전달이 아닙니다. GitHub가 pending run을 �
 - [ ] 실제 모델 사용량/청구 제한, 격리 작업자/패치 게시/독립 리뷰/병합 주체의 구현·검증
 - [ ] 회당 $5, 이슈 $15, UTC 일일 $50, 총 3회·연속 실패 2회의 예약 정책 유지. 실제 청구 hard cap이 없으면 유료 실행 금지
 - [ ] 실제 authenticated read-only E2E/장애 검증 및 사용자 별도 승인. P2는 Codex/Push/PR 자동 생성/병합/실거래/배포를 허용하지 않음
+
+P27: 일반 수동 PR은 재조회로 확인되면 `NOT_APPLICABLE`(exit 0)로 분리된다. autodev 계약 검증은 그대로다. 상세는 [P27](P27_OBSERVER_SCOPE.md).
