@@ -234,6 +234,36 @@ class PipelineTests(Fixture):
             out,r=b.audit(self.src,self.res,self.root/'stop')
         self.assertEqual(r['failure_reason'],'P29_INTERRUPTED');self.assertTrue((out/'INCOMPLETE').exists())
 
+    def test_internal_symlink_or_account_marker_blocks_before_any_read(self):
+        """Every original file passes the full safe_path check BEFORE it is opened (root alone is not enough)."""
+        day=self.src/'data'/base.DAYS[0]
+        def link_analysis():
+            elsewhere=self.root/'elsewhere';shutil.move(str(self.src/'analysis'),elsewhere);(self.src/'analysis').symlink_to(elsewhere)
+        def link_csv():
+            target=self.root/'other.csv';shutil.move(str(day/'KRW-XRP-1.csv'),target);(day/'KRW-XRP-1.csv').symlink_to(target)
+        def link_data():
+            shutil.move(str(self.src/'data'),self.src/'holdout-data');(self.src/'data').symlink_to(self.src/'holdout-data')
+        csv=day/'KRW-XRP-1.csv'
+        cases=[('analysis-symlink',link_analysis,'SYMLINK_FORBIDDEN',self.src/'analysis'/'results.json'),
+            ('analysis-account',lambda:(self.src/'analysis'/'session.json').write_text('{}'),'ACCOUNT_OR_HOLDOUT_PATH_FORBIDDEN',
+                self.src/'analysis'/'results.json'),
+            ('day-account',lambda:(day/'experiment-state.json').write_text('{}'),'ACCOUNT_OR_HOLDOUT_PATH_FORBIDDEN',day/'plan.json'),
+            ('data-symlink',link_data,'SYMLINK_FORBIDDEN',day/'plan.json'),
+            ('csv-symlink',link_csv,'SYMLINK_FORBIDDEN',csv)]
+        for n,(name,change,reason,offending) in enumerate(cases):
+            with self.subTest(name):
+                shutil.rmtree(self.root/'in');shutil.rmtree(self.root/'elsewhere',ignore_errors=True)
+                (self.root/'other.csv').unlink(missing_ok=True);shutil.copytree(self.base/'fixture',self.root/'in');change()
+                before=tree(self.root);opened=[];opener=p28._open
+                def record(path):
+                    opened.append(Path(path));return opener(path)
+                with patch.object(p28,'_open',side_effect=record):_,r=b.audit(self.src,self.res,self.root/f'o{n}')
+                self.assertEqual((r['status'],r['failure_reason']),('INCOMPLETE',reason))
+                self.assertNotIn(offending,opened)  # Blocked before the original is ever opened.
+                for p in opened:base.safe_path(p)  # Anything read had already passed the full path policy.
+                after=tree(self.root);[after.pop(k) for k in list(after) if k.parts[0]==f'o{n}']
+                self.assertEqual(before,after)  # Sources, account markers and link targets unchanged.
+
     def test_account_and_backup_paths_untouched_and_rejected(self):
         account=self.root/'accounts'/'halted';account.mkdir(parents=True)
         (account/'experiment.json').write_text('{"status":"HALTED"}');(account/'backup.json').write_text('{}')

@@ -56,6 +56,9 @@ class Deadline(p28.Deadline):
 
 
 def _file(path):
+    """Full existing path policy on the ORIGINAL file before any open: no symlink in the file or any
+    ancestor, no account/holdout/runtime marker. Never resolved or repaired to make it pass."""
+    base.safe_path(path)
     base.require(path.is_file() and not path.is_symlink(),'P29_INPUT_UNREADABLE')
     return path
 
