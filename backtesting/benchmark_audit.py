@@ -100,36 +100,50 @@ def unchanged(root,hashes):
         base.require(hashlib.sha256(raw).hexdigest()==digest,'P29_INPUT_CHANGED')
 
 
+def buy_hold_40_core(frame,first,market,folder,*,prefix='P29',extra=None,check=None):
+    """One disposable P17 research BUY of a fee-inclusive 400,000 at `first` open, marked at the last close.
+
+    Also re-derives q=400000/(1+f)/BUY(open) independently, so a run without a stored baseline
+    (P30/P22) still proves the engine followed the P17/P19 formula. `extra` keys are inserted after
+    marked_return_pct; `check(marked_return)` runs before anything is returned.
+    """
+    stamp=minute.utc(first);base.require(stamp in frame.index and stamp>frame.index[0],prefix+'_WINDOW_MISMATCH')
+    reference=number(frame.loc[stamp,'open']);mark=number(frame.close.iloc[-1]);costs=CostModel(5,5,2)
+    folder.mkdir(mode=0o700)
+    engine=base.P17ResearchEngine(folder/'unused.json',1000000,costs,lambda:stamp.timestamp())
+    engine.open()
+    try:
+        base.require(engine.buy(market,reference,400000),prefix+'_BH40_REJECTED')
+        cash=engine.cash;q=number(engine.position(market)['quantity'])
+        orders=list(engine.state['orders'].values())
+        base.require(len(orders)==1 and orders[0]['side']=='bid',prefix+'_BH40_REJECTED')
+        fee=number(orders[0]['paid_fee']);funds=number(orders[0]['funds'])
+    finally:engine.close()
+    budget=INITIAL_CASH*BH_FRACTION
+    base.require(close(cash+funds+fee,INITIAL_CASH) and close(funds+fee,budget),prefix+'_BH40_BUDGET_MISMATCH')
+    base.require(close(q,budget/(1+costs.fee_rate)/costs.price(reference,'BUY')),prefix+'_BH40_FORMULA_MISMATCH')
+    e=p28.exit_values(cash,q,mark);marked=e['marked']
+    marked_ret=(marked/INITIAL_CASH-1)*100
+    if check:check(marked_ret)
+    hyp_ret=(e['hyp']-INITIAL_CASH)/INITIAL_CASH*100
+    return {'status':'EVALUATED','entry_open_utc':stamp.isoformat(),'entry_reference_open':str(reference),
+        'budget_fee_inclusive':str(budget),'buy_funds':str(funds),'buy_fee':str(fee),'quantity':str(q),
+        'cash':str(cash),'mark_price':str(mark),'marked_equity':str(marked),'marked_return_pct':str(marked_ret),
+        **(extra or {}),'exit_price':None if e['exit_price'] is None else str(e['exit_price']),
+        'exit_fee':str(e['fee']),'extra_exit_cost':str(e['diff']),'hypothetical_exit_equity':str(e['hyp']),
+        'hypothetical_exit_return_pct':str(hyp_ret),'fills':{'buys':1,'sells':0},
+        'hypothetical_sell_counted_as_fill':False}
+
+
 def buy_hold_40(frame,old,market,folder):
     """Same P17 path, reference open, fee-inclusive budget and last close as p19_baseline.buy_hold."""
     first=old.get('execution_first_open');stored=old['metrics'].get('buy_hold_40_net_pct')
     if first is None:
         base.require(stored is None,'P29_BH40_MISMATCH')
         return {'status':'NA_NO_COMMON_EXECUTION_OPEN'}
-    stamp=minute.utc(first);base.require(stamp in frame.index and stamp>frame.index[0],'P29_WINDOW_MISMATCH')
-    reference=number(frame.loc[stamp,'open']);mark=number(frame.close.iloc[-1])
-    folder.mkdir(mode=0o700)
-    engine=base.P17ResearchEngine(folder/'unused.json',1000000,CostModel(5,5,2),lambda:stamp.timestamp())
-    engine.open()
-    try:
-        base.require(engine.buy(market,reference,400000),'P29_BH40_REJECTED')
-        cash=engine.cash;q=number(engine.position(market)['quantity'])
-        orders=list(engine.state['orders'].values())
-        base.require(len(orders)==1 and orders[0]['side']=='bid','P29_BH40_REJECTED')
-        fee=number(orders[0]['paid_fee']);funds=number(orders[0]['funds'])
-    finally:engine.close()
-    base.require(close(cash+funds+fee,INITIAL_CASH) and close(funds+fee,INITIAL_CASH*BH_FRACTION),'P29_BH40_BUDGET_MISMATCH')
-    e=p28.exit_values(cash,q,mark);marked=e['marked']
-    marked_ret=(marked/INITIAL_CASH-1)*100
-    base.require(type(stored) is str and close(p28.num(stored,signed=True),marked_ret),'P29_BH40_MISMATCH')
-    hyp_ret=(e['hyp']-INITIAL_CASH)/INITIAL_CASH*100
-    return {'status':'EVALUATED','entry_open_utc':stamp.isoformat(),'entry_reference_open':str(reference),
-        'budget_fee_inclusive':str(INITIAL_CASH*BH_FRACTION),'buy_funds':str(funds),'buy_fee':str(fee),'quantity':str(q),
-        'cash':str(cash),'mark_price':str(mark),'marked_equity':str(marked),'marked_return_pct':str(marked_ret),
-        'p19_buy_hold_40_net_pct':stored,'exit_price':None if e['exit_price'] is None else str(e['exit_price']),
-        'exit_fee':str(e['fee']),'extra_exit_cost':str(e['diff']),'hypothetical_exit_equity':str(e['hyp']),
-        'hypothetical_exit_return_pct':str(hyp_ret),'fills':{'buys':1,'sells':0},
-        'hypothetical_sell_counted_as_fill':False}
+    def check(marked_ret):
+        base.require(type(stored) is str and close(p28.num(stored,signed=True),marked_ret),'P29_BH40_MISMATCH')
+    return buy_hold_40_core(frame,first,market,folder,extra={'p19_buy_hold_40_net_pct':stored},check=check)
 
 
 def compare(audit,raw,bh):
