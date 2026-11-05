@@ -132,11 +132,10 @@ def check_policy(result,policy):
     return {'trades':trades,'cash':cash,'quantity':q,'mark':mark,'equity':equity,'realized':realized,'remaining_cost':remaining}
 
 
-def exit_audit(result,policy):
-    """C+Q*P versus C+Q*SELL(P)*(1-f). Past costs stay inside cash/remaining cost; never re-deducted."""
-    v=check_policy(result,policy)
+def exit_values(c,q,p):
+    """Pure Decimal model: C+Q*P versus C+Q*SELL(P)*(1-f) with the fixed P21 5/5/2bps CostModel."""
     model=CostModel(Decimal(P21_COSTS['fee_bps']),Decimal(P21_COSTS['slippage_bps']),Decimal(P21_COSTS['spread_bps']))
-    c,q,p=v['cash'],v['quantity'],v['mark'];marked=c+q*p
+    marked=c+q*p
     if q==0:
         exit_price=None;funds=fee=slip=spread=Decimal(0)
     else:
@@ -144,6 +143,16 @@ def exit_audit(result,policy):
         slip=q*p*model.slippage_bps/10000;spread=q*p*model.spread_bps/20000  # Half of the full spread.
     proceeds=funds-fee;hyp=c+proceeds;diff=marked-hyp
     base.require(close(diff,slip+spread+fee),'P28_EXIT_COST_IDENTITY')
+    return {'marked':marked,'exit_price':exit_price,'funds':funds,'fee':fee,'slip':slip,'spread':spread,
+        'proceeds':proceeds,'hyp':hyp,'diff':diff}
+
+
+def exit_audit(result,policy):
+    """C+Q*P versus C+Q*SELL(P)*(1-f). Past costs stay inside cash/remaining cost; never re-deducted."""
+    v=check_policy(result,policy)
+    c,q,p=v['cash'],v['quantity'],v['mark']
+    e=exit_values(c,q,p);marked,exit_price,funds,fee,slip,spread=(e[k] for k in ('marked','exit_price','funds','fee','slip','spread'))
+    proceeds,hyp,diff=e['proceeds'],e['hyp'],e['diff']
     base.require(q==0 or close(hyp-INITIAL_CASH,v['realized']+proceeds-v['remaining_cost']),'P28_EXIT_PNL_IDENTITY')
     trades=v['trades']>0
     marked_pnl=marked-INITIAL_CASH;hyp_pnl=hyp-INITIAL_CASH
