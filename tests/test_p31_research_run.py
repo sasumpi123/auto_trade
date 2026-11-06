@@ -182,12 +182,12 @@ class SpawnTests(unittest.TestCase):
     def test_exit_code_log_timeout_group_kill_and_bounded_log(self):
         with TemporaryDirectory() as temp:
             root=Path(temp).resolve()
-            outcome,code=rr.spawn([sys.executable,'-c','import sys;print("x");sys.exit(3)'],root/'a.log',30)
+            outcome,code,_=rr.spawn([sys.executable,'-c','import sys;print("x");sys.exit(3)'],root/'a.log',30)
             self.assertEqual((outcome,code),('EXITED',3));self.assertEqual((root/'a.log').read_text().strip(),'x')
             script=('import subprocess,sys,time;'
                 f'p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);open({str(root/"pid")!r},"w").write(str(p.pid));'
                 'sys.stdout.flush();time.sleep(60)')
-            t0=time.monotonic();outcome,code=rr.spawn([sys.executable,'-c',script],root/'b.log',2)
+            t0=time.monotonic();outcome,code,_=rr.spawn([sys.executable,'-c',script],root/'b.log',2)
             self.assertEqual(outcome,'TIMEOUT');self.assertLess(time.monotonic()-t0,30);self.assertNotEqual(code,0)
             grandchild=int((root/'pid').read_text())
             def alive(pid):
@@ -201,6 +201,85 @@ class SpawnTests(unittest.TestCase):
             with patch.object(rr,'MAX_LOG_BYTES',100):
                 rr.spawn([sys.executable,'-c','print("y"*5000)'],root/'c.log',30)
             self.assertLessEqual((root/'c.log').stat().st_size,100+len(b'[truncated]\n'))
+
+
+def _alive(pid):
+    try:os.kill(pid,0)
+    except ProcessLookupError:return False
+    stat_file=Path(f'/proc/{pid}/stat')  # Killed but unreaped (zombie) under a non-reaping PID 1.
+    return not (stat_file.exists() and stat_file.read_text().rsplit(')',1)[1].split()[0]=='Z')
+
+
+def _wait_dead(pid,seconds=10):
+    deadline=time.monotonic()+seconds
+    while _alive(pid) and time.monotonic()<deadline:time.sleep(0.1)
+    return not _alive(pid)
+
+
+def _stubborn_leader(pidfile,leader_ignores_term=False):
+    """Leader starts a SIGTERM-ignoring grandchild in the SAME process group, then sleeps."""
+    child='import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(120)'
+    prefix='import signal;signal.signal(signal.SIGTERM,signal.SIG_IGN);' if leader_ignores_term else ''
+    return [sys.executable,'-c',prefix+'import subprocess,sys,time;'
+        f'p=subprocess.Popen([sys.executable,"-c",{child!r}]);open({str(pidfile)!r},"w").write(str(p.pid));time.sleep(120)']
+
+
+@unittest.skipUnless(os.name=='posix','process groups require POSIX')
+class GroupCleanupTests(unittest.TestCase):
+    """Review 5794135817: the leader exiting on SIGTERM must not end cleanup of its own group."""
+    def setUp(self):
+        self.t=TemporaryDirectory();self.root=Path(self.t.name).resolve()
+        # Unrelated sentinel in its own session: must survive every cleanup below.
+        self.sentinel=subprocess.Popen([sys.executable,'-c','import time;time.sleep(120)'],start_new_session=True)
+    def tearDown(self):
+        self.sentinel.kill();self.sentinel.wait();self.t.cleanup()
+    def started(self,pidfile):
+        deadline=time.monotonic()+10
+        while not pidfile.exists() and time.monotonic()<deadline:time.sleep(0.05)
+        return int(pidfile.read_text())
+
+    def test_timeout_kills_term_ignoring_grandchild_and_spares_sentinel(self):
+        for leader_ignores in (False,True):
+            with self.subTest(leader_ignores_term=leader_ignores):
+                pidfile=self.root/f'gc{int(leader_ignores)}'
+                result=rr.spawn(_stubborn_leader(pidfile,leader_ignores),self.root/f't{int(leader_ignores)}.log',2)
+                grandchild=self.started(pidfile)
+                self.assertEqual(result[0],'TIMEOUT');self.assertNotEqual(result[1],0)
+                self.assertTrue(_wait_dead(grandchild),'SIGTERM-ignoring grandchild left running')
+                self.assertTrue(result[2]['sigterm_sent']);self.assertTrue(result[2]['sigkill_sent'])
+                self.assertIsNone(self.sentinel.poll())
+
+    def test_ctrl_c_path_also_cleans_whole_group(self):
+        pidfile=self.root/'gc';real=subprocess.Popen.wait;calls=[]
+        def wait(self_,timeout=None):
+            calls.append(timeout)
+            if len(calls)==1:
+                deadline=time.monotonic()+10
+                while not pidfile.exists() and time.monotonic()<deadline:time.sleep(0.05)
+                raise KeyboardInterrupt
+            return real(self_,timeout=timeout)
+        with patch.object(subprocess.Popen,'wait',wait):result=rr.spawn(_stubborn_leader(pidfile),self.root/'c.log',60)
+        self.assertEqual(result[0],'INTERRUPTED');self.assertTrue(_wait_dead(int(pidfile.read_text())))
+        self.assertTrue(result[2]['sigkill_sent']);self.assertIsNone(self.sentinel.poll())
+
+    def test_run_preserves_completed_step_and_is_nonzero_after_group_timeout(self):
+        pidfile=self.root/'gc';run=self.root/'run'
+        def argv(step,root):
+            if step=='collect':
+                return [sys.executable,'-c',f'import pathlib;p=pathlib.Path({str(run/"collection")!r});p.mkdir();'
+                    '(p/"collection.json").write_text(\'{"status":"PARTIAL_REAL_DATA","network_calls":3}\')']
+            if step=='analyze':return _stubborn_leader(pidfile)
+            return [sys.executable,'-c','raise SystemExit("supplement must not start")']  # Recorded only, never run.
+        with patch.object(p22,'utc_now',return_value=FUTURE),patch.object(rr,'argv_for',side_effect=argv),\
+                patch.dict(rr.STEP_SECONDS,{'collect':30,'analyze':2,'supplement':5}),patch.object(rr,'preflight',return_value=[]):
+            out,r=rr.run(run,connect_public=True)
+        self.assertEqual(r['status'],'TIMEOUT');self.assertEqual(rr.code_of(r),2)
+        steps={s['step']:s for s in json.loads((out/'run.json').read_text())['steps']}
+        self.assertEqual((steps['collect']['status'],steps['collect']['exit_code'],steps['collect']['result']),('EXITED',0,'PARTIAL_REAL_DATA'))
+        self.assertEqual(steps['analyze']['status'],'TIMEOUT');self.assertTrue(steps['analyze']['cleanup']['sigkill_sent'])
+        self.assertEqual(steps['supplement']['status'],'SKIPPED_WITH_REASON')
+        self.assertTrue((out/'collection'/'collection.json').is_file());self.assertTrue(_wait_dead(int(pidfile.read_text())))
+        self.assertIsNone(self.sentinel.poll())
 
 
 @unittest.skipUnless(os.name=='posix','bash required')

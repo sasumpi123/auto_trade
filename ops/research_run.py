@@ -92,8 +92,44 @@ def child_env():
     return env
 
 
+TERM_GRACE_SECONDS=10
+KILL_REAP_SECONDS=5
+
+
+def _leader_exited(pid):
+    """Non-reaping check: the exited leader stays a zombie, so its PGID cannot be reused meanwhile."""
+    try:return os.waitid(os.P_PID,pid,os.WEXITED|os.WNOHANG|os.WNOWAIT) is not None
+    except ChildProcessError:return True
+
+
+def stop_group(child):
+    """Bounded cleanup of the ONE process group this process created (never another group).
+
+    SIGTERM to the group, wait up to TERM_GRACE_SECONDS for the leader without reaping it, then
+    ALWAYS SIGKILL the same group (members that ignore SIGTERM or outlive the leader), and only then
+    reap the leader. Leader exit and group cleanup are recorded separately.
+    """
+    pgid=child.pid;record={'pgid_is_own_session':True,'sigterm_sent':False,'sigkill_sent':False,'leader_exit':None}
+    try:previous=signal.signal(signal.SIGINT,signal.SIG_IGN)  # Finish the bounded cleanup on a 2nd Ctrl-C.
+    except ValueError:previous=None
+    try:
+        try:os.killpg(pgid,signal.SIGTERM);record['sigterm_sent']=True
+        except ProcessLookupError:pass
+        deadline=time.monotonic()+TERM_GRACE_SECONDS
+        while not _leader_exited(pgid) and time.monotonic()<deadline:time.sleep(0.1)
+        record['leader_exited_after_term']=_leader_exited(pgid)
+        try:os.killpg(pgid,signal.SIGKILL);record['sigkill_sent']=True
+        except ProcessLookupError:pass
+        try:record['leader_exit']=child.wait(timeout=KILL_REAP_SECONDS)
+        except subprocess.TimeoutExpired:record['leader_exit']=None
+    finally:
+        if previous is not None:signal.signal(signal.SIGINT,previous)
+    return record
+
+
 def spawn(argv,log,timeout):
-    """Run ONE direct child in its own process group; on timeout/Ctrl-C terminate only that group."""
+    """Run ONE direct child in its own process group; on timeout/Ctrl-C clean up that whole group only."""
+    cleanup=None
     with open(log,'wb') as out:
         child=subprocess.Popen(argv,cwd=ROOT,env=child_env(),stdin=subprocess.DEVNULL,stdout=out,stderr=subprocess.STDOUT,
             start_new_session=True)
@@ -102,17 +138,12 @@ def spawn(argv,log,timeout):
         except subprocess.TimeoutExpired:outcome='TIMEOUT'
         except KeyboardInterrupt:outcome='INTERRUPTED'
         if outcome!='EXITED':
-            for sig,grace in ((signal.SIGTERM,10),(signal.SIGKILL,5)):
-                try:os.killpg(child.pid,sig)
-                except ProcessLookupError:break
-                try:child.wait(timeout=grace);break
-                except subprocess.TimeoutExpired:continue
-            code=child.poll()
+            cleanup=stop_group(child);code=cleanup['leader_exit']
     size=Path(log).stat().st_size
     if size>MAX_LOG_BYTES:  # Keep the bounded tail; never echo it.
         with open(log,'rb') as fh:fh.seek(size-MAX_LOG_BYTES);tail=fh.read()
         Path(log).write_bytes(b'[truncated]\n'+tail)
-    return outcome,code
+    return outcome,code,cleanup
 
 
 def read_json(path):
@@ -148,10 +179,10 @@ def describe(step,root):
 
 
 def run(directory,*,connect_public=False,executor=None,clock=time.monotonic):
-    """executor(step, argv, log, timeout) -> (outcome, exit_code); tests inject a fake, the CLI never can."""
+    """executor(step, argv, log, timeout) -> (outcome, exit_code[, cleanup]); tests inject a fake, the CLI never can."""
     if now()<p22.END:return None,not_ready()
     if not connect_public:return None,plan()
-    executor=executor or (lambda step,argv,log,timeout:spawn(argv,log,timeout))
+    executor=executor or (lambda step,argv,log,timeout:spawn(argv,log,timeout))  # -> (outcome, code, cleanup)
     drift=preflight()
     previous=os.umask(0o077)
     try:
@@ -170,8 +201,10 @@ def run(directory,*,connect_public=False,executor=None,clock=time.monotonic):
             if remaining<=0:
                 entry.update(status='SKIPPED_WITH_REASON',reason='P31_TOTAL_BUDGET_EXCEEDED');record['steps'].append(entry);save();return entry
             log=root/'logs'/f'{name}.log';t0=clock();entry['status']='RUNNING';record['steps'].append(entry);save()
-            try:outcome,code=executor(name,entry['argv'],log,min(STEP_SECONDS[name],remaining))
-            except KeyboardInterrupt:outcome,code='INTERRUPTED',None  # spawn already stopped its own group.
+            try:result=executor(name,entry['argv'],log,min(STEP_SECONDS[name],remaining))
+            except KeyboardInterrupt:result=('INTERRUPTED',None)  # spawn already stopped its own group.
+            outcome,code=result[0],result[1]
+            if len(result)>2 and result[2] is not None:entry['cleanup']=result[2]
             entry.update(status=outcome,exit_code=code,elapsed_seconds=round(clock()-t0,3),**describe(name,root))
             save();return entry
         collect=step('collect')
