@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import re
+import subprocess
 import tempfile
 import time
 from contextlib import redirect_stdout,redirect_stderr
@@ -38,6 +39,8 @@ from strategies.signals import ConsensusStrategy
 
 PROTOCOL=Path(__file__).with_name('p33_protocol.json')
 REGISTRATION=Path(__file__).with_name('p33_registration.json')
+ANCHOR=Path(__file__).with_name('p33_registration_anchor.json')
+CHECKOUT=minute.ROOT
 DAYS=tuple((pd.Timestamp('2026-11-08')+pd.Timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7))
 MARKETS=('KRW-BTC','KRW-XRP')
 START=pd.Timestamp('2026-11-08T00:00:00Z')
@@ -71,18 +74,49 @@ def protocol():
     return p
 
 
+def _git(*args):
+    try:out=subprocess.run(['git','-C',str(CHECKOUT),*args],capture_output=True,text=True,timeout=15)
+    except (OSError,subprocess.SubprocessError):raise ValueError('P33_CHECKOUT_UNVERIFIED') from None
+    return out
+
+
+def committed(path):
+    """Tracked, unmodified and committed in this checkout; returns the last commit time touching it."""
+    rel=str(Path(path).resolve().relative_to(Path(CHECKOUT).resolve()))
+    base.require(_git('ls-files','--error-unmatch','--',rel).returncode==0,'P33_REGISTRATION_UNTRACKED')
+    status=_git('status','--porcelain','--',rel)
+    base.require(status.returncode==0 and status.stdout.strip()=='','P33_REGISTRATION_MODIFIED')
+    log=_git('log','-1','--format=%cI','--',rel)
+    base.require(log.returncode==0 and log.stdout.strip(),'P33_REGISTRATION_UNTRACKED')
+    return minute.utc(log.stdout.strip())
+
+
 def registration():
-    """Registration receipt written only after review/approval, before START. Absent -> blocked."""
-    p=protocol()
-    if not REGISTRATION.is_file():
-        return {'status':'MISSED_REGISTRATION' if utc_now()>=START else 'NOT_REGISTERED','protocol_sha256':sha(PROTOCOL)}
+    """Gate opens ONLY via the reviewed anchor: a receipt file alone can never register.
+
+    The anchor (separately reviewed registration PR, merged before START) pins the receipt digest and
+    approval reference. Receipt and anchor must be tracked and unmodified; the anchor's last commit and
+    the receipt's observed time must both precede START, and the observed time cannot be in the future.
+    """
+    p=protocol();now=utc_now();missed='MISSED_REGISTRATION' if now>=START else 'NOT_REGISTERED'
+    anchor=json.loads(normalized(ANCHOR))
+    base.require(anchor.get('schema')=='P33_REGISTRATION_ANCHOR_V1','P33_REGISTRATION_UNVERIFIED')
+    if anchor.get('receipt_sha256') is None:
+        return {'status':missed,'protocol_sha256':sha(PROTOCOL),'receipt_present_but_unanchored':REGISTRATION.exists()}
+    base.require(re.fullmatch(r'[0-9a-f]{64}',str(anchor['receipt_sha256'])) and type(anchor.get('approval_reference')) is str
+        and anchor['approval_reference'],'P33_REGISTRATION_UNVERIFIED')
+    base.require(REGISTRATION.is_file() and sha(REGISTRATION)==anchor['receipt_sha256'],'P33_RECEIPT_NOT_ANCHORED')
+    base.require(committed(ANCHOR)<START,'P33_MISSED_REGISTRATION')
+    committed(REGISTRATION)
     r=json.loads(normalized(REGISTRATION))
     base.require(r.get('schema')=='P33_REGISTRATION_V1' and r.get('protocol_sha256')==sha(PROTOCOL)
-        and r.get('approved') is True and type(r.get('approval_reference')) is str and r['approval_reference']
+        and r.get('approved') is True and r.get('approval_reference')==anchor['approval_reference']
         and re.fullmatch(r'[0-9a-f]{40}',str(r.get('protocol_commit'))) and r.get('observed_remote_head')==r.get('protocol_commit')
         and r.get('remote_repository')=='sasumpi123/auto_trade','P33_REGISTRATION_UNVERIFIED')
-    base.require(minute.utc(r['observed_at_utc'])<START,'P33_MISSED_REGISTRATION')
-    return {'status':'REGISTERED','protocol_sha256':r['protocol_sha256'],'protocol_commit':r['protocol_commit'],'protocol':p}
+    observed=minute.utc(r['observed_at_utc'])
+    base.require(observed<START,'P33_MISSED_REGISTRATION');base.require(observed<=now,'P33_REGISTRATION_FROM_FUTURE')
+    return {'status':'REGISTERED','protocol_sha256':r['protocol_sha256'],'protocol_commit':r['protocol_commit'],
+        'registration_id':anchor['receipt_sha256'],'protocol':p}
 
 
 def not_ready(reg):return {'status':'NOT_READY','registration':reg['status'],'network_calls':0,'files_written':0,
@@ -102,7 +136,7 @@ def collect(output,*,connect_public=False,clock=time.time,client_factory=None):
     if not connect_public:return {'status':'OFFLINE_PLAN_ONLY','network_calls':0,'files_written':0,'days':DAYS,'markets':MARKETS}
     out=base.fresh(output);(out/'data').mkdir(mode=0o700)
     (out/'protocol.json').write_bytes(normalized(PROTOCOL))
-    record={'schema':'P33_COLLECTION_V1','status':'INCOMPLETE','protocol_sha256':reg['protocol_sha256'],
+    record={'schema':'P33_COLLECTION_V1','status':'INCOMPLETE','protocol_sha256':reg['protocol_sha256'],'registration_id':reg['registration_id'],
         'started_at':pd.Timestamp(clock(),unit='s',tz='UTC').isoformat(),'days':[],'network_calls':0}
     base.write_json(out/'collection.json',record)
     try:
@@ -130,7 +164,8 @@ def inputs(source,reg):
     root=base.safe_path(source)
     _,proto=p20.metadata(root/'protocol.json');base.require(proto==reg['protocol_sha256'],'P33_INPUT_PROTOCOL_MISMATCH')
     record,digest=p20.metadata(root/'collection.json')
-    base.require(record.get('schema')=='P33_COLLECTION_V1' and record.get('protocol_sha256')==reg['protocol_sha256'],'P33_INPUT_REGISTRATION_MISMATCH')
+    base.require(record.get('schema')=='P33_COLLECTION_V1' and record.get('protocol_sha256')==reg['protocol_sha256']
+        and record.get('registration_id')==reg['registration_id'],'P33_INPUT_REGISTRATION_MISMATCH')  # Never reinterpret under another approval.
     base.require(END<=minute.utc(record['started_at'])<=minute.utc(record['finished_at'])<=utc_now(),'P33_COLLECTION_TIME_UNVERIFIED')
     days=record['days']
     base.require(type(days) is list and [d['day'] for d in days]==list(DAYS) and record['status'] in ('COLLECTED','PARTIAL_REAL_DATA')
@@ -201,7 +236,7 @@ def work(source,out,pipe):
         with (out/'analysis.log').open('w') as log,redirect_stdout(log),redirect_stderr(log),tempfile.TemporaryDirectory(prefix='p33-') as temp:
             reg,blocked=gate();base.require(blocked is None,'P33_'+(blocked['status'] if blocked else 'OK'))
             engines=Path(temp).resolve();(engines/'bh').mkdir(mode=0o700)
-            root,record,digest=inputs(source,reg);report.update(collection_sha256=digest,protocol_sha256=reg['protocol_sha256'],protocol_commit=reg['protocol_commit'])
+            root,record,digest=inputs(source,reg);report.update(collection_sha256=digest,protocol_sha256=reg['protocol_sha256'],protocol_commit=reg['protocol_commit'],registration_id=reg['registration_id'])
             for item in record['days']:
                 day=item['day'];path=base.safe_path(root/'data'/day)
                 plan,plan_hash=p20.metadata(path/'plan.json');_,manifest_hash=p20.metadata(path/'manifest.json')
@@ -222,7 +257,8 @@ def work(source,out,pipe):
                 for name,digest0 in hashes.items():
                     base.require(p32.rehash(root/'data'/day/name,minute.MAX_FILE_BYTES)==digest0,'P33_INPUT_CHANGED')
             base.require(p32.rehash(root/'collection.json',minute.MAX_FILE_BYTES)==digest,'P33_INPUT_CHANGED')
-            base.require(len(report['cases'])<=MAX_CASES and registration()['status']=='REGISTERED','P33_CASE_LIMIT')
+            base.require(len(report['cases'])<=MAX_CASES,'P33_CASE_LIMIT')
+            base.require(registration().get('registration_id')==reg['registration_id'],'P33_REGISTRATION_CHANGED')
             report['tally']=tally(report['cases'],report['excluded'])
             report['status']=('VERIFIED_PARTIAL' if report['excluded'] else 'VERIFIED') if report['cases'] else 'INSUFFICIENT_REAL_DATA'
             base.write_json(out/'results.json',report)
@@ -293,7 +329,8 @@ def main(argv=None):
         if a.command=='status':
             s=status();print(f"P33 {s['status']} protocol_sha256={s['protocol_sha256']}")
             print(f"window={s['window']} register_before={s['registration_deadline_exclusive']} collect_after={s['collection_not_before_utc']}")
-            print('Proposal only until reviewed/approved and registered before the start; no network or files.')
+            print('Registered via the reviewed anchor; collect only after the window ends; no network or files.' if s['status']=='REGISTERED'
+                else 'Proposal only until reviewed/approved and anchored before the start; no network or files.')
             return 0 if s['status'] in ('PROPOSED_NOT_REGISTERED','REGISTERED') else 2
         r=collect(a.output,connect_public=a.connect_public) if a.command=='collect' else analyze(a.input,a.output)[1]
     except Exception as exc:

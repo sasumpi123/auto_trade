@@ -23,7 +23,10 @@
   "registration_deadline_exclusive": "2026-11-08T00:00:00+00:00",
   "registration_requirements": [
     "Review and explicit approval of this exact protocol SHA-256 before the deadline",
-    "A registration receipt backtesting/p33_registration.json (schema P33_REGISTRATION_V1) with protocol_sha256, approval_reference, protocol_commit == observed_remote_head (GitHub-observable) and observed_at_utc before the deadline",
+    "A receipt backtesting/p33_registration.json (schema P33_REGISTRATION_V1: protocol_sha256, approved, approval_reference, protocol_commit == observed_remote_head, observed_at_utc before the deadline and not in the future)",
+    "A separately reviewed registration PR, merged before the deadline, that pins the receipt SHA-256 and approval_reference in backtesting/p33_registration_anchor.json after the reviewer verified on GitHub the pre-deadline approval event, the proposal commit, the protocol bytes and the published receipt",
+    "Receipt and anchor must be tracked and unmodified in the checkout and the anchor commit must precede the deadline; a receipt alone (untracked, modified, unanchored, retroactive or future-dated) never registers",
+    "Collections and analyses are bound to the registration id (receipt SHA-256) and are never reinterpreted under another approval",
     "Missing the deadline blocks this window permanently; dates are never moved silently and nothing is registered retroactively"
   ],
   "collection_not_before_utc": "2026-11-15T00:00:00+00:00",
@@ -109,7 +112,7 @@
     "backtesting/p20_attribution.py": "36a9d2b70f6cca16d9e6b215a2429b9f7b7c2ce96d5235c7273575070fb77a36",
     "backtesting/p21_entry_filter.py": "7bc2553eaa821c0af3f8b5d9d25388bdc94d61cd2e446bdd27ca2476e15a0934",
     "backtesting/p32_consensus_cost_comparison.py": "c102a4c161c279b3babc5d5d876d58ba099fc851d14abfb40182b98708a69a87",
-    "backtesting/p33_forward.py": "3fb6b34a0833d0992c8ce09c5baa82b1e878ffe97fec71c1117a45389ac36fc9",
+    "backtesting/p33_forward.py": "8a80a18c65908beee42c08bb365384af7769960e8907225d233a381075880e78",
     "backtesting/protocol.json": "dc2080dc904b4d9d7d3ea7fa3d4de664ce84d77448eedfe0fe31fbd59fd82c26",
     "backtesting/terminal_exit_audit.py": "d0a3fac55cc567861a167ef60f96ca21e7008a3947219b9a7e58459c7fda07df",
     "backtesting/trade_attribution.py": "758397a17795847f74d55e7ac7fc17244d07365851af7475eaa54d1474d26ebf",

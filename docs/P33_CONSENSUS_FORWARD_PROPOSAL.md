@@ -4,11 +4,19 @@
 
 > 이미 본 P19 개발 구간을 떠나서도, 고정 비용을 반영한 뒤 현금 보유와 BH40을 넘는가?
 
-이 문서와 `backtesting/p33_protocol.json`은 **검토를 기다리는 제안**입니다. 전방 평가로 인정되려면 아래 두 조건이 **2026-11-08T00:00Z 전에** 모두 갖춰져야 합니다.
+이 문서와 `backtesting/p33_protocol.json`은 **검토를 기다리는 제안**입니다. 전방 평가로 인정되려면 **2026-11-08T00:00Z 전에** 아래 조건이 모두 갖춰져야 합니다.
 1. 이 protocol의 정확한 SHA-256을 검토하고 명시적으로 승인합니다.
-2. GitHub에서 확인할 수 있는 등록 영수증 `backtesting/p33_registration.json`을 남깁니다.
+2. 등록 영수증 `backtesting/p33_registration.json`을 작성합니다.
+3. 별도로 검토된 **등록 PR**이 영수증 digest와 `approval_reference`를 `backtesting/p33_registration_anchor.json`에 고정하고, 기한 전에 병합됩니다. 검토자는 병합 전에 GitHub에서 기한 전 승인 이벤트, 제안 commit, protocol 바이트, 게시된 영수증을 확인합니다.
 
-이 기한을 놓치면 이번 창은 영구 차단됩니다(`MISSED_REGISTRATION`). 날짜를 조용히 옮기거나 소급해서 등록하지 않습니다. 개발 중 실자료 접근과 예약은 한 번도 하지 않았습니다.
+**gate는 이 anchor로만 열립니다** (리뷰 5796192064 반영).
+- 영수증 파일만 있어서는 등록되지 않습니다. 추적되지 않거나, 수정됐거나, anchor에 없거나, 소급됐거나, 미래 시각인 영수증은 모두 거절합니다.
+- 영수증과 anchor는 git에 추적되고 수정되지 않은 상태여야 합니다.
+- anchor의 마지막 commit 시각과 영수증의 `observed_at_utc`는 모두 START 이전이어야 하고, `observed_at_utc`는 현재보다 미래일 수 없습니다.
+- anchor는 protocol의 코드 고정 목록에 포함되지 않습니다. 그래서 등록 PR이 protocol SHA를 바꾸지 않습니다.
+- 수집 결과(`collection.json`)와 분석 결과는 등록 id(영수증 SHA-256)에 묶입니다. 다른 승인으로 재해석하지 않습니다(`P33_INPUT_REGISTRATION_MISMATCH`, `P33_REGISTRATION_CHANGED`).
+
+기한을 놓치면 이번 창은 영구 차단됩니다(`MISSED_REGISTRATION`). 날짜를 조용히 옮기거나 소급해서 등록하지 않습니다. 개발 중 실자료 접근과 예약은 한 번도 하지 않았고, 이번 수정에도 실제 승인이나 등록은 포함되지 않습니다.
 
 ## 고정 내용 (`backtesting/p33_protocol.json`)
 
