@@ -1,7 +1,6 @@
 {
   "schema": "P33_REGISTRATION_ANCHOR_V1",
-  "stage": "PROPOSAL_NOT_REGISTERED",
-  "receipt_sha256": null,
-  "approval_reference": null,
-  "note": "Set ONLY by a separately reviewed registration PR merged before 2026-11-08T00:00Z, after the reviewer verified on GitHub the pre-deadline approval event, the proposal commit, the protocol bytes and the published receipt. Not part of the protocol code pins so registering never changes the protocol SHA."
+  "stage": "REGISTERED",
+  "receipt_sha256": "0b6708065827e171d5f18a2d887ce55b914519f6281044244f932c411b8f067c",
+  "approval_reference": "https://github.com/sasumpi123/auto_trade/pull/71#pullrequestreview-5796900030"
 }
