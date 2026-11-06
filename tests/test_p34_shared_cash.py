@@ -19,7 +19,8 @@ class SharedCashTests(unittest.TestCase):
         self.guard=patch.object(socket.socket,'connect',side_effect=AssertionError('No network'));self.guard.start()
     def tearDown(self):self.guard.stop();self.t.cleanup()
     def run_case(self,scenario,order):
-        return p34.run(p34.ORDERS[order],scenario,self.root/f'{scenario}-{order}')
+        self.n=getattr(self,'n',0)+1  # Every run gets its own brand-new disposable account.
+        return p34.run(p34.ORDERS[order],scenario,self.root/f'{scenario}-{order}-{self.n}')
 
     def test_entries_use_fee_inclusive_40_percent_each_from_one_cash_pool(self):
         steps,_=self.run_case('drop_then_further_drop','btc_first')
