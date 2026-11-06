@@ -1,0 +1,10 @@
+{
+  "schema": "P33_REGISTRATION_V1",
+  "protocol_sha256": "2d245d702f2ab38b39f316dd540b5f317c1805aa8bfae14bed55189962be6285",
+  "approved": true,
+  "approval_reference": "https://github.com/sasumpi123/auto_trade/pull/71#pullrequestreview-5796900030",
+  "protocol_commit": "4de48bde6c60c761834f5542dcf93e2a6846f7b9",
+  "observed_remote_head": "4de48bde6c60c761834f5542dcf93e2a6846f7b9",
+  "remote_repository": "sasumpi123/auto_trade",
+  "observed_at_utc": "2026-11-06T07:11:44Z"
+}
