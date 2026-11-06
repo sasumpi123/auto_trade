@@ -176,6 +176,33 @@ class RegistrationTests(unittest.TestCase):
         (root/'p33_registration.json').unlink()
         with self.assertRaisesRegex(ValueError,'P33_RECEIPT_NOT_ANCHORED'):p33.registration()
 
+    def test_shallow_history_is_unverified_not_missed_and_full_history_keeps_registration(self):
+        """Review 5796595696: CI's default depth-1 checkout must not turn a valid registration into MISSED."""
+        src=anchored_checkout(self.root/'src',commit_date='2026-11-06T08:01:00+00:00')
+        later={**os.environ,'GIT_COMMITTER_DATE':'2026-11-09T00:00:00+00:00','GIT_AUTHOR_DATE':'2026-11-09T00:00:00+00:00'}
+        (src/'README.md').write_text('docs only after the deadline\n')
+        subprocess.run(GIT+['add','-A'],cwd=src,check=True);subprocess.run(GIT+['commit','-q','-m','docs'],cwd=src,check=True,env=later)
+        full=self.root/'full';shallow=self.root/'shallow'
+        subprocess.run(['git','clone','-q','--no-local',str(src),str(full)],check=True)
+        subprocess.run(['git','clone','-q','--depth','1','file://'+str(src),str(shallow)],check=True)
+        now='2026-11-16T00:00:00Z'
+        for root,expected in ((src,'REGISTERED'),(full,'REGISTERED')):
+            with self.subTest(root=root.name),patched(patch.object(p33,'utc_now',return_value=pd.Timestamp(now)),*use_checkout(root)):
+                self.assertEqual(p33.registration()['status'],expected)  # A docs-only commit after the deadline keeps it valid.
+        with patched(patch.object(p33,'utc_now',return_value=pd.Timestamp(now)),*use_checkout(shallow)):
+            with self.assertRaisesRegex(ValueError,'P33_HISTORY_UNVERIFIED'):p33.registration()
+            with self.assertRaisesRegex(ValueError,'P33_HISTORY_UNVERIFIED'):p33.gate()
+        anchor=json.loads((src/'p33_registration_anchor.json').read_text());anchor['note']='changed after the deadline'
+        (src/'p33_registration_anchor.json').write_text(json.dumps(anchor))
+        subprocess.run(GIT+['add','-A'],cwd=src,check=True);subprocess.run(GIT+['commit','-q','-m','late anchor'],cwd=src,check=True,env=later)
+        with patched(patch.object(p33,'utc_now',return_value=pd.Timestamp(now)),*use_checkout(src)):
+            with self.assertRaisesRegex(ValueError,'P33_MISSED_REGISTRATION'):p33.registration()  # Real late anchor change still rejected.
+
+    def test_ci_checkout_fetches_full_history(self):
+        workflow=(ROOT/'.github/workflows/tests.yml').read_text(encoding='utf-8')
+        checkout=workflow.split('actions/checkout@',1)[1].split('- name:',1)[0]
+        self.assertIn('fetch-depth: 0',checkout);self.assertIn('ref: ${{ github.event.pull_request.head.sha || github.sha }}',checkout)
+
     def test_frozen_sources_and_conditions(self):
         root=anchored_checkout(self.root/'f');self.at('2026-11-07T23:30:00Z',root);real=p33.sha
         with patch.object(p33,'sha',side_effect=lambda f:'0'*64 if Path(f).name=='signals.py' else real(f)):

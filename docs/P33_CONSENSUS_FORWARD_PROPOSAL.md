@@ -13,6 +13,7 @@
 - 영수증 파일만 있어서는 등록되지 않습니다. 추적되지 않거나, 수정됐거나, anchor에 없거나, 소급됐거나, 미래 시각인 영수증은 모두 거절합니다.
 - 영수증과 anchor는 git에 추적되고 수정되지 않은 상태여야 합니다.
 - anchor의 마지막 commit 시각과 영수증의 `observed_at_utc`는 모두 START 이전이어야 하고, `observed_at_utc`는 현재보다 미래일 수 없습니다.
+- commit 시각은 **전체 이력**에서만 확인합니다. shallow clone에서는 tip commit이 anchor commit처럼 보일 수 있어서, 이 경우 MISSED로 단정하지 않고 `P33_HISTORY_UNVERIFIED`로 차단합니다(리뷰 5796595696 반영). CI checkout은 `fetch-depth: 0`으로 정확한 head와 전체 이력을 받습니다. 기한 뒤 문서만 바뀐 commit은 유효한 등록에 영향을 주지 않지만, 기한 뒤 anchor 자체가 바뀌면 계속 거부합니다.
 - anchor는 protocol의 코드 고정 목록에 포함되지 않습니다. 그래서 등록 PR이 protocol SHA를 바꾸지 않습니다.
 - 수집 결과(`collection.json`)와 분석 결과는 등록 id(영수증 SHA-256)에 묶입니다. 다른 승인으로 재해석하지 않습니다(`P33_INPUT_REGISTRATION_MISMATCH`, `P33_REGISTRATION_CHANGED`).
 

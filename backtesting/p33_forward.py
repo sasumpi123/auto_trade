@@ -83,6 +83,9 @@ def _git(*args):
 def committed(path):
     """Tracked, unmodified and committed in this checkout; returns the last commit time touching it."""
     rel=str(Path(path).resolve().relative_to(Path(CHECKOUT).resolve()))
+    shallow=_git('rev-parse','--is-shallow-repository')
+    # A shallow clone's tip commit would masquerade as the anchor commit; never infer MISSED from it.
+    base.require(shallow.returncode==0 and shallow.stdout.strip()=='false','P33_HISTORY_UNVERIFIED')
     base.require(_git('ls-files','--error-unmatch','--',rel).returncode==0,'P33_REGISTRATION_UNTRACKED')
     status=_git('status','--porcelain','--',rel)
     base.require(status.returncode==0 and status.stdout.strip()=='','P33_REGISTRATION_MODIFIED')

@@ -112,7 +112,7 @@
     "backtesting/p20_attribution.py": "36a9d2b70f6cca16d9e6b215a2429b9f7b7c2ce96d5235c7273575070fb77a36",
     "backtesting/p21_entry_filter.py": "7bc2553eaa821c0af3f8b5d9d25388bdc94d61cd2e446bdd27ca2476e15a0934",
     "backtesting/p32_consensus_cost_comparison.py": "c102a4c161c279b3babc5d5d876d58ba099fc851d14abfb40182b98708a69a87",
-    "backtesting/p33_forward.py": "8a80a18c65908beee42c08bb365384af7769960e8907225d233a381075880e78",
+    "backtesting/p33_forward.py": "79687b8b07c53b00c068f0677c331c121fe48ea11029e95621fe5fcf5b8f8e22",
     "backtesting/protocol.json": "dc2080dc904b4d9d7d3ea7fa3d4de664ce84d77448eedfe0fe31fbd59fd82c26",
     "backtesting/terminal_exit_audit.py": "d0a3fac55cc567861a167ef60f96ca21e7008a3947219b9a7e58459c7fda07df",
     "backtesting/trade_attribution.py": "758397a17795847f74d55e7ac7fc17244d07365851af7475eaa54d1474d26ebf",
