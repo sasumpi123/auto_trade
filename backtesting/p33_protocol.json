@@ -1,0 +1,126 @@
+{
+  "schema": "P33_FORWARD_PROTOCOL_V1",
+  "status": "PROPOSED_FOR_REVIEW_NOT_REGISTERED",
+  "question": "Outside the already-seen P19 development window, does the existing consensus_2of3, after fixed costs, beat cash 100% and the same-window P17 cost-aware BH40?",
+  "parent_issue": "#7 (bounded sub-task #69)",
+  "start": "2026-11-08T00:00:00+00:00",
+  "end_exclusive": "2026-11-15T00:00:00+00:00",
+  "days": [
+    "2026-11-08",
+    "2026-11-09",
+    "2026-11-10",
+    "2026-11-11",
+    "2026-11-12",
+    "2026-11-13",
+    "2026-11-14"
+  ],
+  "markets": [
+    "KRW-BTC",
+    "KRW-XRP"
+  ],
+  "unit_minutes": 1,
+  "max_cases": 14,
+  "registration_deadline_exclusive": "2026-11-08T00:00:00+00:00",
+  "registration_requirements": [
+    "Review and explicit approval of this exact protocol SHA-256 before the deadline",
+    "A registration receipt backtesting/p33_registration.json (schema P33_REGISTRATION_V1) with protocol_sha256, approval_reference, protocol_commit == observed_remote_head (GitHub-observable) and observed_at_utc before the deadline",
+    "Missing the deadline blocks this window permanently; dates are never moved silently and nothing is registered retroactively"
+  ],
+  "collection_not_before_utc": "2026-11-15T00:00:00+00:00",
+  "collection_not_before_kst": "2026-11-15T09:00:00+09:00",
+  "strategy": {
+    "name": "consensus_2of3",
+    "class": "strategies.signals.ConsensusStrategy",
+    "quorum": 2
+  },
+  "other_policies": "NONE (no legacy, 44bps or parameter variants are run)",
+  "fixed_conditions": {
+    "indicators": "unchanged RSI/MACD/BB definitions",
+    "signal_cooldown_seconds": 300,
+    "volume_ratio": "0.5",
+    "risk": "unchanged take-profit/stop/one averaging/minimum order",
+    "execution": "completed bar signal -> next minute open",
+    "terminal": "no forced liquidation; open inventory marked at last close"
+  },
+  "costs_bps": {
+    "fee_bps": "5",
+    "slippage_bps": "5",
+    "spread_bps": "2"
+  },
+  "initial_cash": "1000000",
+  "position_fraction": "0.4",
+  "warmup_candles": 200,
+  "benchmarks": [
+    "cash_100 (0% by definition)",
+    "buy_hold_40: P17 cost-aware fee-inclusive 400,000 at the same execution_first_open, marked at the same last close"
+  ],
+  "comparison": {
+    "primary": "original last-close valuation (net_return_pct) vs cash and vs BH40 marked",
+    "secondary": "hypothetical cost-aware terminal exit (P28) vs cash and vs BH40 hypothetical exit; never replaces the primary",
+    "equality": "unrounded Decimal; equal is TIE, never a win",
+    "no_trades": "NO_TRADES is never a win; reported with explicit denominators",
+    "aggregation": "none: no summed, compounded or portfolio return across days/markets"
+  },
+  "preserved_per_case": [
+    "net_return_pct",
+    "fees",
+    "mdd_pct",
+    "fills",
+    "open_position",
+    "window",
+    "buy_hold_40",
+    "exit_audit"
+  ],
+  "counts": [
+    "scheduled",
+    "valid",
+    "quarantined",
+    "unfinished",
+    "trade_cases",
+    "no_trade_cases",
+    "EXCEED/TIE/BELOW vs cash",
+    "EXCEED/TIE/BELOW/NA vs BH40",
+    "both_exceed and its markets"
+  ],
+  "decision_rule": {
+    "scope": "only whether further pre-registered validation is warranted; never PAPER default or live trading",
+    "INSUFFICIENT_SAMPLE_HOLD": "valid < 10 or trade_cases < 6",
+    "CONCENTRATED_OR_ABSENT_HOLD": "primary both_exceed occurs in fewer than 2 markets",
+    "FURTHER_VALIDATION_WARRANTED": "primary both_exceed >= ceil(0.6 * trade_cases)",
+    "NOT_SUPPORTED": "otherwise"
+  },
+  "missing_candles": "quarantine the day/market (PARTIAL); no interpolation, re-collection or window extension",
+  "collection_per_day_requests": 40,
+  "collection_per_day_seconds": 120,
+  "collection_total_requests": 280,
+  "analysis_seconds": 600,
+  "automatic_retry_resume_schedule": false,
+  "adopt_strategy": false,
+  "code_hash_normalization": "sha256 over bytes with CRLF normalized to LF",
+  "code_sha256": {
+    "backtesting/benchmark_audit.py": "a05366d997399f6ed0f54491c7012b8c6d81b79cef300ba43412b264a05d2af0",
+    "backtesting/collection.py": "50013e940aa253a9b99aa1c92848bfbbca8e1ec97fdcbb8539fdcd135408b1b0",
+    "backtesting/data.py": "ae2719d0f8a315bf2201a1fc88b1b5a0f48db8fa098e51188b92526007f6c221",
+    "backtesting/engine.py": "cf4ad5ad4aa6977fe1197d047f6fae94e4d37572395bc482198a0d9626d65649",
+    "backtesting/historical.py": "1eb269348e91ab9f36ab9a507f6d69889480b0f6eb936008be740fe7096088bb",
+    "backtesting/legacy_diagnostic.py": "5a38fab085b6f01c5cbd9edcf5be0d5a4a154108ebe3e98c84f0d8b9e0bad789",
+    "backtesting/minute_study.py": "16c443b447aeeb96d1f43df9d1a6b55d8a35d37802e6788bee1bfe52164cf5a8",
+    "backtesting/p19_baseline.py": "e2e6824be4354a1cfd4ada8fed75aca5403ad33e5cf0d6efc976853fcdc1b6b7",
+    "backtesting/p20_attribution.py": "36a9d2b70f6cca16d9e6b215a2429b9f7b7c2ce96d5235c7273575070fb77a36",
+    "backtesting/p21_entry_filter.py": "7bc2553eaa821c0af3f8b5d9d25388bdc94d61cd2e446bdd27ca2476e15a0934",
+    "backtesting/p32_consensus_cost_comparison.py": "c102a4c161c279b3babc5d5d876d58ba099fc851d14abfb40182b98708a69a87",
+    "backtesting/p33_forward.py": "3fb6b34a0833d0992c8ce09c5baa82b1e878ffe97fec71c1117a45389ac36fc9",
+    "backtesting/protocol.json": "dc2080dc904b4d9d7d3ea7fa3d4de664ce84d77448eedfe0fe31fbd59fd82c26",
+    "backtesting/terminal_exit_audit.py": "d0a3fac55cc567861a167ef60f96ca21e7008a3947219b9a7e58459c7fda07df",
+    "backtesting/trade_attribution.py": "758397a17795847f74d55e7ac7fc17244d07365851af7475eaa54d1474d26ebf",
+    "config.py": "43c0b0bae731004a5a85af8856d528b03e2503c45ead52aba594eceb0ff27f40",
+    "data_analyzer/analyzer.py": "30e6cc4cf84067293e382059ed1f5f3c9187b0dee3f7129102bf5299a4e92794",
+    "ops/paper_experiment.py": "2693b0a843d3981c3493c59684aeb1e633820021186824685a38ce3d283a4f31",
+    "services/notification_metrics.py": "5da2457570c9987d423b4b4a22ba05f4cae963ef0745d9fcfe7d211b7b775807",
+    "strategies/signals.py": "431f0beed0c623b8dbbb0cdf53f68823a34c28fccf3a9aacf402d7d4128db92a",
+    "trading/auto_trade.py": "db9d10fb14fc8748763b0268cfdaf3c95f2e55521f3e2651e9945f53a15f4e0a",
+    "trading/costs.py": "8dbbb436b1e3051b9ce2a4933536598b6226aabb87de7768394ea383d0797c75",
+    "trading/execution.py": "de4570f9457f86ebac9c80f1cf3af32e49ad0e44e8e8dc4b7168dea57fcdedb4",
+    "trading/state_store.py": "24cf0db395e42c3615424e2b871b07b9d5e60e307c80a002f4ace3f26a164940"
+  }
+}
