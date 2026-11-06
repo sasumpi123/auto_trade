@@ -218,10 +218,11 @@ def _wait_dead(pid,seconds=10):
 
 def _stubborn_leader(pidfile,leader_ignores_term=False):
     """Leader starts a SIGTERM-ignoring grandchild in the SAME process group, then sleeps."""
-    child='import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(120)'
+    # The grandchild writes its pid ONLY after SIG_IGN is installed, so a fast SIGTERM cannot win the race.
+    child=f'import os,signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);open({str(pidfile)!r}+".tmp","w").write(str(os.getpid()));os.replace({str(pidfile)!r}+".tmp",{str(pidfile)!r});time.sleep(120)'
     prefix='import signal;signal.signal(signal.SIGTERM,signal.SIG_IGN);' if leader_ignores_term else ''
     return [sys.executable,'-c',prefix+'import subprocess,sys,time;'
-        f'p=subprocess.Popen([sys.executable,"-c",{child!r}]);open({str(pidfile)!r},"w").write(str(p.pid));time.sleep(120)']
+        f'p=subprocess.Popen([sys.executable,"-c",{child!r}]);time.sleep(120)']
 
 
 @unittest.skipUnless(os.name=='posix','process groups require POSIX')
@@ -261,6 +262,21 @@ class GroupCleanupTests(unittest.TestCase):
             self.assertIsNone(self.sentinel.poll())
         finally:
             if saved is not None:os.waitid=saved
+
+    def test_macos_eperm_for_zombie_only_group_is_not_an_error(self):
+        """macOS killpg() returns EPERM when only the unreaped zombie leader remains in the group."""
+        real=os.killpg;sent=[]
+        def killpg(pgid,sig):
+            sent.append(sig)
+            if sig==signal.SIGKILL:
+                real(pgid,sig)  # Still deliver it on Linux so nothing leaks, then report what macOS reports.
+                raise PermissionError(1,'Operation not permitted')
+            return real(pgid,sig)
+        pidfile=self.root/'eperm'
+        with patch.object(rr.os,'killpg',side_effect=killpg):result=rr.spawn(_stubborn_leader(pidfile),self.root/'e.log',2)
+        self.assertEqual(result[0],'TIMEOUT');self.assertIn(signal.SIGKILL,sent)
+        self.assertEqual(result[2]['sigkill_result'],'EPERM_NO_SIGNALABLE_MEMBER');self.assertIsNotNone(result[2]['leader_exit'])
+        self.assertTrue(_wait_dead(self.started(pidfile)));self.assertIsNone(self.sentinel.poll())
 
     def test_ctrl_c_path_also_cleans_whole_group(self):
         pidfile=self.root/'gc';real=subprocess.Popen.wait;calls=[]

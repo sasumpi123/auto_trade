@@ -110,6 +110,14 @@ def _leader_exited(exit_pipe,timeout):
     except (OSError,ValueError):return False
 
 
+def _signal_group(pgid,sig):
+    """Signal ONLY our own group. macOS returns EPERM when the group holds just the unreaped zombie
+    leader (no live, signalable member); Linux delivers silently. Neither case is an error here."""
+    try:os.killpg(pgid,sig);return 'SENT'
+    except ProcessLookupError:return 'NO_GROUP'
+    except PermissionError:return 'EPERM_NO_SIGNALABLE_MEMBER'
+
+
 def stop_group(child,exit_pipe=None):
     """Bounded cleanup of the ONE process group this process created (never another group).
 
@@ -122,13 +130,11 @@ def stop_group(child,exit_pipe=None):
     try:previous=signal.signal(signal.SIGINT,signal.SIG_IGN)  # Finish the bounded cleanup on a 2nd Ctrl-C.
     except ValueError:previous=None
     try:
-        try:os.killpg(pgid,signal.SIGTERM);record['sigterm_sent']=True
-        except ProcessLookupError:pass
+        record['sigterm_result']=_signal_group(pgid,signal.SIGTERM);record['sigterm_sent']=record['sigterm_result']=='SENT'
         deadline=time.monotonic()+TERM_GRACE_SECONDS
         while time.monotonic()<deadline:
             if _leader_exited(exit_pipe,min(0.2,deadline-time.monotonic())):record['leader_exited_after_term']=True;break
-        try:os.killpg(pgid,signal.SIGKILL);record['sigkill_sent']=True
-        except ProcessLookupError:pass
+        record['sigkill_result']=_signal_group(pgid,signal.SIGKILL);record['sigkill_sent']=record['sigkill_result']=='SENT'
         try:record['leader_exit']=child.wait(timeout=KILL_REAP_SECONDS)
         except subprocess.TimeoutExpired:record['leader_exit']=None
     finally:

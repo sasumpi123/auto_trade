@@ -62,7 +62,8 @@ if test -z "$(git status --porcelain)"; then PYTHON_DOTENV_DISABLED=1 .venv/bin/
   3. leader가 끝났는지와 상관없이 **항상** 같은 group에 SIGKILL을 보냅니다. SIGTERM을 무시하거나 leader보다 오래 남는 하위 프로세스까지 정리하기 위해서입니다(리뷰 5794135817 반영).
   4. 그 뒤 leader를 reap합니다(최대 5초).
   - 정리 중 두 번째 Ctrl-C는 이 bounded 정리가 끝날 때까지 무시합니다.
-  - run.json의 단계 `cleanup`에 `sigterm_sent`, `sigkill_sent`, `leader_exited_after_term`, `leader_exit`를 기록합니다.
+  - macOS는 group에 unreaped 좀비 leader만 남아 신호를 받을 수 있는 구성원이 없으면 `killpg`가 `EPERM`을 돌려줍니다(Linux는 조용히 전달). 이 경우는 오류가 아니라 `EPERM_NO_SIGNALABLE_MEMBER`로 기록하고, 그대로 reap을 진행합니다.
+  - run.json의 단계 `cleanup`에 `sigterm_result`/`sigkill_result`(`SENT`/`NO_GROUP`/`EPERM_NO_SIGNALABLE_MEMBER`), `sigterm_sent`, `sigkill_sent`, `leader_exited_after_term`, `leader_exit`를 기록합니다.
 - 단계 내부의 중단은 각 도구의 기존 정리 동작에 맡깁니다.
 - 자동 재시도, 재수집, 새 날짜, 시간 연장, 새 root 자동 생성, 데몬, 감시, polling 루프는 없습니다.
 
