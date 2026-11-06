@@ -42,6 +42,30 @@ INTERPRETATION=('P19 development sample only; not independent, forward or holdou
     'no operational adoption, portfolio aggregation, ranking or profitability claim. NO_TRADES is not improvement.')
 
 
+def rehash(path,limit):
+    """Final input check under the SAME contract as P29: full safe_path on the original file and every
+    ancestor (symlink/account/holdout markers) before any open, then a bounded read (never the whole of a
+    file that grew). A swapped, linked or oversized input fails closed instead of being re-read blindly."""
+    try:raw=p28.read_bounded(p29._file(path),limit)
+    except ValueError as exc:
+        code=str(exc)
+        raise ValueError('P19_INPUT_CHANGED' if code in ('P28_INPUT_SIZE','P29_INPUT_UNREADABLE') else code) from None
+    return hashlib.sha256(raw).hexdigest()
+
+
+def input_root(source):
+    """The real P19 root, also when given as its `analysis` alias (same rule as p20.inputs)."""
+    root=base.safe_path(source)
+    if root.name=='analysis' and (root/'results.json').is_file():root=base.safe_path(root.parent)
+    return root
+
+
+def require_outside(source,output):
+    """Reject an output inside the P19 input tree BEFORE any directory or INCOMPLETE marker exists."""
+    root=input_root(source);target=Path(output).expanduser().absolute().resolve()
+    base.require(not (target==root or target.is_relative_to(root)),'P32_OUTPUT_INSIDE_INPUT')
+
+
 def strategy_case(frame,windows,market,strategy):
     """Exactly p19_baseline.case(..., (5,5,2), details=True) with an injected existing strategy."""
     c=CostModel(5,5,2)
@@ -125,8 +149,8 @@ def work(source,out,pipe):
                     report['cases'].append(compare(day,market,results,bh));base.write_json(out/'results.json',report)
             for day,hashes in report.get('input_hashes',{}).items():
                 for name,digest0 in {'manifest.json':hashes['manifest'],'plan.json':hashes['plan'],**hashes['files']}.items():
-                    base.require(hashlib.sha256((root/'data'/day/name).read_bytes()).hexdigest()==digest0,'P19_INPUT_CHANGED')
-            base.require(hashlib.sha256((root/'analysis/results.json').read_bytes()).hexdigest()==digest,'P19_INPUT_CHANGED')
+                    base.require(rehash(root/'data'/day/name,minute.MAX_FILE_BYTES)==digest0,'P19_INPUT_CHANGED')
+            base.require(rehash(root/'analysis/results.json',p28.MAX_INPUT_BYTES)==digest,'P19_INPUT_CHANGED')
             base.require(len(report['completed_policies'])==3*len(primary)<=MAX_POLICY_CASES,'P32_CASE_LIMIT')
             report['evidence']='NO_TRADES_ONLY' if all(c['status']=='NO_TRADES_ALL_POLICIES' for c in report['cases']) else 'HAS_TRADES'
             report['status']='VERIFIED_PARTIAL' if report['excluded'] else 'VERIFIED'
@@ -165,6 +189,7 @@ def write_report(out,report):
 
 
 def analyze(source,output,*,seconds=600,worker=work):
+    require_outside(source,output)  # p20.analyze creates the output right after checking the source.
     return p20.analyze(source,output,seconds=seconds,worker=worker,report_writer=write_report)
 
 

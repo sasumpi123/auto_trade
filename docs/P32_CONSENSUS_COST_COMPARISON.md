@@ -51,6 +51,8 @@ if test -z "$(git status --porcelain)"; then PYTHON_DOTENV_DISABLED=1 .venv/bin/
   - 기존 `p20.analyze` worker를 그대로 씁니다. 600초 상한과 기존 자식 정리를 따르며, 새 runner나 process-group 구현은 없습니다.
   - 네트워크 호출은 0입니다.
   - 새 출력 경로만 허용하고, 입력·계좌·백업·checkout은 바꾸지 않습니다.
+  - 출력이 P19 입력 트리 내부이면 디렉터리나 INCOMPLETE 표지를 만들기 전에 `P32_OUTPUT_INSIDE_INPUT`으로 거부합니다. 입력을 `P19_ROOT/analysis` 별칭으로 주어도 실제 P19 root를 기준으로 판단합니다. 형제 경로 출력은 허용합니다(리뷰 5795108502 반영).
+  - 마지막 입력 해시 검산은 P29와 같은 계약을 따릅니다. 원본 파일과 모든 상위 경로를 `safe_path`로 검사한 뒤 bounded로 읽습니다. 실행 중 CSV나 `analysis/results.json`이 심볼릭 링크 등으로 바뀌거나 커지면 INCOMPLETE·exit 2로 끝납니다. 정상 PARTIAL 입력은 그대로 허용합니다.
 - **실패 처리:**
   - 실패, 대사 불일치, 예산 초과는 INCOMPLETE와 nonzero 종료로 처리합니다.
   - 완료된 정책 결과는 보존하되, 성공으로 승격하지 않습니다.

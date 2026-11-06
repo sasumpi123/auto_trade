@@ -30,6 +30,14 @@ def setUpModule():
 def tearDownModule():STATE['temp'].cleanup()
 
 
+def quick(source,out,pipe):
+    """Picklable stand-in worker for path tests: records nothing about inputs, never reads them."""
+    base.write_json(out/'results.json',{'status':'INCOMPLETE','cases':[],'excluded':[],'completed_policies':[]});pipe.close()
+
+
+def listing(path):return sorted(str(p.relative_to(path)) for p in Path(path).rglob('*'))
+
+
 def tree(path):return {p.relative_to(path):p.read_bytes() for p in sorted(Path(path).rglob('*')) if p.is_file()}
 
 
@@ -138,6 +146,67 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(p32.summary(r)[1],2)
         (self.root/'exists').mkdir()
         with self.assertRaisesRegex(ValueError,'OUTPUT_EXISTS_NO_OVERWRITE'):p32.analyze(self.src,self.root/'exists')
+
+
+@unittest.skipUnless(os.name=='posix','P17 disposable accounts require POSIX')
+class ReviewTests(unittest.TestCase):
+    """Review 5795108502: final rehash path/size contract and output inside the input tree."""
+    def setUp(self):
+        self.t=TemporaryDirectory();self.root=Path(self.t.name).resolve()
+        shutil.copytree(STATE['p19'],self.root/'p19');self.src=self.root/'p19'
+        self.patches=[patch.object(socket.socket,'connect',side_effect=AssertionError('No network')),
+            patch.object(base.minute,'load_partitioned_sample',side_effect=fx.synthetic_loader())]
+        for x in self.patches:x.start()
+    def tearDown(self):
+        for x in reversed(self.patches):x.stop()
+        self.t.cleanup()
+
+    def test_input_swapped_for_symlink_with_same_bytes_after_compare_is_incomplete(self):
+        csv_path=self.src/'data'/base.DAYS[0]/'KRW-XRP-1.csv';real=p32.compare
+        def swap(*a):
+            value=real(*a);moved=self.root/'moved.csv';shutil.move(str(csv_path),moved);csv_path.symlink_to(moved);return value
+        with patch.object(p32,'compare',side_effect=swap):
+            out=base.fresh(self.root/'swap');p32.work(self.src,out,Mock())
+        r=p20.read_results(out/'results.json')
+        self.assertEqual((r['status'],r['failure_reason']),('INCOMPLETE','SYMLINK_FORBIDDEN'))
+        self.assertTrue((out/'INCOMPLETE').exists());self.assertEqual(p32.summary(r)[1],2)
+
+    def test_results_swapped_for_symlink_and_growth_are_bounded_and_incomplete(self):
+        results=self.src/'analysis'/'results.json';real=p32.compare
+        def swap(*a):
+            value=real(*a);moved=self.root/'moved.json';shutil.move(str(results),moved);results.symlink_to(moved);return value
+        with patch.object(p32,'compare',side_effect=swap):
+            out=base.fresh(self.root/'rswap');p32.work(self.src,out,Mock())
+        self.assertEqual(p20.read_results(out/'results.json')['failure_reason'],'SYMLINK_FORBIDDEN')
+        results.unlink();shutil.move(str(self.root/'moved.json'),results)
+        csv_path=self.src/'data'/base.DAYS[0]/'KRW-XRP-1.csv';reads=[];opener=p32.p28._open
+        def grow(*a):
+            value=real(*a)
+            with open(csv_path,'ab') as f:f.write(b'x'*5000)
+            return value
+        def record(path):
+            f=opener(path);orig=f.read
+            class W:
+                def __enter__(s):return s
+                def __exit__(s,*x):f.close()
+                def read(s,n):d=orig(n);reads.append((Path(path).name,len(d)));return d
+            return W()
+        with patch.object(p32,'compare',side_effect=grow),patch.object(p32.p28,'_open',side_effect=record),\
+                patch.object(p32.minute,'MAX_FILE_BYTES',csv_path.stat().st_size+100):
+            out=base.fresh(self.root/'grow');p32.work(self.src,out,Mock())
+        self.assertEqual(p20.read_results(out/'results.json')['failure_reason'],'P19_INPUT_CHANGED')
+        limit=csv_path.stat().st_size-5000+100
+        self.assertLessEqual(sum(n for name,n in reads if name=='KRW-XRP-1.csv'),limit+1)  # Never the whole grown file.
+
+    def test_output_inside_input_tree_is_rejected_before_any_file_and_sibling_allowed(self):
+        before=tree(self.src);names=listing(self.src)
+        for target in (self.src/'analysis'/'new-output',self.src/'new-output',self.src/'data'/'x'/'y',self.src):
+            for given in (self.src,self.src/'analysis'):
+                with self.subTest(output=str(target.relative_to(self.root)),input=given.name):
+                    with self.assertRaisesRegex(ValueError,'P32_OUTPUT_INSIDE_INPUT'):p32.analyze(given,target,worker=quick)
+                    self.assertEqual(listing(self.src),names);self.assertEqual(tree(self.src),before)
+        out,r=p32.analyze(self.src/'analysis',self.root/'sibling-out',worker=quick)  # Sibling path stays allowed.
+        self.assertTrue((self.root/'sibling-out'/'results.json').is_file());self.assertEqual(tree(self.src),before)
 
 
 class LimitTests(unittest.TestCase):
