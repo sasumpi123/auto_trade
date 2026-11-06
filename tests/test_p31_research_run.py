@@ -249,6 +249,19 @@ class GroupCleanupTests(unittest.TestCase):
                 self.assertTrue(result[2]['sigterm_sent']);self.assertTrue(result[2]['sigkill_sent'])
                 self.assertIsNone(self.sentinel.poll())
 
+    def test_cleanup_needs_no_linux_only_waitid(self):
+        """Review 5794390314: macOS Python 3.12 has no os.waitid; run the same cleanup without it."""
+        saved=getattr(os,'waitid',None)
+        if saved is not None:del os.waitid
+        try:
+            pidfile=self.root/'nowaitid'
+            result=rr.spawn(_stubborn_leader(pidfile),self.root/'n.log',2)
+            self.assertEqual(result[0],'TIMEOUT');self.assertTrue(_wait_dead(self.started(pidfile)))
+            self.assertTrue(result[2]['sigkill_sent']);self.assertTrue(result[2]['leader_exited_after_term'])
+            self.assertIsNone(self.sentinel.poll())
+        finally:
+            if saved is not None:os.waitid=saved
+
     def test_ctrl_c_path_also_cleans_whole_group(self):
         pidfile=self.root/'gc';real=subprocess.Popen.wait;calls=[]
         def wait(self_,timeout=None):

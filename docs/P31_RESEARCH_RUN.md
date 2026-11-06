@@ -58,7 +58,7 @@ if test -z "$(git status --porcelain)"; then PYTHON_DOTENV_DISABLED=1 .venv/bin/
 - 단계 사이에 전체 경과 시간을 확인합니다. 초과하면 나머지 단계를 `P31_TOTAL_BUDGET_EXCEEDED`로 건너뜁니다.
 - timeout이나 Ctrl-C가 오면 **직접 시작한 그 process group만** 정리합니다. 무관한 프로세스는 건드리지 않고, 완료된 단계의 결과는 보존합니다.
   1. group에 SIGTERM을 보냅니다.
-  2. 최대 10초 동안 leader가 끝나기를 기다립니다. 이때 leader를 reap하지 않으므로 PGID가 재사용되지 않습니다.
+  2. 최대 10초 동안 leader가 끝나기를 기다립니다. 이때 leader를 reap하지 않으므로 PGID가 재사용되지 않습니다. leader 종료는 leader만 물려받은 종료 감지 pipe의 EOF로 확인합니다(`select`). Linux 전용 `os.waitid`를 쓰지 않으므로 macOS Python 3.12에서도 동작합니다(리뷰 5794390314 반영).
   3. leader가 끝났는지와 상관없이 **항상** 같은 group에 SIGKILL을 보냅니다. SIGTERM을 무시하거나 leader보다 오래 남는 하위 프로세스까지 정리하기 위해서입니다(리뷰 5794135817 반영).
   4. 그 뒤 leader를 reap합니다(최대 5초).
   - 정리 중 두 번째 Ctrl-C는 이 bounded 정리가 끝날 때까지 무시합니다.

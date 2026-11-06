@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import platform
+import select
 import signal
 import subprocess
 import sys
@@ -96,28 +97,36 @@ TERM_GRACE_SECONDS=10
 KILL_REAP_SECONDS=5
 
 
-def _leader_exited(pid):
-    """Non-reaping check: the exited leader stays a zombie, so its PGID cannot be reused meanwhile."""
-    try:return os.waitid(os.P_PID,pid,os.WEXITED|os.WNOHANG|os.WNOWAIT) is not None
-    except ChildProcessError:return True
+def _leader_exited(exit_pipe,timeout):
+    """Portable (macOS/Linux) NON-reaping exit check via an inherited pipe.
+
+    Only the leader holds the write end (subprocess closes fds in its own children by default), so EOF
+    means the leader exited. It stays an unreaped zombie, so its PGID cannot be reused meanwhile.
+    """
+    if exit_pipe is None:return False
+    try:
+        ready,_,_=select.select([exit_pipe],[],[],max(0,timeout))
+        return bool(ready) and os.read(exit_pipe,1)==b''
+    except (OSError,ValueError):return False
 
 
-def stop_group(child):
+def stop_group(child,exit_pipe=None):
     """Bounded cleanup of the ONE process group this process created (never another group).
 
-    SIGTERM to the group, wait up to TERM_GRACE_SECONDS for the leader without reaping it, then
+    SIGTERM to the group, wait up to TERM_GRACE_SECONDS for the leader WITHOUT reaping it, then
     ALWAYS SIGKILL the same group (members that ignore SIGTERM or outlive the leader), and only then
     reap the leader. Leader exit and group cleanup are recorded separately.
     """
-    pgid=child.pid;record={'pgid_is_own_session':True,'sigterm_sent':False,'sigkill_sent':False,'leader_exit':None}
+    pgid=child.pid;record={'pgid_is_own_session':True,'sigterm_sent':False,'sigkill_sent':False,
+        'leader_exited_after_term':False,'leader_exit':None}
     try:previous=signal.signal(signal.SIGINT,signal.SIG_IGN)  # Finish the bounded cleanup on a 2nd Ctrl-C.
     except ValueError:previous=None
     try:
         try:os.killpg(pgid,signal.SIGTERM);record['sigterm_sent']=True
         except ProcessLookupError:pass
         deadline=time.monotonic()+TERM_GRACE_SECONDS
-        while not _leader_exited(pgid) and time.monotonic()<deadline:time.sleep(0.1)
-        record['leader_exited_after_term']=_leader_exited(pgid)
+        while time.monotonic()<deadline:
+            if _leader_exited(exit_pipe,min(0.2,deadline-time.monotonic())):record['leader_exited_after_term']=True;break
         try:os.killpg(pgid,signal.SIGKILL);record['sigkill_sent']=True
         except ProcessLookupError:pass
         try:record['leader_exit']=child.wait(timeout=KILL_REAP_SECONDS)
@@ -129,16 +138,21 @@ def stop_group(child):
 
 def spawn(argv,log,timeout):
     """Run ONE direct child in its own process group; on timeout/Ctrl-C clean up that whole group only."""
-    cleanup=None
-    with open(log,'wb') as out:
-        child=subprocess.Popen(argv,cwd=ROOT,env=child_env(),stdin=subprocess.DEVNULL,stdout=out,stderr=subprocess.STDOUT,
-            start_new_session=True)
-        try:
-            code=child.wait(timeout=timeout);outcome='EXITED'
-        except subprocess.TimeoutExpired:outcome='TIMEOUT'
-        except KeyboardInterrupt:outcome='INTERRUPTED'
-        if outcome!='EXITED':
-            cleanup=stop_group(child);code=cleanup['leader_exit']
+    cleanup=None;exit_read,exit_write=os.pipe()
+    try:
+        with open(log,'wb') as out:
+            child=subprocess.Popen(argv,cwd=ROOT,env=child_env(),stdin=subprocess.DEVNULL,stdout=out,stderr=subprocess.STDOUT,
+                start_new_session=True,pass_fds=(exit_write,))
+            os.close(exit_write);exit_write=None
+            try:
+                code=child.wait(timeout=timeout);outcome='EXITED'
+            except subprocess.TimeoutExpired:outcome='TIMEOUT'
+            except KeyboardInterrupt:outcome='INTERRUPTED'
+            if outcome!='EXITED':
+                cleanup=stop_group(child,exit_read);code=cleanup['leader_exit']
+    finally:
+        os.close(exit_read)
+        if exit_write is not None:os.close(exit_write)
     size=Path(log).stat().st_size
     if size>MAX_LOG_BYTES:  # Keep the bounded tail; never echo it.
         with open(log,'rb') as fh:fh.seek(size-MAX_LOG_BYTES);tail=fh.read()
