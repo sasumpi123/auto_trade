@@ -19,9 +19,10 @@
 
 ## 작업 흐름
 
-1. 리뷰어(Claude 또는 ChatGPT)가 이 로드맵에 따라 다음 이슈를 만듭니다. 이슈 첫 줄의 `AUTO_TRADE_READY_FOR_CLAUDE`와 `Dedup-Key`는 구현 착수 가능 표시입니다.
+1. 별도 ChatGPT 대화가 이 로드맵에 따라 다음 이슈를 만듭니다. 이슈 첫 줄의 `AUTO_TRADE_READY_FOR_CLAUDE`와 `Dedup-Key`는 구현 착수 가능 표시입니다.
 2. Claude Code가 이슈를 구현하고 PR을 올립니다.
-3. 리뷰어가 PR을 검토·병합하고, 결과에 따라 이 로드맵을 갱신한 뒤 다음 이슈를 만듭니다.
+3. ChatGPT가 PR을 검토합니다. 위임된 일반 PR은 [AGENTS.md의 조건](../AGENTS.md#역할과-리뷰-절차)(검증 완료, 최신 정확한 Head의 macOS CI·Safety gate 통과, 병합 직전 SHA 재확인)을 충족하면 ChatGPT가 일반 대화에서 건별 수동 squash 병합합니다. 명시 승인이 필요한 PR(불변 정책·권한, 비용·실거래·배포, 미승인 전략·위험 변경)은 사용자가 수동으로 병합합니다. 예약·자동 병합은 하지 않고, Claude Code는 직접 병합하지 않습니다.
+4. 병합 결과에 따라 ChatGPT가 이 로드맵을 갱신하고 다음 이슈를 만듭니다.
 
 ## 현재 상태
 
@@ -44,7 +45,7 @@
 
 ### Phase 0 — P33 마무리와 기반 정리 (~ 2026-11 말)
 
-- 2026-11-15 00:00 UTC 이후 사용자가 P33 수집·분석을 수동으로 1회 실행하고, 리뷰어가 판정을 기록합니다. 재수집·기간 변경은 없습니다.
+- 2026-11-15 00:00 UTC 이후 사용자가 P33 수집·분석을 수동으로 1회 실행하고, ChatGPT가 판정을 기록합니다. 재수집·기간 변경은 없습니다.
 - 공통 사전등록 러너와 커밋 고정 실행 — [#75](https://github.com/sasumpi123/auto_trade/issues/75) (P35)
 - 다년치 과거 데이터 스냅샷 수집과 품질 보고 — [#76](https://github.com/sasumpi123/auto_trade/issues/76) (P36)
 - README를 실제 구조·명령에 맞게 정리 — [#77](https://github.com/sasumpi123/auto_trade/issues/77) (P37)
