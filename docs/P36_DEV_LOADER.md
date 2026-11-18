@@ -49,15 +49,20 @@ frame, report = load_development(SNAPSHOT_ROOT, 'KRW-BTC', 60, '2024-01-01T00:00
 2. **메타데이터 (캔들 바이트를 읽지 않음)**
    - schema와 고정 계획: `P36D_PLAN_INVALID`
    - 상태가 `COMPLETE_API_BOUNDARY_REACHED`인지: `P36D_SNAPSHOT_NOT_COMPLETE`
-   - budget 형식: `P36D_BUDGET_INVALID`
+   - budget 형식과 범위 `0 ≤ budget ≤ plan.max_requests`(P36 verifier와 같은 상한, 리뷰 5951924433): `P36D_BUDGET_INVALID`
    - 12개 계열, 요청·응답 수: `P36D_MANIFEST_INVALID`
    - P36 단일 성공 규칙 `completion()`(종료 증거, 요청 회계): `P36D_COMPLETION_UNVERIFIED`
 3. **종목·주기와 구간**
    - 종목·주기: `P36D_SERIES_INVALID`
    - 구간 형식: `P36D_WINDOW_INVALID`
    - `end > holdout_start`이면 **캔들 파일을 하나도 열기 전에** `P36D_HOLDOUT_OVERLAP`으로 거절합니다.
-4. **개발 월 (요청 구간과 겹치는 월만)**
-   - 레코드가 정확한 키 집합이고 경로가 정규 경로 `development/<MARKET>/<unit>m/YYYY-MM.csv.gz`인지: `P36D_RECORD_INVALID`
+4. **최초 관측 봉 (리뷰 5951924433)**
+   - 최초 개발 월은 요청 구간 밖에 있어도 **그 파일을 열어 검증한 뒤** 실제 첫 봉을 `first_observed_bar`로 씁니다. holdout이 아닌 개발 월입니다.
+   - 계열의 `boundary_to`도 그 봉과 같아야 합니다(`P36D_RECORD_INVALID`).
+   - 검증되지 않은 기록값으로 누락 수를 계산하지 않습니다. 결과 행 수가 기대 행 수를 넘으면 `P36D_COUNT_INCONSISTENT`로 거절하므로, 음수 누락은 나오지 않습니다.
+5. **개발 월 (요청 구간과 겹치는 월 + 최초 개발 월)**
+   - 월 키가 `YYYY-MM`(01–12)인지 날짜 해석 전에 확인합니다: `P36D_RECORD_INVALID`
+   - 레코드가 정확한 키 집합이고 경로가 정규 경로 `development/<MARKET>/<unit>m/YYYY-MM.csv.gz`인지, 그리고 `earliest_observed_month`가 최초 개발 월에만 참인지: `P36D_RECORD_INVALID`
    - `p36.inside()`로 경로 이탈·symlink 확인: `P36D_PATH_FORBIDDEN`
    - 파일 존재·크기 상한: `P36D_FILE_MISSING`
    - SHA-256: `P36D_HASH_MISMATCH`
@@ -67,14 +72,17 @@ frame, report = load_development(SNAPSHOT_ROOT, 'KRW-BTC', 60, '2024-01-01T00:00
    - 중복·역순: `P36D_DUPLICATE_OR_UNORDERED`
    - 주기 격자·월 경계: `P36D_GRID_OR_MONTH_INVALID`
    - 기존 `quality_report`로 OHLCV 검사(유한 양수, 범위): `P36D_OHLCV_INVALID`
-   - 레코드의 dataset hash와 첫/마지막 봉 일치: `P36D_QUALITY_MISMATCH`
+   - **기록된 품질 전체를 P36의 `month_quality()`로 다시 계산**해 기록값과 비교합니다: `P36D_QUALITY_MISMATCH`
+     - 대상: rows, expected_rows, missing_bars, longest_gap_bars, 첫/마지막 봉, dataset hash
+     - 최초 월은 실제 첫 봉부터, 그 외 월은 1일 00:00 UTC부터 계산합니다(리뷰 5951924433).
+     - 해시가 맞아도 품질 기록만 바뀌면 거절합니다.
 
 **하지 않는 것**
 - `holdout/`은 나열하거나 열거나 해시하지 않습니다.
 - holdout 바이트까지 읽는 P36 전체 `verify()`는 호출하지 않습니다.
 - 잠금, 임시 파일, manifest 갱신 등 쓰기가 없고, 네트워크 호출도 없습니다.
 
-## 합성 검증 (`tests/test_p36_dev_loader.py`, 10개)
+## 합성 검증 (`tests/test_p36_dev_loader.py`, 14개)
 
 스냅샷은 P36 수집기와 Fake HTTP로 만듭니다. 소켓 연결은 테스트를 실패시킵니다.
 
@@ -94,6 +102,12 @@ frame, report = load_development(SNAPSHOT_ROOT, 'KRW-BTC', 60, '2024-01-01T00:00
 - 미완료 스냅샷, 계획 변조, 요청 회계 불일치, 계열 누락, 응답 0회, schema 변조
 - 잘못된 종목·주기·구간
 - 계좌 표지 경로, symlink 루트, symlink 종목 디렉터리. 외부 파일 바이트는 바뀌지 않습니다.
+
+**리뷰 회귀 (5951924433)와 같은 종류의 점검**
+- 상한 초과: budget과 manifest를 함께 120,001로 맞추고 차이를 미확인으로 돌려도 `P36D_BUDGET_INVALID`입니다. 정확히 상한(120,000)은 허용합니다.
+- 최초 관측 봉 위조: 1월·3월 봉이 있는 스냅샷에서 1월 기록의 `first_bar`와 `boundary_to`만 4월 1일로 바꾸고 3월을 읽으면 거절됩니다(CSV 불변). 정상일 때는 `missing_bars=0`이고, 최초 봉은 실제 1월 봉입니다.
+- 품질 기록 위조: `expected_rows`, `missing_bars`, `longest_gap_bars`, dataset hash, rows를 하나씩 바꾸거나, 앞의 셋을 함께 바꿔도 거절됩니다. 해시는 정상인 상태입니다.
+- 일관성: 최초 월이 아닌 월에 `earliest_observed_month=True`, `2026-13` 월 키, 첫 봉과 다른 `boundary_to`를 거절합니다.
 
 **경계**
 - 로더가 `verify`나 쓰기 함수(잠금, 수집, 재개, transport)를 호출하지 않습니다.

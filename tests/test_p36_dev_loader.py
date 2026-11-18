@@ -164,6 +164,51 @@ class RejectionTests(Snapshot):
         self.assertEqual(tree(outside),keep)
 
 
+class ReviewRegressionTests(Snapshot):
+    """Review 5951924433 plus the same-class gaps found while fixing it."""
+    def test_budget_above_the_plan_cap_is_refused_even_when_both_records_agree(self):
+        root,m=self.snap(data={**self.only(),('KRW-BTC',60):t36.bars(60,'2026-03-01T00:00:00Z','2026-03-01T03:00:00Z')})
+        over=p36.MAX_REQUESTS+1;extra=over-m['requests']
+        self.manifest_edit(root,lambda x:x.update(requests=over,unconfirmed_requests=x['unconfirmed_requests']+extra))
+        (root/'budget.json').write_text(json.dumps({'schema':p36.SCHEMA,'requests':over}))
+        with self.assertRaisesRegex(loader.LoaderError,'P36D_BUDGET_INVALID'):loader.load_development(root,'KRW-BTC',60,START,END)
+        (root/'budget.json').write_text(json.dumps({'schema':p36.SCHEMA,'requests':p36.MAX_REQUESTS}))
+        self.manifest_edit(root,lambda x:x.update(requests=p36.MAX_REQUESTS,unconfirmed_requests=x['unconfirmed_requests']-1))
+        self.assertEqual(loader.load_development(root,'KRW-BTC',60,START,END)[1]['status'],'LOADED')  # Exactly at the cap: allowed.
+
+    def test_unverified_first_observed_bar_outside_the_window_is_refused(self):
+        data={**self.only(),('KRW-BTC',60):[pd.Timestamp('2026-01-15T00:00:00Z'),pd.Timestamp('2026-03-01T00:00:00Z')]}
+        root,m=self.snap(data=data);self.assertEqual(m['status'],'COMPLETE_API_BOUNDARY_REACHED')
+        frame,report=loader.load_development(root,'KRW-BTC',60,'2026-03-01T00:00:00+00:00','2026-03-01T01:00:00+00:00')
+        self.assertEqual((report['rows'],report['missing_bars'],report['first_observed_bar']),(1,0,'2026-01-15T00:00:00+00:00'))
+        def forge(x):  # The reviewer's case: CSV untouched, only the out-of-window record and boundary rewritten.
+            x['series']['KRW-BTC-60']['months']['2026-01']['quality']['first_bar']='2026-04-01T00:00:00+00:00'
+            x['series']['KRW-BTC-60']['boundary_to']='2026-04-01T00:00:00+00:00'
+        self.manifest_edit(root,forge)
+        with self.assertRaisesRegex(loader.LoaderError,'P36D_QUALITY_MISMATCH'):
+            loader.load_development(root,'KRW-BTC',60,'2026-03-01T00:00:00+00:00','2026-03-01T01:00:00+00:00')
+
+    def test_every_recorded_quality_value_is_recomputed_even_with_a_valid_hash(self):
+        root,_=self.snap()
+        for field,value in (('expected_rows',1),('missing_bars',0),('longest_gap_bars',0),('dataset_sha256','0'*64),('rows',1)):
+            saved=(root/'manifest.json').read_bytes()
+            self.manifest_edit(root,lambda x:x['series']['KRW-BTC-60']['months']['2026-03']['quality'].update({field:value}))
+            with self.subTest(field=field),self.assertRaisesRegex(loader.LoaderError,'P36D_QUALITY_MISMATCH'):
+                loader.load_development(root,'KRW-BTC',60,START,END)
+            (root/'manifest.json').write_bytes(saved)
+        self.manifest_edit(root,lambda x:x['series']['KRW-BTC-60']['months']['2026-03']['quality'].update(expected_rows=1,missing_bars=0,longest_gap_bars=0))
+        with self.assertRaisesRegex(loader.LoaderError,'P36D_QUALITY_MISMATCH'):loader.load_development(root,'KRW-BTC',60,START,END)
+
+    def test_earliest_flag_boundary_and_month_keys_must_be_consistent(self):
+        root,_=self.snap()
+        for change,code in ((lambda x:x['series']['KRW-BTC-60']['months']['2026-03'].update(earliest_observed_month=True),'P36D_RECORD_INVALID'),
+                (lambda x:x['series']['KRW-BTC-60']['months'].update({'2026-13':x['series']['KRW-BTC-60']['months']['2026-03']}),'P36D_RECORD_INVALID'),
+                (lambda x:x['series']['KRW-BTC-60'].update(boundary_to='2026-01-10T01:00:00+00:00'),'P36D_COMPLETION_UNVERIFIED|P36D_RECORD_INVALID')):
+            saved=(root/'manifest.json').read_bytes();self.manifest_edit(root,change)
+            with self.subTest(code=code),self.assertRaisesRegex(loader.LoaderError,code):loader.load_development(root,'KRW-BTC',60,START,END)
+            (root/'manifest.json').write_bytes(saved)
+        self.assertEqual(loader.load_development(root,'KRW-BTC',60,START,END)[1]['missing_bars'],2)
+
 class BoundaryTests(unittest.TestCase):
     def test_loader_never_calls_full_verify_or_writers(self):
         source=(Path(loader.__file__)).read_text(encoding='utf-8')
