@@ -6,26 +6,33 @@
     python -m backtesting.p36_history verify --output EXISTING_DIR
 
 Unauthenticated GETs of https://api.upbit.com/v1/candles/minutes/{unit} only, paged backwards from a fixed
-`end` (first day of the collection month, UTC) until the exchange returns no earlier candle. Each response is
-validated (market/unit, naive-UTC grid timestamps, strictly descending unique, inside the cursor window,
-finite positive OHLC with consistent range, non-negative volume); nothing is sorted, repaired, interpolated or
-filled. Completed months are stored as gzip CSV (mtime 0) per market/unit/month with SHA-256 and quality.
+`end` (first day of the collection month, UTC). Every non-empty page moves the exclusive cursor to its oldest
+candle, whatever its length; only an EMPTY response ends a series, and it is recorded as the API query boundary,
+never as proof of the listing time or of complete history. Each response is validated (market/unit, naive-UTC
+grid timestamps, strictly descending unique, inside the cursor window, finite positive OHLC with a consistent
+range, non-negative volume); nothing is sorted, repaired, interpolated or filled. Completed months are stored
+as gzip CSV (mtime 0) per market/unit/month with SHA-256; development months also keep quality, and the
+development coverage report lists empty months and cross-month gaps.
 
 Holdout: the 6 months before `end` are written under holdout/ and the manifest keeps ONLY their file SHA-256
 and row count; no price, return, gap or timestamp statistic of those rows is recorded or printed.
 
-Limits: fixed per-snapshot request cap, >=0.25 s between requests (4/s), stop on HTTP 429/5xx or any
-validation error (no automatic retry, re-connection or schedule). A stopped snapshot is resumed only by the
-user's explicit `resume`, which first re-verifies every stored month's SHA-256 and the fixed plan. This is a
-data snapshot, not a pre-registered forward evaluation; no strategy is evaluated. Network 0 without
+Limits: one writer per snapshot (lock), a fixed request cap debited on disk BEFORE every call and never
+refunded (a hard kill leaves it spent), >=0.25 s between requests (4/s, below Upbit's documented 10/s per-IP
+candle group limit), stop on HTTP 429/5xx or any validation error (no automatic retry, re-connection or
+schedule). A stopped snapshot is resumed only by the user's explicit `resume`, which first verifies the plan,
+series, request accounting, completion evidence, every month's SHA-256 and the exact file set. This is a data
+snapshot, not a pre-registered forward evaluation; no strategy is evaluated. Network 0 without
 --connect-public. Existing research snapshots (including the 2026-10-21 sealed window) are never read.
 """
 import argparse
+import fcntl
 import gzip
 import hashlib
 import json
 import os
 import re
+import tempfile
 import time
 from datetime import datetime,timezone
 from email.utils import parsedate_to_datetime
@@ -34,21 +41,27 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from . import p19_baseline as base
 from .collection import FIELDS,quality_report,utc
-from .data import dataset_hash
 from services.public_market import PublicOnlyAuth,PublicDataError,positive
 
-SCHEMA='P36_HISTORY_SNAPSHOT_V1'
+SCHEMA='P36_HISTORY_SNAPSHOT_V2'
 MARKETS=('KRW-BTC','KRW-ETH','KRW-XRP','KRW-SOL')
 UNITS=(60,15,1)  # Cheapest series first.
+SERIES=tuple(f'{m}-{u}' for u in UNITS for m in MARKETS)
 HOLDOUT_MONTHS=6
-MAX_REQUESTS=120_000  # Whole snapshot, across every manual resume; never refilled.
-MIN_INTERVAL_SECONDS=0.25
+MAX_REQUESTS=120_000  # Whole snapshot, across every manual resume; debited on disk BEFORE each call, never refunded.
+MIN_INTERVAL_SECONDS=0.25  # 4/s, below Upbit's documented 10/s per-IP candle group limit.
 PAGE=200
 MAX_RESPONSE_BYTES=2_000_000
 CLOCK_TOLERANCE_SECONDS=5
+TERMINAL=('API_BOUNDARY_REACHED','NO_ROWS_RETURNED')
+STATUSES=('IN_PROGRESS',*TERMINAL)
 ROOT=Path(__file__).resolve().parents[1]
 GAP_NOTE='A missing bar may be a minute without trades or an API omission; the two cannot be distinguished.'
+BOUNDARY_NOTE=('An empty response is only the API query boundary; it does not prove the listing time or that the '
+    'whole exchange history was obtained.')
+SNAPSHOT_MARKERS=('manifest.json','budget.json','snapshot.json','protocol.json','results.json','collection.json')
 
 
 class P36Error(ValueError):pass
@@ -62,6 +75,7 @@ def sha(raw):return hashlib.sha256(raw).hexdigest()
 def month_key(stamp):return stamp.strftime('%Y-%m')
 def month_start(stamp):return pd.Timestamp(year=stamp.year,month=stamp.month,day=1,tz='UTC')
 def next_month(stamp):return month_start(stamp)+pd.offsets.MonthBegin(1)
+def now_iso(clock):return pd.Timestamp(clock(),unit='s',tz='UTC').isoformat()
 
 
 def plan(now=None):
@@ -73,27 +87,84 @@ def plan(now=None):
         'min_interval_seconds':MIN_INTERVAL_SECONDS,'page_count':PAGE,
         'endpoint':'https://api.upbit.com/v1/candles/minutes/{unit}','auth':'none; public GET only',
         'automatic_retry_resume_schedule':False,'pre_registered_forward_evaluation':False,
-        'gap_note':GAP_NOTE}
+        'gap_note':GAP_NOTE,'boundary_note':BOUNDARY_NOTE}
 
 
-def atomic_json(path,value):
-    path=Path(path);temp=path.with_name(path.name+'.pending')
-    with temp.open('w',encoding='utf-8') as fh:
-        json.dump(value,fh,ensure_ascii=False,indent=2,allow_nan=False);fh.flush();os.fsync(fh.fileno())
-    os.replace(temp,path)
-
-
-def output_path(value,*,new):
-    original=Path(value).expanduser().absolute()
-    require(not any(p.is_symlink() for p in (original,*original.parents)),'P36_SYMLINK_FORBIDDEN')
-    p=original.resolve()
-    require(not p.is_relative_to(ROOT),'P36_OUTPUT_INSIDE_CHECKOUT')  # Large data never lands in the public repo.
+# ---------------------------------------------------------------- paths (review 5949862643)
+def root_path(value,*,new):
+    """The snapshot root: existing P19 account/holdout/symlink rules, outside the checkout, not inside another snapshot."""
+    try:p=base.safe_path(value)
+    except ValueError as exc:raise P36Error('P36_SYMLINK_FORBIDDEN' if str(exc)=='SYMLINK_FORBIDDEN'
+        else 'P36_OUTPUT_INSIDE_CHECKOUT' if str(exc)=='PRIVATE_OUTPUT_OUTSIDE_CHECKOUT_REQUIRED' else 'P36_OPERATIONAL_OR_ACCOUNT_PATH') from None
     blocked={'.ssh','.aws','.codex','.git','keychains','runtime','paper-experiments','notifications'}
-    require(not any(x.lower() in blocked for x in p.parts),'P36_OPERATIONAL_OR_SECRET_PATH')
+    require(not any(x.lower() in blocked for x in p.parts),'P36_OPERATIONAL_OR_ACCOUNT_PATH')
+    require(not any((x/n).exists() for x in p.parents for n in SNAPSHOT_MARKERS),'P36_INSIDE_EXISTING_SNAPSHOT')
     if new:
         require(not p.exists(),'P36_OUTPUT_EXISTS_NO_OVERWRITE');p.mkdir(parents=True,mode=0o700)
-    else:require(p.is_dir() and (p/'manifest.json').is_file(),'P36_SNAPSHOT_NOT_FOUND')
+    else:require(p.is_dir() and (p/'manifest.json').is_file() and not (p/'manifest.json').is_symlink(),'P36_SNAPSHOT_NOT_FOUND')
     return p
+
+
+def inside(root,rel,*,make=False):
+    """Every component below the root is a real (non-symlink) directory/file inside the root."""
+    rel=Path(rel);require(not rel.is_absolute() and '..' not in rel.parts,'P36_PATH_ESCAPE')
+    current=root
+    for i,part in enumerate(rel.parts):
+        current=current/part
+        if current.is_symlink():raise P36Error('P36_SYMLINK_FORBIDDEN')
+        if i<len(rel.parts)-1:
+            if make and not current.exists():current.mkdir(mode=0o700)
+            require(not current.exists() or (current.is_dir() and not current.is_symlink()),'P36_SYMLINK_FORBIDDEN')
+    require(current.resolve().is_relative_to(root),'P36_PATH_ESCAPE')
+    return current
+
+
+def write_new(root,rel,raw):
+    """Exclusive temp file in the same real directory, fsync, then a no-overwrite publish."""
+    target=inside(root,rel,make=True);require(not target.exists(),'P36_MONTH_EXISTS')
+    fd,temp=tempfile.mkstemp(prefix='.p36-',suffix='.tmp',dir=target.parent)
+    try:
+        with os.fdopen(fd,'wb') as fh:fh.write(raw);fh.flush();os.fsync(fh.fileno())
+        os.link(temp,target)  # Fails if the target appeared meanwhile; never overwrites.
+    finally:
+        if os.path.exists(temp):os.unlink(temp)
+    return target
+
+
+def atomic_json(root,name,value):
+    target=inside(root,name);fd,temp=tempfile.mkstemp(prefix='.p36-',suffix='.tmp',dir=root)
+    try:
+        with os.fdopen(fd,'w',encoding='utf-8') as fh:
+            json.dump(value,fh,ensure_ascii=False,indent=2,allow_nan=False);fh.flush();os.fsync(fh.fileno())
+        os.replace(temp,target)
+    finally:
+        if os.path.exists(temp):os.unlink(temp)
+
+
+def read_json(root,name):
+    path=inside(root,name);require(path.is_file(),'P36_MANIFEST_INVALID')
+    try:return json.loads(path.read_text(encoding='utf-8'))
+    except ValueError:raise P36Error('P36_MANIFEST_INVALID') from None
+
+
+class Lock:
+    """One writer per snapshot; a second collect/resume is refused before any network or file write."""
+    def __init__(self,root):self.root=root;self.fd=None
+    def __enter__(self):
+        path=inside(self.root,'.lock');self.fd=os.open(path,os.O_CREAT|os.O_RDWR|getattr(os,'O_NOFOLLOW',0),0o600)
+        try:fcntl.flock(self.fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except OSError:os.close(self.fd);self.fd=None;raise P36Error('P36_SNAPSHOT_LOCKED') from None
+        return self
+    def __exit__(self,*exc):
+        if self.fd is not None:fcntl.flock(self.fd,fcntl.LOCK_UN);os.close(self.fd)
+
+
+class Budget:
+    """Disk-backed request counter: each call is debited and fsynced BEFORE it is sent; never refunded."""
+    def __init__(self,root,cap):self.root=root;self.cap=cap;self.used=read_json(root,'budget.json')['requests']
+    def debit(self):
+        require(type(self.used) is int and self.used<self.cap,'P36_REQUEST_CAP_REACHED')
+        self.used+=1;atomic_json(self.root,'budget.json',{'schema':SCHEMA,'requests':self.used})
 
 
 class Transport:
@@ -165,114 +236,173 @@ def month_quality(frame,unit,start,end):
         'dataset_sha256':report['dataset_sha256']}
 
 
-def write_month(root,manifest,key,market,unit,month,rows,first_series_month):
+def month_file(market,unit,month,partition):return f'{partition}/{market}/{unit}m/{month}.csv.gz'
+
+
+def write_month(root,manifest,key,market,unit,month,rows,earliest):
     """Store one completed month; holdout months record only file SHA-256 and row count."""
     start=pd.Timestamp(month+'-01',tz='UTC');end=next_month(start)
-    holdout=start>=utc(manifest['plan']['holdout_start'])
+    holdout=start>=utc(manifest['plan']['holdout_start']);partition='holdout' if holdout else 'development'
     frame=pd.DataFrame(sorted(rows,key=lambda r:r['timestamp'])).set_index('timestamp')
-    if first_series_month:start=frame.index[0]  # Before the first listed bar there is nothing to expect.
-    partition='holdout' if holdout else 'development'
-    folder=root/partition/market/f'{unit}m';folder.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if earliest:start=frame.index[0]  # Before the first observed bar nothing is expected.
     raw=gzip.compress(frame.to_csv(index_label='timestamp',float_format='%.17g',lineterminator='\n').encode(),mtime=0)
     quality=month_quality(frame,unit,start,end)  # Validates both partitions; only development keeps the values.
-    path=folder/f'{month}.csv.gz';temp=path.with_name(path.name+'.pending');temp.write_bytes(raw);os.replace(temp,path)
-    record={'partition':partition,'file':str(path.relative_to(root)),'file_sha256':sha(raw),'rows':len(frame)}
-    if not holdout:record.update(quality=quality,earliest_month=first_series_month)
+    write_new(root,month_file(market,unit,month,partition),raw)
+    record={'partition':partition,'file':month_file(market,unit,month,partition),'file_sha256':sha(raw),'rows':len(frame)}
+    if not holdout:record.update(quality=quality,earliest_observed_month=earliest)
     manifest['series'][key]['months'][month]=record
 
 
+def development_coverage(series,plan_,unit):
+    """Development-only coverage over [first observed bar, holdout start): empty months and cross-month gaps
+    are visible; nothing is interpolated. No holdout value enters this report."""
+    dev=sorted((m,r) for m,r in series['months'].items() if r['partition']=='development')
+    if not dev:return {'development_months':0,'rows':0,'expected_rows':0,'missing_bars':0,'longest_gap_bars':0,'empty_development_months':[]}
+    step=pd.Timedelta(minutes=unit);holdout=utc(plan_['holdout_start'])
+    first=utc(dev[0][1]['quality']['first_bar'])
+    # Unfinished series: the span starts at the oldest completed month (a later resume extends it).
+    if series['status'] not in TERMINAL and not dev[0][1].get('earliest_observed_month'):first=pd.Timestamp(dev[0][0]+'-01',tz='UTC')
+    have={m for m,_ in dev};months=[];cursor=month_start(first)
+    while cursor<holdout:months.append(month_key(cursor));cursor=next_month(cursor)
+    longest=max(r['quality']['longest_gap_bars'] for _,r in dev);previous=first-step
+    for _,r in dev:
+        longest=max(longest,(utc(r['quality']['first_bar'])-previous)//step-1);previous=utc(r['quality']['last_bar'])
+    longest=max(longest,(holdout-previous)//step-1)
+    expected=(holdout-first)//step;rows=sum(r['rows'] for _,r in dev)
+    return {'development_months':len(dev),'rows':rows,'expected_rows':int(expected),'missing_bars':int(expected-rows),
+        'longest_gap_bars':int(longest),'empty_development_months':[m for m in months if m not in have]}
+
+
 def summary(manifest):
-    s=manifest['series'];done=[k for k,v in s.items() if v['status']=='EARLIEST_REACHED']
-    dev=[m for v in s.values() for m in v['months'].values() if m['partition']=='development']
+    s=manifest['series'];bounded=[k for k,v in s.items() if v['status']=='API_BOUNDARY_REACHED']
+    empty=[k for k,v in s.items() if v['status']=='NO_ROWS_RETURNED']
     hold=[m for v in s.values() for m in v['months'].values() if m['partition']=='holdout']
-    lines=[f"P36 {manifest['status']} requests={manifest['requests']}/{manifest['plan']['max_requests']} series_full={len(done)}/{len(s)}",
+    lines=[f"P36 {manifest['status']} requests={manifest['requests']}/{manifest['plan']['max_requests']} "
+        f"unconfirmed={manifest.get('unconfirmed_requests',0)} bounded={len(bounded)}/{len(SERIES)} no_rows={len(empty)}",
         f"end={manifest['plan']['end_exclusive']} holdout_start={manifest['plan']['holdout_start']} (holdout: sha256+rows only)"]
     for unit in UNITS:
-        part=[(k,v) for k,v in s.items() if k.endswith(f'-{unit}')]
-        first=[min(v['months']) for _,v in part if any(m['partition']=='development' for m in v['months'].values())]
-        missing=sum(m['quality']['missing_bars'] for _,v in part for m in v['months'].values() if m['partition']=='development')
-        lines.append(f"{unit}m: full={sum(v['status']=='EARLIEST_REACHED' for _,v in part)}/{len(part)} earliest_month={min(first) if first else '-'} "
-            f"dev_months={sum(m['partition']=='development' for _,v in part for m in v['months'].values())} dev_missing_bars={missing}")
-    lines.append(f"development months={len(dev)} rows={sum(m['rows'] for m in dev)}; holdout months={len(hold)} rows={sum(m['rows'] for m in hold)}")
-    lines.append('Full history only where series_full; gaps are not repaired; '+('see failure_reason.' if manifest.get('failure_reason') else 'details in manifest.json.'))
+        part=[(k,v) for k,v in s.items() if k.endswith(f'-{unit}')];cov=[development_coverage(v,manifest['plan'],unit) for _,v in part]
+        first=[min(m for m,r in v['months'].items() if r['partition']=='development') for _,v in part
+            if any(r['partition']=='development' for r in v['months'].values())]
+        lines.append(f"{unit}m: bounded={sum(v['status']=='API_BOUNDARY_REACHED' for _,v in part)}/{len(part)} earliest_observed_month={min(first) if first else '-'} "
+            f"dev_months={sum(c['development_months'] for c in cov)} dev_missing_bars={sum(c['missing_bars'] for c in cov)} "
+            f"empty_dev_months={sum(len(c['empty_development_months']) for c in cov)}")
+    lines.append(f"holdout months={len(hold)} rows={sum(m['rows'] for m in hold)}")
+    lines.append('API query boundary only, not proof of listing or full history; gaps are not repaired; '
+        +('see failure_reason.' if manifest.get('failure_reason') else 'details in manifest.json.'))
     return lines[:8]
 
 
-def run(root,manifest,transport,*,clock=time.time):
-    """Collect until every series reaches its first listed candle, the cap, an error or an interrupt."""
+def run(root,manifest,budget,transport,*,clock=time.time):
+    """Collect until every series gets an empty response, the cap, an error or an interrupt."""
     p=manifest['plan'];end=utc(p['end_exclusive'])
+    def save():
+        manifest['updated_at']=now_iso(clock);atomic_json(root,'manifest.json',manifest)
     try:
         for unit in UNITS:
             for market in MARKETS:
                 key=f'{market}-{unit}';series=manifest['series'].setdefault(key,{'status':'IN_PROGRESS','months':{},'requests':0})
-                if series['status']=='EARLIEST_REACHED':continue
+                if series['status'] in TERMINAL:continue
                 cursor=pd.Timestamp(min(series['months'])+'-01',tz='UTC') if series['months'] else end
                 bucket={}
                 while True:
-                    require(manifest['requests']<p['max_requests'],'P36_REQUEST_CAP_REACHED')
-                    params={'market':market,'count':PAGE,'to':cursor.isoformat()}
+                    budget.debit()  # On disk before the request leaves; a crash keeps the debit.
                     manifest['requests']+=1;series['requests']+=1
+                    params={'market':market,'count':PAGE,'to':cursor.isoformat()}
                     rows=parse_page(transport.get(unit,params),market,unit,cursor,PAGE)
                     for r in rows:bucket.setdefault(month_key(r['timestamp']),[]).append(r)
-                    # Upbit skips minutes without trades, so a short (or empty) page means no earlier history exists.
-                    exhausted=len(rows)<PAGE
+                    # Only an EMPTY response ends a series (review 5949862643): a short page is not proof of the end.
+                    boundary=not rows
                     if rows:cursor=rows[-1]['timestamp']
-                    # A month is complete once strictly earlier data was seen (or history is exhausted); the month
-                    # holding the cursor waits for the next page, so the earliest month is always flagged correctly.
                     for month in sorted(bucket,reverse=True):
-                        if exhausted or pd.Timestamp(month+'-01',tz='UTC')>cursor:
-                            write_month(root,manifest,key,market,unit,month,bucket.pop(month),exhausted and not bucket)
-                    if exhausted:series['status']='EARLIEST_REACHED'
-                    manifest['updated_at']=pd.Timestamp(clock(),unit='s',tz='UTC').isoformat();atomic_json(root/'manifest.json',manifest)
-                    if exhausted:break
-        manifest['status']='COMPLETE_EARLIEST_REACHED';manifest.pop('failure_reason',None)
+                        if boundary or pd.Timestamp(month+'-01',tz='UTC')>cursor:
+                            write_month(root,manifest,key,market,unit,month,bucket.pop(month),boundary and not bucket)
+                    if boundary:
+                        series['status']='API_BOUNDARY_REACHED' if series['months'] else 'NO_ROWS_RETURNED'
+                        series['boundary_before']=cursor.isoformat() if series['months'] else None
+                    save()
+                    if boundary:break
+        manifest['status']='COMPLETE_API_BOUNDARY_REACHED';manifest.pop('failure_reason',None)
     except KeyboardInterrupt:manifest.update(status='INTERRUPTED_RESUME_MANUALLY',failure_reason='P36_INTERRUPTED')
     except Exception as exc:
         code=str(exc) if re.fullmatch(r'P36_[A-Z0-9_]{1,60}',str(exc)) else 'P36_COLLECTION_UNVERIFIED'
         manifest.update(status='REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED' if code=='P36_REQUEST_CAP_REACHED' else 'STOPPED_RESUME_MANUALLY',failure_reason=code)
-    manifest['updated_at']=pd.Timestamp(clock(),unit='s',tz='UTC').isoformat();atomic_json(root/'manifest.json',manifest)
+    save()
     return manifest
 
 
+def stored_files(root):
+    found=set()
+    for partition in ('development','holdout'):
+        top=root/partition
+        if top.is_symlink():raise P36Error('P36_SYMLINK_FORBIDDEN')
+        if not top.exists():continue
+        for path in top.rglob('*'):
+            if path.is_symlink():raise P36Error('P36_SYMLINK_FORBIDDEN')
+            if path.is_file():found.add(str(path.relative_to(root)))
+    return found
+
+
 def verify(root,manifest):
-    """Every stored month must match its recorded SHA-256 and partition; anything else blocks a resume."""
-    require(manifest.get('schema')==SCHEMA and manifest.get('plan',{}).get('schema')==SCHEMA,'P36_MANIFEST_INVALID')
-    holdout=utc(manifest['plan']['holdout_start'])
-    for key,series in manifest['series'].items():
-        for month,record in series['months'].items():
-            market,unit=key.rsplit('-',1);partition='holdout' if pd.Timestamp(month+'-01',tz='UTC')>=holdout else 'development'
-            require(record['partition']==partition and record['file']==f'{partition}/{market}/{unit}m/{month}.csv.gz','P36_RESUME_LAYOUT_MISMATCH')
-            path=root/record['file']
-            require(path.is_file() and not path.is_symlink() and sha(path.read_bytes())==record['file_sha256'],'P36_RESUME_HASH_MISMATCH')
+    """Plan, series set, statuses, request accounting, completion evidence and the exact file set (review 5949862643)."""
+    require(type(manifest) is dict and manifest.get('schema')==SCHEMA and type(manifest.get('plan')) is dict
+        and manifest['plan']==plan(manifest['plan'].get('end_exclusive')),'P36_PLAN_CHANGED')
+    p=manifest['plan'];end=utc(p['end_exclusive']);holdout=utc(p['holdout_start'])
+    budget=read_json(root,'budget.json')
+    require(budget.get('schema')==SCHEMA and type(budget.get('requests')) is int and 0<=budget['requests']<=p['max_requests'],'P36_BUDGET_INVALID')
+    series=manifest.get('series');require(type(series) is dict and set(series)<=set(SERIES),'P36_SERIES_INVALID')
+    counted=sum(v.get('requests',-1) for v in series.values())
+    require(type(manifest.get('requests')) is int and counted==manifest['requests']-manifest.get('unconfirmed_requests',0)
+        and manifest['requests']<=budget['requests'] and all(type(v.get('requests')) is int and v['requests']>=0 for v in series.values()),'P36_REQUEST_COUNT_MISMATCH')
+    expected=set()
+    for key,s in series.items():
+        market,unit=key.rsplit('-',1);unit=int(unit)
+        require(s.get('status') in STATUSES and type(s.get('months')) is dict,'P36_SERIES_INVALID')
+        require(s['status']!='NO_ROWS_RETURNED' or not s['months'],'P36_SERIES_INVALID')
+        require(s['status']!='API_BOUNDARY_REACHED' or (s['months'] and s['requests']>=1),'P36_COMPLETION_UNVERIFIED')
+        for month,record in s['months'].items():
+            require(re.fullmatch(r'\d{4}-\d{2}',month) and pd.Timestamp(month+'-01',tz='UTC')<end,'P36_RESUME_LAYOUT_MISMATCH')
+            partition='holdout' if pd.Timestamp(month+'-01',tz='UTC')>=holdout else 'development'
+            keys={'partition','file','file_sha256','rows'}|({'quality','earliest_observed_month'} if partition=='development' else set())
+            require(type(record) is dict and set(record)==keys and record['partition']==partition
+                and record['file']==month_file(market,unit,month,partition),'P36_RESUME_LAYOUT_MISMATCH')
+            path=inside(root,record['file'])
+            require(path.is_file() and sha(path.read_bytes())==record['file_sha256'],'P36_RESUME_HASH_MISMATCH')
+            expected.add(record['file'])
+    require(stored_files(root)==expected,'P36_UNREGISTERED_OR_MISSING_FILE')
+    if manifest['status']=='COMPLETE_API_BOUNDARY_REACHED':
+        require(set(series)==set(SERIES) and all(v['status'] in TERMINAL for v in series.values()),'P36_COMPLETION_UNVERIFIED')
     return manifest
 
 
 def collect(output,*,connect_public=False,transport=None,clock=time.time):
     spec=plan(pd.Timestamp(clock(),unit='s',tz='UTC'))
     if not connect_public:return {'status':'OFFLINE_PLAN_ONLY','network_calls':0,'files_written':0,'plan':spec}
-    root=output_path(output,new=True)
-    manifest={'schema':SCHEMA,'plan':spec,'status':'IN_PROGRESS','requests':0,'series':{},
-        'started_at':pd.Timestamp(clock(),unit='s',tz='UTC').isoformat(),'runs':1,
-        'source':'SYNTHETIC_TEST_TRANSPORT' if transport is not None else 'PUBLIC_REST_DECLARED_SOURCE_NOT_INDEPENDENTLY_ATTESTED'}
-    atomic_json(root/'manifest.json',manifest)
-    transport=transport or Transport(clock=clock)
-    try:return run(root,manifest,transport,clock=clock)
-    finally:transport.close()
+    root=root_path(output,new=True)
+    with Lock(root):
+        manifest={'schema':SCHEMA,'plan':spec,'status':'IN_PROGRESS','requests':0,'unconfirmed_requests':0,'series':{},
+            'started_at':now_iso(clock),'runs':1,
+            'source':'SYNTHETIC_TEST_TRANSPORT' if transport is not None else 'PUBLIC_REST_DECLARED_SOURCE_NOT_INDEPENDENTLY_ATTESTED'}
+        atomic_json(root,'budget.json',{'schema':SCHEMA,'requests':0});atomic_json(root,'manifest.json',manifest)
+        transport=transport or Transport(clock=clock)
+        try:return run(root,manifest,Budget(root,spec['max_requests']),transport,clock=clock)
+        finally:transport.close()
 
 
 def resume(output,*,connect_public=False,transport=None,clock=time.time):
-    root=output_path(output,new=False)
-    try:manifest=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
-    except ValueError:raise P36Error('P36_MANIFEST_INVALID') from None
-    verify(root,manifest)
-    require(manifest['plan']==plan(manifest['plan']['end_exclusive']),'P36_PLAN_CHANGED')  # Same code constants, same end.
-    if manifest['status']=='COMPLETE_EARLIEST_REACHED':return manifest
-    if not connect_public:return {**manifest,'status':'VERIFIED_RESUMABLE_OFFLINE'}
-    require(manifest['requests']<manifest['plan']['max_requests'],'P36_REQUEST_CAP_REACHED')  # Never refilled.
-    manifest.update(status='IN_PROGRESS',runs=manifest.get('runs',1)+1);manifest.pop('failure_reason',None)
-    transport=transport or Transport(clock=clock)
-    try:return run(root,manifest,transport,clock=clock)
-    finally:transport.close()
+    root=root_path(output,new=False)
+    with Lock(root):
+        manifest=verify(root,read_json(root,'manifest.json'))
+        if manifest['status']=='COMPLETE_API_BOUNDARY_REACHED':return manifest
+        if not connect_public:return {**manifest,'status':'VERIFIED_RESUMABLE_OFFLINE'}
+        budget=Budget(root,manifest['plan']['max_requests'])
+        # Requests debited but never recorded (a hard kill) stay spent and are reported, never refunded.
+        manifest['unconfirmed_requests']=manifest.get('unconfirmed_requests',0)+budget.used-manifest['requests'];manifest['requests']=budget.used
+        require(budget.used<budget.cap,'P36_REQUEST_CAP_REACHED')
+        manifest.update(status='IN_PROGRESS',runs=manifest.get('runs',1)+1);manifest.pop('failure_reason',None)
+        transport=transport or Transport(clock=clock)
+        try:return run(root,manifest,budget,transport,clock=clock)
+        finally:transport.close()
 
 
 def main(argv=None):
@@ -286,7 +416,8 @@ def main(argv=None):
         if a.command=='plan':
             s=plan();print(f"P36 PLAN end={s['end_exclusive']} holdout_start={s['holdout_start']} max_requests={s['max_requests']} interval={s['min_interval_seconds']}s; no network or files.");return 0
         if a.command=='verify':
-            root=output_path(a.output,new=False);m=verify(root,json.loads((root/'manifest.json').read_text(encoding='utf-8')))
+            root=root_path(a.output,new=False)
+            with Lock(root):m=verify(root,read_json(root,'manifest.json'))
         elif a.command=='collect':m=collect(a.output,connect_public=a.connect_public)
         else:m=resume(a.output,connect_public=a.connect_public)
     except (P36Error,ValueError,OSError) as exc:
@@ -294,7 +425,7 @@ def main(argv=None):
     if m['status']=='OFFLINE_PLAN_ONLY':
         print(f"P36 OFFLINE_PLAN_ONLY end={m['plan']['end_exclusive']} holdout_start={m['plan']['holdout_start']}; add --connect-public to collect.");return 0
     for line in summary(m):print(line)
-    return 0 if m['status'] in ('COMPLETE_EARLIEST_REACHED','VERIFIED_RESUMABLE_OFFLINE','IN_PROGRESS') else 2
+    return 0 if m['status'] in ('COMPLETE_API_BOUNDARY_REACHED','VERIFIED_RESUMABLE_OFFLINE') else 2
 
 
 if __name__=='__main__':raise SystemExit(main())

@@ -4,7 +4,7 @@ No real network: every response comes from FakeSession; a socket guard fails the
 """
 from contextlib import contextmanager
 from email.utils import format_datetime
-import gzip,hashlib,io,json,os,socket,unittest
+import gzip,hashlib,io,json,os,socket,subprocess,sys,unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -96,10 +96,10 @@ class PlanTests(Base):
         with patch('sys.stdout'):self.assertEqual(p36.main(['plan']),0)
 
     def test_output_must_be_new_private_and_outside_checkout(self):
-        for bad,code in ((ROOT/'research'/'p36',"P36_OUTPUT_INSIDE_CHECKOUT"),(self.root/'.ssh'/'x','P36_OPERATIONAL_OR_SECRET_PATH')):
-            with self.subTest(code=code),self.assertRaisesRegex(p36.P36Error,code):p36.output_path(bad,new=True)
+        for bad,code in ((ROOT/'research'/'p36',"P36_OUTPUT_INSIDE_CHECKOUT"),(self.root/'.ssh'/'x','P36_OPERATIONAL_OR_ACCOUNT_PATH')):
+            with self.subTest(code=code),self.assertRaisesRegex(p36.P36Error,code):p36.root_path(bad,new=True)
         (self.root/'exists').mkdir()
-        with self.assertRaisesRegex(p36.P36Error,'P36_OUTPUT_EXISTS_NO_OVERWRITE'):p36.output_path(self.root/'exists',new=True)
+        with self.assertRaisesRegex(p36.P36Error,'P36_OUTPUT_EXISTS_NO_OVERWRITE'):p36.root_path(self.root/'exists',new=True)
 
     def test_cli_arguments_are_fixed(self):
         for argv in (['plan','--output','x'],['collect'],['verify','--output','x','--connect-public'],['fetch']):
@@ -109,8 +109,8 @@ class PlanTests(Base):
 class CollectTests(Base):
     def test_full_collection_round_trips_every_bar_and_reaches_listing(self):
         root,m,session,state=self.collect()
-        self.assertEqual(m['status'],'COMPLETE_EARLIEST_REACHED');self.assertEqual(len(m['series']),12)
-        self.assertTrue(all(v['status']=='EARLIEST_REACHED' for v in m['series'].values()));self.assertTrue(session.closed)
+        self.assertEqual(m['status'],'COMPLETE_API_BOUNDARY_REACHED');self.assertEqual(len(m['series']),12)
+        self.assertTrue(all(v['status']=='API_BOUNDARY_REACHED' for v in m['series'].values()));self.assertTrue(session.closed)
         data=default_data()
         for (market,unit),series in data.items():
             got=months_frame(root,m,f'{market}-{unit}')
@@ -119,7 +119,7 @@ class CollectTests(Base):
         self.assertTrue(all(c[0]==f"https://api.upbit.com/v1/candles/minutes/{c[0].rsplit('/',1)[1]}" and c[2]=='PublicOnlyAuth'
             and c[3] is False and c[1]['count']==200 for c in session.calls))
         self.assertTrue(all(x>=0 for x in state['slept']) and abs(sum(state['slept'])-0.25*(len(session.calls)-1))<1e-6)  # 4 req/s floor.
-        lines=p36.summary(m);self.assertLessEqual(len(lines),8);self.assertIn('series_full=12/12',lines[0])
+        lines=p36.summary(m);self.assertLessEqual(len(lines),8);self.assertIn('bounded=12/12',lines[0])
 
     def test_holdout_is_stored_apart_with_only_hash_and_rows_and_no_statistics(self):
         root,m,_,_=self.collect()
@@ -140,7 +140,7 @@ class CollectTests(Base):
         root,m,_,_=self.collect()
         march=m['series']['KRW-BTC-60']['months']['2026-03']['quality']
         self.assertEqual((march['missing_bars'],march['longest_gap_bars'],march['rows'],march['expected_rows']),(2,2,31*24-2,31*24))
-        first=m['series']['KRW-BTC-60']['months']['2026-01'];self.assertTrue(first['earliest_month'])
+        first=m['series']['KRW-BTC-60']['months']['2026-01'];self.assertTrue(first['earliest_observed_month'])
         self.assertEqual(first['quality']['first_bar'],'2026-01-10T00:00:00+00:00');self.assertEqual(first['quality']['missing_bars'],0)
         april=m['series']['KRW-BTC-1']['months']['2026-04']['quality'];self.assertEqual(april['missing_bars'],1)
         self.assertEqual(april['expected_rows'],(pd.Timestamp('2026-05-01',tz='UTC')-pd.Timestamp('2026-04-29T12:00',tz='UTC'))//pd.Timedelta(minutes=1))
@@ -149,7 +149,7 @@ class CollectTests(Base):
         data={k:[] for k in default_data()};data[('KRW-BTC',60)]=bars(60,'2026-03-01T00:00:00Z','2026-03-09T08:00:00Z')  # Exactly 200.
         self.assertEqual(len(data[('KRW-BTC',60)]),200)
         root,m,session,_=self.collect(data=data)
-        btc=m['series']['KRW-BTC-60'];self.assertEqual(list(btc['months']),['2026-03']);self.assertTrue(btc['months']['2026-03']['earliest_month'])
+        btc=m['series']['KRW-BTC-60'];self.assertEqual(list(btc['months']),['2026-03']);self.assertTrue(btc['months']['2026-03']['earliest_observed_month'])
         self.assertEqual(btc['months']['2026-03']['rows'],200);self.assertEqual([c[1]['to'] for c in session.calls[:2]],['2026-11-01T00:00:00+00:00','2026-03-01T00:00:00+00:00'])
         self.assertEqual(m['series']['KRW-ETH-60']['months'],{})  # Never listed: one empty page, nothing written.
 
@@ -196,7 +196,7 @@ class RejectionTests(Base):
             root,m,session,_=self.collect(name='cap')
             self.assertEqual((m['status'],m['failure_reason'],m['requests'],len(session.calls)),
                 ('REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED','P36_REQUEST_CAP_REACHED',7,7))
-            self.assertIn('series_full=',p36.summary(m)[0])
+            self.assertIn('bounded=',p36.summary(m)[0])
             tr,_=transport(FakeSession())
             with self.assertRaisesRegex(p36.P36Error,'P36_REQUEST_CAP_REACHED'):p36.resume(root,connect_public=True,transport=tr)
 
@@ -208,11 +208,11 @@ class ResumeTests(Base):
         self.assertEqual((m['status'],m['failure_reason']),('INTERRUPTED_RESUME_MANUALLY','P36_INTERRUPTED'))
         r=p36.resume(root);self.assertEqual(r['status'],'VERIFIED_RESUMABLE_OFFLINE')  # Offline: verify only.
         tr,_=transport(FakeSession());done=p36.resume(root,connect_public=True,transport=tr,clock=lambda:NOW.timestamp())
-        self.assertEqual((done['status'],done['runs']),('COMPLETE_EARLIEST_REACHED',2))
+        self.assertEqual((done['status'],done['runs']),('COMPLETE_API_BOUNDARY_REACHED',2))
         for key,series in ref['series'].items():
             self.assertEqual({mo:r['file_sha256'] for mo,r in done['series'][key]['months'].items()},
                 {mo:r['file_sha256'] for mo,r in series['months'].items()})
-        self.assertEqual(p36.resume(root)['status'],'COMPLETE_EARLIEST_REACHED')
+        self.assertEqual(p36.resume(root)['status'],'COMPLETE_API_BOUNDARY_REACHED')
 
     def test_resume_blocks_on_hash_layout_or_plan_mismatch(self):
         root,m,_,_=self.collect(name='cut',fail_at=(40,KeyboardInterrupt()))
@@ -220,11 +220,104 @@ class ResumeTests(Base):
         path=root/record['file'];saved=path.read_bytes();path.write_bytes(saved+b'x')
         with self.assertRaisesRegex(p36.P36Error,'P36_RESUME_HASH_MISMATCH'):p36.resume(root)
         path.write_bytes(saved);manifest=json.loads((root/'manifest.json').read_text())
-        bad=json.loads(json.dumps(manifest));bad['plan']['holdout_start']='2026-04-01T00:00:00+00:00';p36.atomic_json(root/'manifest.json',bad)
-        with self.assertRaisesRegex(p36.P36Error,'P36_RESUME_LAYOUT_MISMATCH|P36_PLAN_CHANGED'):p36.resume(root)
-        bad=json.loads(json.dumps(manifest));bad['plan']['max_requests']=10**9;p36.atomic_json(root/'manifest.json',bad)
+        bad=json.loads(json.dumps(manifest));bad['plan']['holdout_start']='2026-04-01T00:00:00+00:00';p36.atomic_json(root,'manifest.json',bad)
         with self.assertRaisesRegex(p36.P36Error,'P36_PLAN_CHANGED'):p36.resume(root)
-        p36.atomic_json(root/'manifest.json',manifest);self.assertEqual(p36.resume(root)['status'],'VERIFIED_RESUMABLE_OFFLINE')
+        bad=json.loads(json.dumps(manifest));bad['plan']['max_requests']=10**9;p36.atomic_json(root,'manifest.json',bad)
+        with self.assertRaisesRegex(p36.P36Error,'P36_PLAN_CHANGED'):p36.resume(root)
+        p36.atomic_json(root,'manifest.json',manifest);self.assertEqual(p36.resume(root)['status'],'VERIFIED_RESUMABLE_OFFLINE')
+
+
+class ReviewRegressionTests(Base):
+    """Review 5949862643: short pages, hard kill, concurrent writers, empty completion, links, empty months."""
+    def only(self,**series):
+        data={k:[] for k in default_data()};data.update(series);return data
+
+    def test_short_nonempty_page_is_not_the_end_of_history(self):
+        data=self.only(**{'x':None});data.pop('x')
+        data[('KRW-BTC',60)]=bars(60,'2026-02-10T00:00:00Z','2026-02-10T05:00:00Z')+bars(60,'2026-04-05T00:00:00Z','2026-04-05T03:00:00Z')
+        root,m,session,_=self.collect(data=data,mutate=lambda n,r:r[:1] if n==1 else r)  # First page: ONE April bar.
+        btc=m['series']['KRW-BTC-60'];self.assertEqual(btc['status'],'API_BOUNDARY_REACHED')
+        self.assertEqual(sorted(btc['months']),['2026-02','2026-04']);self.assertGreater(btc['requests'],2)
+        self.assertEqual(sum(r['rows'] for r in btc['months'].values()),8)  # Nothing after the short page was lost.
+        self.assertEqual(btc['boundary_before'],'2026-02-10T00:00:00+00:00')
+        cov=p36.development_coverage(btc,m['plan'],60);self.assertEqual(cov['empty_development_months'],['2026-03'])
+        self.assertEqual(cov['missing_bars'],cov['expected_rows']-8);self.assertGreater(cov['longest_gap_bars'],24*28)
+        self.assertIn('empty_dev_months=1',p36.summary(m)[2])
+
+    def test_series_empty_from_the_first_response_is_never_counted_as_obtained(self):
+        root,m,session,_=self.collect(data=self.only())
+        self.assertTrue(all(v['status']=='NO_ROWS_RETURNED' and v['months']=={} for v in m['series'].values()))
+        self.assertIn('bounded=0/12 no_rows=12',p36.summary(m)[0]);self.assertEqual(len(session.calls),12)
+
+    def test_hard_kill_keeps_the_request_debited_and_resume_never_refunds_it(self):
+        out=self.root/'killed';script=(
+            'import os,sys;sys.path.insert(0,sys.argv[1]);from backtesting import p36_history as p36\n'
+            'class Kill:\n def get(self,unit,params):os._exit(9)\n def close(self):pass\n'
+            'p36.collect(sys.argv[2],connect_public=True,transport=Kill(),clock=lambda:%r)\n'%NOW.timestamp())
+        code=subprocess.run([sys.executable,'-c',script,str(ROOT),str(out)],env={**os.environ,'PYTHON_DOTENV_DISABLED':'1'}).returncode
+        self.assertEqual(code,9)
+        self.assertEqual(json.loads((out/'budget.json').read_text())['requests'],1)  # Debited before the call left.
+        self.assertEqual(json.loads((out/'manifest.json').read_text())['requests'],0)
+        self.assertEqual(p36.resume(out)['status'],'VERIFIED_RESUMABLE_OFFLINE')
+        with patch.object(p36,'MAX_REQUESTS',3):
+            bad=json.loads((out/'manifest.json').read_text());bad['plan']['max_requests']=3;p36.atomic_json(out,'manifest.json',bad)
+            tr,_=transport(FakeSession());r=p36.resume(out,connect_public=True,transport=tr,clock=lambda:NOW.timestamp())
+            self.assertEqual((r['requests'],r['unconfirmed_requests'],r['failure_reason']),(3,1,'P36_REQUEST_CAP_REACHED'))
+            self.assertEqual(json.loads((out/'budget.json').read_text())['requests'],3)
+
+    def test_second_writer_is_refused_before_network_or_file_writes(self):
+        root,m,_,_=self.collect(name='locked',fail_at=(30,KeyboardInterrupt()))
+        before={p:p.read_bytes() for p in root.rglob('*') if p.is_file()}
+        with p36.Lock(root):
+            session=FakeSession();tr,_=transport(session)
+            with self.assertRaisesRegex(p36.P36Error,'P36_SNAPSHOT_LOCKED'):p36.resume(root,connect_public=True,transport=tr)
+            with self.assertRaisesRegex(p36.P36Error,'P36_SNAPSHOT_LOCKED'):p36.resume(root)
+            self.assertEqual(session.calls,[])
+        self.assertEqual({p:p.read_bytes() for p in root.rglob('*') if p.is_file()},before)
+
+    def test_verify_requires_evidence_for_completion_and_the_exact_file_set(self):
+        root,m,_,_=self.collect(name='done');manifest=json.loads((root/'manifest.json').read_text())
+        def check(change,code):
+            bad=json.loads(json.dumps(manifest));change(bad);p36.atomic_json(root,'manifest.json',bad)
+            with self.subTest(code=code),self.assertRaisesRegex(p36.P36Error,code):p36.resume(root)
+            p36.atomic_json(root,'manifest.json',manifest)
+        def empty(b):b['series']={};b['requests']=0;b['unconfirmed_requests']=0
+        check(empty,'P36_UNREGISTERED_OR_MISSING_FILE')
+        record=next(iter(manifest['series']['KRW-BTC-60']['months']))
+        check(lambda b:b['series']['KRW-BTC-60']['months'].pop(record),'P36_UNREGISTERED_OR_MISSING_FILE')
+        check(lambda b:b['series'].pop('KRW-SOL-1') and b.update(requests=b['requests']-manifest['series']['KRW-SOL-1']['requests']),
+            'P36_UNREGISTERED_OR_MISSING_FILE|P36_COMPLETION_UNVERIFIED')
+        check(lambda b:b.update(requests=b['requests']+1),'P36_REQUEST_COUNT_MISMATCH')
+        check(lambda b:b['series'].update({'KRW-DOGE-1':{'status':'IN_PROGRESS','months':{},'requests':0}}),'P36_SERIES_INVALID')
+        check(lambda b:b['series']['KRW-BTC-60'].update(status='DONE'),'P36_SERIES_INVALID')
+        # A completion claim with no files at all (the reviewer's empty manifest) is rejected outright.
+        for path in sorted((root/'development').rglob('*'),reverse=True)+sorted((root/'holdout').rglob('*'),reverse=True):
+            path.unlink() if path.is_file() else path.rmdir()
+        check(empty,'P36_COMPLETION_UNVERIFIED')
+        extra,_,_,_=self.collect(name='extra');(extra/'development'/'stray.csv.gz').write_bytes(b'x')
+        with self.assertRaisesRegex(p36.P36Error,'P36_UNREGISTERED_OR_MISSING_FILE'):p36.resume(extra)
+
+    def test_linked_partition_or_account_marker_paths_are_refused_and_outside_bytes_unchanged(self):
+        outside=self.root/'outside';outside.mkdir();(outside/'paper-state.json').write_text('{"keep": 1}')
+        before=(outside/'paper-state.json').read_bytes()
+        root,m,_,_=self.collect(name='linked',fail_at=(2,KeyboardInterrupt()))
+        self.assertFalse((root/'development').exists())
+        (root/'development').symlink_to(outside,target_is_directory=True)
+        tr,_=transport(FakeSession())
+        with self.assertRaisesRegex(p36.P36Error,'P36_SYMLINK_FORBIDDEN'):p36.resume(root,connect_public=True,transport=tr)
+        with self.assertRaisesRegex(p36.P36Error,'P36_SYMLINK_FORBIDDEN'):p36.inside(root,'development/KRW-BTC/60m/2026-01.csv.gz',make=True)
+        self.assertEqual(sorted(p.name for p in outside.iterdir()),['paper-state.json']);self.assertEqual((outside/'paper-state.json').read_bytes(),before)
+        with self.assertRaisesRegex(p36.P36Error,'P36_OPERATIONAL_OR_ACCOUNT_PATH'):p36.root_path(outside/'snap',new=True)
+        with self.assertRaisesRegex(p36.P36Error,'P36_INSIDE_EXISTING_SNAPSHOT'):p36.root_path(root/'nested',new=True)
+        link=self.root/'link';link.symlink_to(self.root/'real',target_is_directory=True);(self.root/'real').mkdir()
+        with self.assertRaisesRegex(p36.P36Error,'P36_SYMLINK_FORBIDDEN'):p36.root_path(link/'snap',new=True)
+        self.assertFalse((self.root/'real'/'snap').exists())
+
+    def test_final_component_symlink_is_refused_even_when_it_points_inside_the_snapshot(self):
+        root,m,_,_=self.collect(name='final',fail_at=(3,KeyboardInterrupt()))
+        copy=root/'budget-copy.json';copy.write_bytes((root/'budget.json').read_bytes());(root/'budget.json').unlink()
+        (root/'budget.json').symlink_to(copy)
+        with self.assertRaisesRegex(p36.P36Error,'P36_SYMLINK_FORBIDDEN'):p36.resume(root)
 
 
 class BoundaryTests(unittest.TestCase):
@@ -233,7 +326,7 @@ class BoundaryTests(unittest.TestCase):
         from tools import p22_isolated as iso
         p33.protocol();self.assertEqual(iso.working_tree_drift(),['ops/paper_experiment.py'])
         source=(ROOT/'backtesting/p36_history.py').read_text(encoding='utf-8')
-        for word in ('research/2026-10-21','load_csv(','protocol.json'):self.assertNotIn(word,source)
+        for word in ('research/2026-10-21','load_csv(','load_protocol'):self.assertNotIn(word,source)  # Snapshot markers are only refused, never read.
 
 
 if __name__=='__main__':unittest.main()
