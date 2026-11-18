@@ -52,8 +52,9 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 - `end`에서 과거 방향으로 `count=200`씩 페이지를 요청합니다(`to`는 미포함).
 - **비어 있지 않은 응답은 길이와 무관하게** 가장 오래된 봉을 다음 `to`(미포함)로 삼아 계속 요청합니다. 짧은 페이지를 이력의 끝으로 보지 않습니다(리뷰 5949862643).
 - **빈 응답만** 계열을 끝냅니다. 상태는 다음 둘 중 하나입니다.
-  - `API_BOUNDARY_REACHED`: 봉을 받은 뒤 빈 응답이 옴. `boundary_before`에 마지막 cursor를 기록합니다.
-  - `NO_ROWS_RETURNED`: 첫 응답부터 비어 있음. 확보한 계열로 세지 않습니다.
+  - `API_BOUNDARY_REACHED`: 봉을 받은 뒤 빈 응답이 옴. 빈 응답에 보낸 `to`를 `boundary_to`로 기록하며, 이 값은 저장된 가장 오래된 봉과 같습니다.
+    - 가장 오래된 봉이 holdout 안에 있으면 그 시각도 holdout 정보이므로 `SEALED_IN_HOLDOUT`으로만 남깁니다.
+  - `NO_ROWS_RETURNED`: 첫 응답부터 비어 있음. 확보한 계열로 세지 않습니다. `boundary_to`는 고정 `end`입니다.
 - 빈 응답은 **API 조회 경계**일 뿐입니다. 상장 시각이나 거래소 전 기간 확보의 증거로 표시하지 않습니다.
 
 **재사용한 기존 코드**
@@ -93,7 +94,10 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 **요청 제한**
 - 요청 간격 0.25초 이상(초당 4회)입니다. 리뷰어가 [업비트 공식 분 캔들 문서](https://docs.upbit.com/kr/reference/list-candles-minutes)에서 확인한 IP당 캔들 그룹 공유 한도(초당 10회)보다 낮습니다. 같은 IP에서 다른 캔들 요청을 함께 보내면 공유 한도에 합산되므로, 수집 중에는 다른 시세 프로그램을 돌리지 않습니다.
 - 스냅샷 전체 요청 상한은 **120,000회**입니다. 모든 재개 실행을 합친 값이며, 다시 채워지지 않습니다.
-- **선차감:** 요청을 보내기 **전에** `budget.json`의 카운터를 1 올리고 fsync합니다. 프로세스가 강제 종료돼도 그 요청은 소비된 것으로 남습니다. 재개할 때 manifest에 기록되지 않은 소비분은 `unconfirmed_requests`로 보고하고 환급하지 않습니다.
+- **선차감:** 요청을 보내기 **전에** `budget.json`의 카운터를 1 올리고 fsync합니다. 프로세스가 강제 종료돼도 그 요청은 소비된 것으로 남습니다.
+- **보고:** `verify`와 `resume`은 항상 디스크 예산 기준으로 보고합니다. manifest에 기록되지 않은 소비분은 `unconfirmed_requests`이며 환급하지 않습니다(리뷰 5950578943).
+  - 마지막 허용 요청을 차감한 직후 끊긴 경우에도 `requests=N/N unconfirmed=1`과 `REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED`(재개 불가)를 표시합니다.
+  - 오프라인 `verify`는 파일을 다시 쓰지 않습니다. 온라인 `resume`은 transport를 열지 않고, 보정된 수치만 manifest에 기록한 뒤 끝냅니다.
 - **단일 writer:** 스냅샷마다 `.lock`을 배타 잠금(`flock`, 비차단)으로 잡습니다. 이미 잠겨 있으면 `collect`, `resume`, `verify`가 네트워크 호출이나 파일 쓰기 전에 `P36_SNAPSHOT_LOCKED`로 거절됩니다. 잠금은 프로세스가 끝나면 OS가 풉니다.
 - 상한에 도달하면 `REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED`이며, **전체 기간 확보로 보고하지 않습니다**.
 
@@ -109,7 +113,12 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 - 요청 회계가 맞는지: 계열별 합 + 미확인분 = manifest 합 ≤ budget(`P36_REQUEST_COUNT_MISMATCH`)
 - 월 레코드의 키와 경로, 구분(`P36_RESUME_LAYOUT_MISMATCH`), 파일 SHA-256(`P36_RESUME_HASH_MISMATCH`)
 - 실제 `development/`·`holdout/` 파일 집합이 manifest와 **정확히 같은지**(`P36_UNREGISTERED_OR_MISSING_FILE`)
-- 완료 상태라면 12개 계열이 모두 종료 상태인지(`P36_COMPLETION_UNVERIFIED`). 빈 `series`로 완료를 주장하면 실패합니다.
+- 전체 상태 값이 허용된 집합 안에 있는지(`P36_STATUS_INVALID`), `unconfirmed_requests`가 0 이상의 정수인지
+- 종료 상태의 증거(리뷰 5950578943, `P36_COMPLETION_UNVERIFIED`)
+  - `NO_ROWS_RETURNED`: 요청이 정확히 1회이고 `boundary_to`가 `end`여야 합니다.
+  - `API_BOUNDARY_REACHED`: 요청이 2회 이상이고 월 레코드가 있으며, `boundary_to`가 최초 관측 월(표시 포함)의 첫 봉과 같아야 합니다. holdout만 있는 계열이면 `SEALED_IN_HOLDOUT`이어야 합니다.
+- 완료 상태라면 12개 계열이 모두 위 증거를 갖춘 종료 상태이고, 미확인 요청이 0이며, manifest 요청 수와 budget이 같아야 합니다. 빈 `series`나 요청 0회짜리 종료 12개로는 완료를 주장할 수 없습니다.
+- 위 검증은 manifest 안의 기록이 서로 맞는지 확인할 뿐입니다. 응답 자체를 다시 증명하지는 못합니다.
 - 모든 경로 구성요소에 symlink가 없는지(`P36_SYMLINK_FORBIDDEN`)
 
 월 파일을 쓴 직후 manifest를 갱신하기 전에 강제 종료되면, 등록되지 않은 파일이 남아 재개가 차단됩니다(fail-closed). 이때는 파일을 지워 우회하지 않고 새 스냅샷으로 다시 수집합니다.
@@ -168,7 +177,7 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 **읽지 않는 자료**
 - 2026-10-21 스냅샷의 봉인 구간을 포함해, 기존 연구 스냅샷은 읽지 않습니다. 새로 공개 API에서 받은 자료만 씁니다.
 
-## 합성 검증 (`tests/test_p36_history.py`, 22개, 실제 API 호출 0회)
+## 합성 검증 (`tests/test_p36_history.py`, 25개, 실제 API 호출 0회)
 
 모든 응답은 Fake HTTP 세션이 만들고, 소켓 연결은 테스트를 실패시킵니다.
 
@@ -180,6 +189,13 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 - **오류 처리:** 429/503/연결 실패는 정확히 1회 요청으로 멈춥니다(재시도 없음). 서버 Date 30초 차이는 `P36_CLOCK_UNVERIFIED`입니다.
 - **요청 상한:** 상한(테스트에서 7)에서 `REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED`이고, 재개해도 리필되지 않습니다.
 - **재개:** 중단(Ctrl-C) 뒤 오프라인 검증 → 수동 재개 결과가 중단 없는 수집과 월별 SHA-256이 같습니다. 해시·계획 변조는 차단됩니다.
+- **리뷰 회귀 (5950578943):**
+  - 실제 모의 빈 응답 12개는 완료로 인정합니다(양성 대조).
+  - 같은 manifest를 요청 0회 종료 12개로 바꾸면 거절합니다(음성 대조).
+  - 다음도 거절합니다: `boundary_to` 누락·변조, 알 수 없는 전체 상태, 음수·비정수 미확인 요청, 회계 불일치.
+  - holdout만 있는 계열은 경계 시각을 봉인합니다.
+  - 상한 1에서 차감 직후 `os._exit`: 오프라인 `verify`/CLI 출력이 `requests=1/1 unconfirmed=1`이고 상한 상태(exit 2)입니다. manifest 바이트는 바뀌지 않습니다.
+  - 같은 상황의 온라인 `resume`: transport 호출 0회, 닫힘 0회로 끝나고, 디스크 manifest에 1/1·미확인 1·상한 상태가 기록됩니다.
 - **리뷰 회귀 (5949862643):**
   - 첫 페이지가 4월 봉 1개뿐이어도 계속 요청해 2월까지 받습니다. 3월은 빈 개발 월로 보고됩니다.
   - 첫 응답부터 빈 12개 계열은 `bounded=0/12 no_rows=12`입니다.

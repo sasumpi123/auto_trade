@@ -197,8 +197,9 @@ class RejectionTests(Base):
             self.assertEqual((m['status'],m['failure_reason'],m['requests'],len(session.calls)),
                 ('REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED','P36_REQUEST_CAP_REACHED',7,7))
             self.assertIn('bounded=',p36.summary(m)[0])
-            tr,_=transport(FakeSession())
-            with self.assertRaisesRegex(p36.P36Error,'P36_REQUEST_CAP_REACHED'):p36.resume(root,connect_public=True,transport=tr)
+            session=FakeSession();tr,_=transport(session);r=p36.resume(root,connect_public=True,transport=tr)
+            self.assertEqual((r['status'],r['failure_reason'],r['requests'],session.calls),
+                ('REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED','P36_REQUEST_CAP_REACHED',7,[]))  # Never refilled.
 
 
 class ResumeTests(Base):
@@ -239,7 +240,7 @@ class ReviewRegressionTests(Base):
         btc=m['series']['KRW-BTC-60'];self.assertEqual(btc['status'],'API_BOUNDARY_REACHED')
         self.assertEqual(sorted(btc['months']),['2026-02','2026-04']);self.assertGreater(btc['requests'],2)
         self.assertEqual(sum(r['rows'] for r in btc['months'].values()),8)  # Nothing after the short page was lost.
-        self.assertEqual(btc['boundary_before'],'2026-02-10T00:00:00+00:00')
+        self.assertEqual(btc['boundary_to'],'2026-02-10T00:00:00+00:00')
         cov=p36.development_coverage(btc,m['plan'],60);self.assertEqual(cov['empty_development_months'],['2026-03'])
         self.assertEqual(cov['missing_bars'],cov['expected_rows']-8);self.assertGreater(cov['longest_gap_bars'],24*28)
         self.assertIn('empty_dev_months=1',p36.summary(m)[2])
@@ -318,6 +319,63 @@ class ReviewRegressionTests(Base):
         copy=root/'budget-copy.json';copy.write_bytes((root/'budget.json').read_bytes());(root/'budget.json').unlink()
         (root/'budget.json').symlink_to(copy)
         with self.assertRaisesRegex(p36.P36Error,'P36_SYMLINK_FORBIDDEN'):p36.resume(root)
+
+    def test_terminal_states_need_real_request_and_boundary_evidence(self):
+        """Review 5950578943: 12 terminal series with zero requests are not completion evidence."""
+        root,m,session,_=self.collect(name='empty-real',data=self.only())  # Positive control: 12 real empty responses.
+        self.assertEqual((m['status'],m['requests'],len(session.calls)),('COMPLETE_API_BOUNDARY_REACHED',12,12))
+        self.assertTrue(all(v['boundary_to']==m['plan']['end_exclusive'] for v in m['series'].values()))
+        self.assertEqual(p36.resume(root)['status'],'COMPLETE_API_BOUNDARY_REACHED')
+        manifest=json.loads((root/'manifest.json').read_text())
+        def check(change,code,budget=None):
+            bad=json.loads(json.dumps(manifest));change(bad);p36.atomic_json(root,'manifest.json',bad)
+            if budget is not None:p36.atomic_json(root,'budget.json',{'schema':p36.SCHEMA,'requests':budget})
+            with self.subTest(code=code),self.assertRaisesRegex(p36.P36Error,code):p36.resume(root)
+            p36.atomic_json(root,'manifest.json',manifest);p36.atomic_json(root,'budget.json',{'schema':p36.SCHEMA,'requests':12})
+        def zero(b):
+            b['requests']=0
+            for v in b['series'].values():v['requests']=0
+        check(zero,'P36_COMPLETION_UNVERIFIED',budget=0)  # The reviewer's 12 x NO_ROWS_RETURNED with 0 requests.
+        check(lambda b:[v.pop('boundary_to') for v in b['series'].values()],'P36_COMPLETION_UNVERIFIED')
+        check(lambda b:b.update(status='FINISHED'),'P36_STATUS_INVALID')
+        check(lambda b:b.update(unconfirmed_requests=-1,requests=11),'P36_REQUEST_COUNT_MISMATCH')
+        check(lambda b:b.update(unconfirmed_requests=0.5),'P36_REQUEST_COUNT_MISMATCH')
+        check(lambda b:b.update(unconfirmed_requests=1,requests=13),'P36_REQUEST_COUNT_MISMATCH')
+        done,full,_,_=self.collect(name='full-real')  # Observed series: boundary_to is the oldest stored bar.
+        btc=full['series']['KRW-BTC-60'];self.assertEqual(btc['boundary_to'],btc['months'][min(btc['months'])]['quality']['first_bar'])
+        bad=json.loads((done/'manifest.json').read_text());bad['series']['KRW-BTC-60']['boundary_to']='2025-01-01T00:00:00+00:00'
+        p36.atomic_json(done,'manifest.json',bad)
+        with self.assertRaisesRegex(p36.P36Error,'P36_COMPLETION_UNVERIFIED'):p36.resume(done)
+
+    def test_holdout_only_series_seals_its_boundary_timestamp(self):
+        data=self.only();data[('KRW-SOL',60)]=bars(60,'2026-07-02T00:00:00Z','2026-07-03T00:00:00Z')
+        root,m,_,_=self.collect(name='sealed',data=data);sol=m['series']['KRW-SOL-60']
+        self.assertEqual((sol['status'],sol['boundary_to']),('API_BOUNDARY_REACHED','SEALED_IN_HOLDOUT'))
+        self.assertNotIn('2026-07-02',json.dumps(sol));self.assertEqual(p36.resume(root)['status'],'COMPLETE_API_BOUNDARY_REACHED')
+
+    def test_exhausted_budget_after_a_hard_kill_is_reported_without_new_requests(self):
+        """Review 5950578943: cap 1, killed right after the debit -> requests=1/1 unconfirmed=1, no transport."""
+        out=self.root/'cap1';script=(
+            'import os,sys;sys.path.insert(0,sys.argv[1]);from backtesting import p36_history as p36\n'
+            'p36.MAX_REQUESTS=1\n'
+            'class Kill:\n def get(self,unit,params):os._exit(9)\n def close(self):pass\n'
+            'p36.collect(sys.argv[2],connect_public=True,transport=Kill(),clock=lambda:%r)\n'%NOW.timestamp())
+        self.assertEqual(subprocess.run([sys.executable,'-c',script,str(ROOT),str(out)],env={**os.environ,'PYTHON_DOTENV_DISABLED':'1'}).returncode,9)
+        with patch.object(p36,'MAX_REQUESTS',1):
+            before=(out/'manifest.json').read_bytes()
+            off=p36.resume(out);self.assertEqual((off['status'],off['requests'],off['unconfirmed_requests']),
+                ('REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED',1,1))
+            self.assertIn('requests=1/1 unconfirmed=1',p36.summary(off)[0]);self.assertEqual((out/'manifest.json').read_bytes(),before)
+            buf=io.StringIO()
+            with patch('sys.stdout',buf):code=p36.main(['verify','--output',str(out)])
+            self.assertEqual(code,2);self.assertIn('requests=1/1 unconfirmed=1',buf.getvalue());self.assertEqual((out/'manifest.json').read_bytes(),before)
+            session=FakeSession();tr,_=transport(session)
+            on=p36.resume(out,connect_public=True,transport=tr,clock=lambda:NOW.timestamp())
+            self.assertEqual((on['status'],on['failure_reason'],session.calls,session.closed),
+                ('REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED','P36_REQUEST_CAP_REACHED',[],False))
+            disk=json.loads((out/'manifest.json').read_text())
+            self.assertEqual((disk['requests'],disk['unconfirmed_requests'],disk['status']),(1,1,'REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED'))
+            self.assertEqual(json.loads((out/'budget.json').read_text())['requests'],1)
 
 
 class BoundaryTests(unittest.TestCase):

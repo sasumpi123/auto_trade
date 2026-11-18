@@ -57,6 +57,9 @@ MAX_RESPONSE_BYTES=2_000_000
 CLOCK_TOLERANCE_SECONDS=5
 TERMINAL=('API_BOUNDARY_REACHED','NO_ROWS_RETURNED')
 STATUSES=('IN_PROGRESS',*TERMINAL)
+RUN_STATUSES=('IN_PROGRESS','COMPLETE_API_BOUNDARY_REACHED','INTERRUPTED_RESUME_MANUALLY','STOPPED_RESUME_MANUALLY',
+    'REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED')
+SEALED='SEALED_IN_HOLDOUT'  # The boundary cursor of a holdout-only series is a holdout timestamp: never recorded.
 ROOT=Path(__file__).resolve().parents[1]
 GAP_NOTE='A missing bar may be a minute without trades or an API omission; the two cannot be distinguished.'
 BOUNDARY_NOTE=('An empty response is only the API query boundary; it does not prove the listing time or that the '
@@ -318,8 +321,11 @@ def run(root,manifest,budget,transport,*,clock=time.time):
                         if boundary or pd.Timestamp(month+'-01',tz='UTC')>cursor:
                             write_month(root,manifest,key,market,unit,month,bucket.pop(month),boundary and not bucket)
                     if boundary:
+                        # Terminal evidence (review 5950578943): the exclusive `to` of the empty response, which for an
+                        # observed series equals its oldest stored bar (or is sealed if that bar is in the holdout).
                         series['status']='API_BOUNDARY_REACHED' if series['months'] else 'NO_ROWS_RETURNED'
-                        series['boundary_before']=cursor.isoformat() if series['months'] else None
+                        oldest=series['months'][min(series['months'])] if series['months'] else None
+                        series['boundary_to']=(params['to'] if oldest is None or oldest['partition']=='development' else SEALED)
                     save()
                     if boundary:break
         manifest['status']='COMPLETE_API_BOUNDARY_REACHED';manifest.pop('failure_reason',None)
@@ -350,6 +356,9 @@ def verify(root,manifest):
     p=manifest['plan'];end=utc(p['end_exclusive']);holdout=utc(p['holdout_start'])
     budget=read_json(root,'budget.json')
     require(budget.get('schema')==SCHEMA and type(budget.get('requests')) is int and 0<=budget['requests']<=p['max_requests'],'P36_BUDGET_INVALID')
+    require(manifest.get('status') in RUN_STATUSES,'P36_STATUS_INVALID')
+    unconfirmed=manifest.get('unconfirmed_requests')
+    require(type(unconfirmed) is int and unconfirmed>=0,'P36_REQUEST_COUNT_MISMATCH')
     series=manifest.get('series');require(type(series) is dict and set(series)<=set(SERIES),'P36_SERIES_INVALID')
     counted=sum(v.get('requests',-1) for v in series.values())
     require(type(manifest.get('requests')) is int and counted==manifest['requests']-manifest.get('unconfirmed_requests',0)
@@ -359,7 +368,15 @@ def verify(root,manifest):
         market,unit=key.rsplit('-',1);unit=int(unit)
         require(s.get('status') in STATUSES and type(s.get('months')) is dict,'P36_SERIES_INVALID')
         require(s['status']!='NO_ROWS_RETURNED' or not s['months'],'P36_SERIES_INVALID')
-        require(s['status']!='API_BOUNDARY_REACHED' or (s['months'] and s['requests']>=1),'P36_COMPLETION_UNVERIFIED')
+        if s['status']=='NO_ROWS_RETURNED':  # One real empty response at the fixed end, nothing else.
+            require(s['requests']==1 and s.get('boundary_to')==end.isoformat(),'P36_COMPLETION_UNVERIFIED')
+        if s['status']=='API_BOUNDARY_REACHED':  # At least one page with rows plus the empty response.
+            require(s['months'] and s['requests']>=2,'P36_COMPLETION_UNVERIFIED')
+            oldest=s['months'][min(s['months'])]
+            if oldest.get('partition')=='development':
+                require(oldest.get('earliest_observed_month') is True and type(oldest.get('quality')) is dict
+                    and s.get('boundary_to')==oldest['quality'].get('first_bar'),'P36_COMPLETION_UNVERIFIED')
+            else:require(s.get('boundary_to')==SEALED,'P36_COMPLETION_UNVERIFIED')
         for month,record in s['months'].items():
             require(re.fullmatch(r'\d{4}-\d{2}',month) and pd.Timestamp(month+'-01',tz='UTC')<end,'P36_RESUME_LAYOUT_MISMATCH')
             partition='holdout' if pd.Timestamp(month+'-01',tz='UTC')>=holdout else 'development'
@@ -371,8 +388,19 @@ def verify(root,manifest):
             expected.add(record['file'])
     require(stored_files(root)==expected,'P36_UNREGISTERED_OR_MISSING_FILE')
     if manifest['status']=='COMPLETE_API_BOUNDARY_REACHED':
-        require(set(series)==set(SERIES) and all(v['status'] in TERMINAL for v in series.values()),'P36_COMPLETION_UNVERIFIED')
+        require(set(series)==set(SERIES) and all(v['status'] in TERMINAL for v in series.values())
+            and unconfirmed==0 and manifest['requests']==budget['requests'],'P36_COMPLETION_UNVERIFIED')
     return manifest
+
+
+def reconcile(manifest,used):
+    """Report requests debited on disk but never recorded (hard kill) as spent and unconfirmed; never refunded."""
+    out=json.loads(json.dumps(manifest));extra=used-out['requests']
+    require(extra>=0,'P36_REQUEST_COUNT_MISMATCH')
+    out['unconfirmed_requests']+=extra;out['requests']=used
+    if used>=out['plan']['max_requests'] and out['status']!='COMPLETE_API_BOUNDARY_REACHED':
+        out.update(status='REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED',failure_reason='P36_REQUEST_CAP_REACHED')
+    return out
 
 
 def collect(output,*,connect_public=False,transport=None,clock=time.time):
@@ -394,11 +422,12 @@ def resume(output,*,connect_public=False,transport=None,clock=time.time):
     with Lock(root):
         manifest=verify(root,read_json(root,'manifest.json'))
         if manifest['status']=='COMPLETE_API_BOUNDARY_REACHED':return manifest
-        if not connect_public:return {**manifest,'status':'VERIFIED_RESUMABLE_OFFLINE'}
         budget=Budget(root,manifest['plan']['max_requests'])
-        # Requests debited but never recorded (a hard kill) stay spent and are reported, never refunded.
-        manifest['unconfirmed_requests']=manifest.get('unconfirmed_requests',0)+budget.used-manifest['requests'];manifest['requests']=budget.used
-        require(budget.used<budget.cap,'P36_REQUEST_CAP_REACHED')
+        manifest=reconcile(manifest,budget.used)  # Review 5950578943: disk budget is always what is reported.
+        exhausted=budget.used>=budget.cap
+        if not connect_public:return manifest if exhausted else {**manifest,'status':'VERIFIED_RESUMABLE_OFFLINE'}
+        if exhausted:  # Record the reconciled counts; no transport is opened and nothing is requested.
+            manifest['updated_at']=now_iso(clock);atomic_json(root,'manifest.json',manifest);return manifest
         manifest.update(status='IN_PROGRESS',runs=manifest.get('runs',1)+1);manifest.pop('failure_reason',None)
         transport=transport or Transport(clock=clock)
         try:return run(root,manifest,budget,transport,clock=clock)
@@ -417,7 +446,8 @@ def main(argv=None):
             s=plan();print(f"P36 PLAN end={s['end_exclusive']} holdout_start={s['holdout_start']} max_requests={s['max_requests']} interval={s['min_interval_seconds']}s; no network or files.");return 0
         if a.command=='verify':
             root=root_path(a.output,new=False)
-            with Lock(root):m=verify(root,read_json(root,'manifest.json'))
+            with Lock(root):
+                m=verify(root,read_json(root,'manifest.json'));m=reconcile(m,Budget(root,m['plan']['max_requests']).used)
         elif a.command=='collect':m=collect(a.output,connect_public=a.connect_public)
         else:m=resume(a.output,connect_public=a.connect_public)
     except (P36Error,ValueError,OSError) as exc:
