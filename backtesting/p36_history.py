@@ -58,7 +58,8 @@ CLOCK_TOLERANCE_SECONDS=5
 TERMINAL=('API_BOUNDARY_REACHED','NO_ROWS_RETURNED')
 STATUSES=('IN_PROGRESS',*TERMINAL)
 RUN_STATUSES=('IN_PROGRESS','COMPLETE_API_BOUNDARY_REACHED','INTERRUPTED_RESUME_MANUALLY','STOPPED_RESUME_MANUALLY',
-    'REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED')
+    'REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED','QUERY_FINISHED_COMPLETION_UNVERIFIED')
+SUCCESS='COMPLETE_API_BOUNDARY_REACHED'
 SEALED='SEALED_IN_HOLDOUT'  # The boundary cursor of a holdout-only series is a holdout timestamp: never recorded.
 ROOT=Path(__file__).resolve().parents[1]
 GAP_NOTE='A missing bar may be a minute without trades or an API omission; the two cannot be distinguished.'
@@ -304,7 +305,7 @@ def run(root,manifest,budget,transport,*,clock=time.time):
     try:
         for unit in UNITS:
             for market in MARKETS:
-                key=f'{market}-{unit}';series=manifest['series'].setdefault(key,{'status':'IN_PROGRESS','months':{},'requests':0})
+                key=f'{market}-{unit}';series=manifest['series'].setdefault(key,{'status':'IN_PROGRESS','months':{},'requests':0,'responses':0})
                 if series['status'] in TERMINAL:continue
                 cursor=pd.Timestamp(min(series['months'])+'-01',tz='UTC') if series['months'] else end
                 bucket={}
@@ -313,6 +314,7 @@ def run(root,manifest,budget,transport,*,clock=time.time):
                     manifest['requests']+=1;series['requests']+=1
                     params={'market':market,'count':PAGE,'to':cursor.isoformat()}
                     rows=parse_page(transport.get(unit,params),market,unit,cursor,PAGE)
+                    series['responses']+=1  # A validated response; failed or killed attempts only count as requests.
                     for r in rows:bucket.setdefault(month_key(r['timestamp']),[]).append(r)
                     # Only an EMPTY response ends a series (review 5949862643): a short page is not proof of the end.
                     boundary=not rows
@@ -328,12 +330,17 @@ def run(root,manifest,budget,transport,*,clock=time.time):
                         series['boundary_to']=(params['to'] if oldest is None or oldest['partition']=='development' else SEALED)
                     save()
                     if boundary:break
-        manifest['status']='COMPLETE_API_BOUNDARY_REACHED';manifest.pop('failure_reason',None)
+        # Review 5950882054: the writer uses the verifier's own completion rule, so a saved success always re-verifies.
+        try:completion(manifest,budget.used);manifest['status']=SUCCESS;manifest.pop('failure_reason',None)
+        except P36Error as exc:manifest.update(status='QUERY_FINISHED_COMPLETION_UNVERIFIED',failure_reason=str(exc))
     except KeyboardInterrupt:manifest.update(status='INTERRUPTED_RESUME_MANUALLY',failure_reason='P36_INTERRUPTED')
     except Exception as exc:
         code=str(exc) if re.fullmatch(r'P36_[A-Z0-9_]{1,60}',str(exc)) else 'P36_COLLECTION_UNVERIFIED'
         manifest.update(status='REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED' if code=='P36_REQUEST_CAP_REACHED' else 'STOPPED_RESUME_MANUALLY',failure_reason=code)
     save()
+    if manifest['status']==SUCCESS:  # Final self-check of the stored copy with the same verifier the CLI uses.
+        try:verify(root,read_json(root,'manifest.json'))
+        except P36Error as exc:manifest.update(status='QUERY_FINISHED_COMPLETION_UNVERIFIED',failure_reason=str(exc));save()
     return manifest
 
 
@@ -367,16 +374,8 @@ def verify(root,manifest):
     for key,s in series.items():
         market,unit=key.rsplit('-',1);unit=int(unit)
         require(s.get('status') in STATUSES and type(s.get('months')) is dict,'P36_SERIES_INVALID')
-        require(s['status']!='NO_ROWS_RETURNED' or not s['months'],'P36_SERIES_INVALID')
-        if s['status']=='NO_ROWS_RETURNED':  # One real empty response at the fixed end, nothing else.
-            require(s['requests']==1 and s.get('boundary_to')==end.isoformat(),'P36_COMPLETION_UNVERIFIED')
-        if s['status']=='API_BOUNDARY_REACHED':  # At least one page with rows plus the empty response.
-            require(s['months'] and s['requests']>=2,'P36_COMPLETION_UNVERIFIED')
-            oldest=s['months'][min(s['months'])]
-            if oldest.get('partition')=='development':
-                require(oldest.get('earliest_observed_month') is True and type(oldest.get('quality')) is dict
-                    and s.get('boundary_to')==oldest['quality'].get('first_bar'),'P36_COMPLETION_UNVERIFIED')
-            else:require(s.get('boundary_to')==SEALED,'P36_COMPLETION_UNVERIFIED')
+        require(type(s.get('responses')) is int and 0<=s['responses']<=s['requests'],'P36_REQUEST_COUNT_MISMATCH')
+        if s['status'] in TERMINAL:terminal_evidence(s,end)
         for month,record in s['months'].items():
             require(re.fullmatch(r'\d{4}-\d{2}',month) and pd.Timestamp(month+'-01',tz='UTC')<end,'P36_RESUME_LAYOUT_MISMATCH')
             partition='holdout' if pd.Timestamp(month+'-01',tz='UTC')>=holdout else 'development'
@@ -387,10 +386,32 @@ def verify(root,manifest):
             require(path.is_file() and sha(path.read_bytes())==record['file_sha256'],'P36_RESUME_HASH_MISMATCH')
             expected.add(record['file'])
     require(stored_files(root)==expected,'P36_UNREGISTERED_OR_MISSING_FILE')
-    if manifest['status']=='COMPLETE_API_BOUNDARY_REACHED':
-        require(set(series)==set(SERIES) and all(v['status'] in TERMINAL for v in series.values())
-            and unconfirmed==0 and manifest['requests']==budget['requests'],'P36_COMPLETION_UNVERIFIED')
+    if manifest['status']==SUCCESS:completion(manifest,budget['requests'])
     return manifest
+
+
+def terminal_evidence(s,end):
+    """Shared by writer and verifier. Failed or killed attempts may precede the boundary, so the evidence is the
+    count of VALIDATED responses: exactly one empty response for NO_ROWS_RETURNED, at least one page with rows
+    plus the empty response for API_BOUNDARY_REACHED. A terminal state with no validated response never passes."""
+    if s['status']=='NO_ROWS_RETURNED':
+        require(not s['months'] and s.get('responses')==1 and s['requests']>=1 and s.get('boundary_to')==end.isoformat(),'P36_COMPLETION_UNVERIFIED')
+    else:
+        require(s['months'] and type(s.get('responses')) is int and s['responses']>=2 and s['requests']>=s['responses'],'P36_COMPLETION_UNVERIFIED')
+        oldest=s['months'][min(s['months'])]
+        if oldest.get('partition')=='development':
+            require(oldest.get('earliest_observed_month') is True and type(oldest.get('quality')) is dict
+                and s.get('boundary_to')==oldest['quality'].get('first_bar'),'P36_COMPLETION_UNVERIFIED')
+        else:require(s.get('boundary_to')==SEALED,'P36_COMPLETION_UNVERIFIED')
+
+
+def completion(manifest,budget_used):
+    """The single success rule: all 12 series terminal with evidence and every debited request accounted for
+    (recorded or reported as unconfirmed; never refunded)."""
+    end=utc(manifest['plan']['end_exclusive']);series=manifest['series']
+    require(set(series)==set(SERIES) and all(v['status'] in TERMINAL for v in series.values()),'P36_COMPLETION_UNVERIFIED')
+    for v in series.values():terminal_evidence(v,end)
+    require(manifest['requests']==budget_used and sum(v['requests'] for v in series.values())+manifest['unconfirmed_requests']==budget_used,'P36_COMPLETION_UNVERIFIED')
 
 
 def reconcile(manifest,used):
@@ -398,7 +419,7 @@ def reconcile(manifest,used):
     out=json.loads(json.dumps(manifest));extra=used-out['requests']
     require(extra>=0,'P36_REQUEST_COUNT_MISMATCH')
     out['unconfirmed_requests']+=extra;out['requests']=used
-    if used>=out['plan']['max_requests'] and out['status']!='COMPLETE_API_BOUNDARY_REACHED':
+    if used>=out['plan']['max_requests'] and out['status'] not in (SUCCESS,'QUERY_FINISHED_COMPLETION_UNVERIFIED'):
         out.update(status='REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED',failure_reason='P36_REQUEST_CAP_REACHED')
     return out
 
@@ -421,7 +442,11 @@ def resume(output,*,connect_public=False,transport=None,clock=time.time):
     root=root_path(output,new=False)
     with Lock(root):
         manifest=verify(root,read_json(root,'manifest.json'))
-        if manifest['status']=='COMPLETE_API_BOUNDARY_REACHED':return manifest
+        if manifest['status']==SUCCESS:return manifest
+        if manifest['status']=='QUERY_FINISHED_COMPLETION_UNVERIFIED':
+            # Every series already ended but the stored evidence fails the success rule: resuming cannot add evidence,
+            # so this stays a distinct non-success state (no transport is opened, nothing is rewritten).
+            return reconcile(manifest,Budget(root,manifest['plan']['max_requests']).used)
         budget=Budget(root,manifest['plan']['max_requests'])
         manifest=reconcile(manifest,budget.used)  # Review 5950578943: disk budget is always what is reported.
         exhausted=budget.used>=budget.cap

@@ -115,9 +115,13 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 - 실제 `development/`·`holdout/` 파일 집합이 manifest와 **정확히 같은지**(`P36_UNREGISTERED_OR_MISSING_FILE`)
 - 전체 상태 값이 허용된 집합 안에 있는지(`P36_STATUS_INVALID`), `unconfirmed_requests`가 0 이상의 정수인지
 - 종료 상태의 증거(리뷰 5950578943, `P36_COMPLETION_UNVERIFIED`)
-  - `NO_ROWS_RETURNED`: 요청이 정확히 1회이고 `boundary_to`가 `end`여야 합니다.
-  - `API_BOUNDARY_REACHED`: 요청이 2회 이상이고 월 레코드가 있으며, `boundary_to`가 최초 관측 월(표시 포함)의 첫 봉과 같아야 합니다. holdout만 있는 계열이면 `SEALED_IN_HOLDOUT`이어야 합니다.
-- 완료 상태라면 12개 계열이 모두 위 증거를 갖춘 종료 상태이고, 미확인 요청이 0이며, manifest 요청 수와 budget이 같아야 합니다. 빈 `series`나 요청 0회짜리 종료 12개로는 완료를 주장할 수 없습니다.
+  - 계열마다 요청 수(`requests`)와 별도로 **검증을 통과한 응답 수**(`responses`)를 기록합니다. 실패하거나 강제 종료된 시도는 요청에만 더해집니다. `responses ≤ requests`여야 합니다.
+  - `NO_ROWS_RETURNED`: 검증된 응답이 정확히 1회(그 빈 응답)이고, 요청이 1회 이상이며, `boundary_to`가 `end`여야 합니다. 앞선 실패 시도가 있어도 인정합니다(리뷰 5950882054).
+  - `API_BOUNDARY_REACHED`: 검증된 응답이 2회 이상이고 월 레코드가 있으며, `boundary_to`가 최초 관측 월(표시 포함)의 첫 봉과 같아야 합니다. holdout만 있는 계열이면 `SEALED_IN_HOLDOUT`이어야 합니다.
+- **단일 성공 규칙(`completion`)**: 12개 계열이 모두 위 증거를 갖춘 종료 상태이고, budget의 모든 차감이 계열 요청이나 `unconfirmed_requests`로 설명되어야 합니다(환급 없음).
+  - 수집기(`run`)와 `verify`가 같은 함수로 판정합니다. 수집기는 저장한 사본을 같은 `verify`로 한 번 더 확인한 뒤에야 성공을 유지합니다.
+  - 빈 `series`나 검증된 응답이 0회인 종료 12개로는 완료를 주장할 수 없습니다.
+- **`QUERY_FINISHED_COMPLETION_UNVERIFIED`**: 모든 계열의 조회는 끝났지만 성공 규칙을 통과하지 못한 비성공 상태입니다. 재개해도 증거를 더할 수 없으므로 `resume`은 이 상태를 그대로 반환합니다(네트워크 0, 파일 재작성 없음). CLI는 exit 2입니다.
 - 위 검증은 manifest 안의 기록이 서로 맞는지 확인할 뿐입니다. 응답 자체를 다시 증명하지는 못합니다.
 - 모든 경로 구성요소에 symlink가 없는지(`P36_SYMLINK_FORBIDDEN`)
 
@@ -177,7 +181,7 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 **읽지 않는 자료**
 - 2026-10-21 스냅샷의 봉인 구간을 포함해, 기존 연구 스냅샷은 읽지 않습니다. 새로 공개 API에서 받은 자료만 씁니다.
 
-## 합성 검증 (`tests/test_p36_history.py`, 25개, 실제 API 호출 0회)
+## 합성 검증 (`tests/test_p36_history.py`, 29개, 실제 API 호출 0회)
 
 모든 응답은 Fake HTTP 세션이 만들고, 소켓 연결은 테스트를 실패시킵니다.
 
@@ -189,6 +193,12 @@ PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m backtesting.p36_history resume --ou
 - **오류 처리:** 429/503/연결 실패는 정확히 1회 요청으로 멈춥니다(재시도 없음). 서버 Date 30초 차이는 `P36_CLOCK_UNVERIFIED`입니다.
 - **요청 상한:** 상한(테스트에서 7)에서 `REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED`이고, 재개해도 리필되지 않습니다.
 - **재개:** 중단(Ctrl-C) 뒤 오프라인 검증 → 수동 재개 결과가 중단 없는 수집과 월별 SHA-256이 같습니다. 해시·계획 변조는 차단됩니다.
+- **리뷰 회귀 (5950882054):** 저장본을 다시 열어 `verify`·오프라인 `resume`·CLI가 같은 결론인지 확인합니다.
+  - (a) 한도가 남은 상태에서 첫 차감 직후 `os._exit` → 빈 응답 12개로 재개: `COMPLETE`, `requests=13`, `unconfirmed=1`. 재검증과 CLI도 성공(exit 0)이고 budget 13은 유지됩니다.
+  - (b) 첫 호출 연결 실패(요청 1·응답 0) → 재개 후 정상 빈 응답: 계열은 `NO_ROWS_RETURNED`(요청 2·응답 1)이고, 재검증과 CLI도 성공입니다.
+  - 같은 저장본에서 응답 0회나 응답 > 요청으로 바꾸면 거절합니다.
+  - 최종 자체 검증을 무력화해도 수집기 자신의 성공 규칙 판정만으로 비성공이 됩니다.
+  - 수집기의 성공 판정이나 최종 자체 검증이 실패하면 `QUERY_FINISHED_COMPLETION_UNVERIFIED`로 저장됩니다. CLI는 exit 2이고, `resume`도 같은 상태를 네트워크 0·바이트 불변으로 반환합니다.
 - **리뷰 회귀 (5950578943):**
   - 실제 모의 빈 응답 12개는 완료로 인정합니다(양성 대조).
   - 같은 manifest를 요청 0회 종료 12개로 바꾸면 거절합니다(음성 대조).

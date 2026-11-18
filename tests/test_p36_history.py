@@ -334,7 +334,7 @@ class ReviewRegressionTests(Base):
             p36.atomic_json(root,'manifest.json',manifest);p36.atomic_json(root,'budget.json',{'schema':p36.SCHEMA,'requests':12})
         def zero(b):
             b['requests']=0
-            for v in b['series'].values():v['requests']=0
+            for v in b['series'].values():v['requests']=0;v['responses']=0
         check(zero,'P36_COMPLETION_UNVERIFIED',budget=0)  # The reviewer's 12 x NO_ROWS_RETURNED with 0 requests.
         check(lambda b:[v.pop('boundary_to') for v in b['series'].values()],'P36_COMPLETION_UNVERIFIED')
         check(lambda b:b.update(status='FINISHED'),'P36_STATUS_INVALID')
@@ -376,6 +376,60 @@ class ReviewRegressionTests(Base):
             disk=json.loads((out/'manifest.json').read_text())
             self.assertEqual((disk['requests'],disk['unconfirmed_requests'],disk['status']),(1,1,'REQUEST_CAP_REACHED_FULL_HISTORY_NOT_CONFIRMED'))
             self.assertEqual(json.loads((out/'budget.json').read_text())['requests'],1)
+
+    def reopened(self,root,expect_code):
+        """Stored copy re-opened: verify, offline resume and the CLI must reach the same conclusion."""
+        v=p36.verify(root,p36.read_json(root,'manifest.json'));r=p36.resume(root);buf=io.StringIO()
+        with patch('sys.stdout',buf):code=p36.main(['verify','--output',str(root)])
+        self.assertEqual((v['status'],r['status'],code),('COMPLETE_API_BOUNDARY_REACHED','COMPLETE_API_BOUNDARY_REACHED',expect_code))
+        return buf.getvalue()
+
+    def test_resume_after_a_hard_kill_with_budget_left_completes_and_reverifies(self):
+        """Review 5950882054 (a): one debit lost to a hard kill stays spent and unconfirmed; the stored success re-verifies."""
+        out=self.root/'kill-left';script=(
+            'import os,sys;sys.path.insert(0,sys.argv[1]);from backtesting import p36_history as p36\n'
+            'class Kill:\n def get(self,unit,params):os._exit(9)\n def close(self):pass\n'
+            'p36.collect(sys.argv[2],connect_public=True,transport=Kill(),clock=lambda:%r)\n'%NOW.timestamp())
+        self.assertEqual(subprocess.run([sys.executable,'-c',script,str(ROOT),str(out)],env={**os.environ,'PYTHON_DOTENV_DISABLED':'1'}).returncode,9)
+        tr,_=transport(FakeSession(data=self.only()));done=p36.resume(out,connect_public=True,transport=tr,clock=lambda:NOW.timestamp())
+        self.assertEqual((done['status'],done['requests'],done['unconfirmed_requests']),('COMPLETE_API_BOUNDARY_REACHED',13,1))
+        text=self.reopened(out,0);self.assertIn('requests=13/120000 unconfirmed=1',text)
+        self.assertEqual(json.loads((out/'budget.json').read_text())['requests'],13)  # Never refunded.
+
+    def test_resume_after_a_failed_first_call_completes_and_reverifies(self):
+        """Review 5950882054 (b): a failed attempt then the first validated empty response is a real NO_ROWS boundary."""
+        root,m,_,_=self.collect(name='fail-first',data=self.only(),fail_at=(1,OSError('down')))
+        self.assertEqual((m['status'],m['failure_reason']),('STOPPED_RESUME_MANUALLY','P36_REQUEST_FAILED'))
+        self.assertEqual((m['series']['KRW-BTC-60']['requests'],m['series']['KRW-BTC-60']['responses']),(1,0))
+        tr,_=transport(FakeSession(data=self.only()));done=p36.resume(root,connect_public=True,transport=tr,clock=lambda:NOW.timestamp())
+        btc=done['series']['KRW-BTC-60']
+        self.assertEqual((done['status'],btc['status'],btc['requests'],btc['responses']),('COMPLETE_API_BOUNDARY_REACHED','NO_ROWS_RETURNED',2,1))
+        self.reopened(root,0)
+        # Still no fabricated terminal: zero validated responses, or more validated responses than requests.
+        manifest=json.loads((root/'manifest.json').read_text())
+        for change,code in ((lambda b:b['series']['KRW-BTC-60'].update(responses=0),'P36_COMPLETION_UNVERIFIED'),
+                (lambda b:b['series']['KRW-BTC-60'].update(responses=3),'P36_REQUEST_COUNT_MISMATCH')):
+            bad=json.loads(json.dumps(manifest));change(bad);p36.atomic_json(root,'manifest.json',bad)
+            with self.subTest(code=code),self.assertRaisesRegex(p36.P36Error,code):p36.resume(root)
+        p36.atomic_json(root,'manifest.json',manifest);self.reopened(root,0)
+
+    def test_writer_applies_the_success_rule_itself_before_any_self_check(self):
+        with patch.object(p36,'completion',side_effect=p36.P36Error('P36_COMPLETION_UNVERIFIED')),patch.object(p36,'verify',side_effect=lambda root,m:m):
+            root,m,_,_=self.collect(name='writer-rule',data=self.only())
+        self.assertEqual((m['status'],m['failure_reason']),('QUERY_FINISHED_COMPLETION_UNVERIFIED','P36_COMPLETION_UNVERIFIED'))
+
+    def test_writer_never_stores_a_success_its_verifier_would_reject(self):
+        for target in ('completion','verify'):
+            with self.subTest(target=target),patch.object(p36,target,side_effect=p36.P36Error('P36_COMPLETION_UNVERIFIED')):
+                root,m,_,_=self.collect(name=f'guard-{target}',data=self.only())
+                self.assertEqual((m['status'],m['failure_reason']),('QUERY_FINISHED_COMPLETION_UNVERIFIED','P36_COMPLETION_UNVERIFIED'))
+            stored=json.loads((root/'manifest.json').read_text());self.assertEqual(stored['status'],'QUERY_FINISHED_COMPLETION_UNVERIFIED')
+            buf=io.StringIO()
+            with patch('sys.stdout',buf):self.assertEqual(p36.main(['verify','--output',str(root)]),2)  # Non-success everywhere.
+            session=FakeSession();tr,_=transport(session);before=(root/'manifest.json').read_bytes()
+            for r in (p36.resume(root),p36.resume(root,connect_public=True,transport=tr)):
+                self.assertEqual(r['status'],'QUERY_FINISHED_COMPLETION_UNVERIFIED')  # Not 'resumable', not success.
+            self.assertEqual((session.calls,(root/'manifest.json').read_bytes()),([],before))
 
 
 class BoundaryTests(unittest.TestCase):
